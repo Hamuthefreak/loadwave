@@ -185,16 +185,31 @@ async function main() {
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
 
-    await prisma.laneDailyStat.createMany({
-      data: [
-        { statDate: today, originRegion: 'QC', destinationRegion: 'NY', equipmentType: 'ALL', loadsSeen: 4, trucksSeen: 3, avgRate: 2100 },
-        { statDate: today, originRegion: 'ON', destinationRegion: 'MI', equipmentType: 'ALL', loadsSeen: 3, trucksSeen: 5, avgRate: 1450 },
-        { statDate: addDays(today, -1), originRegion: 'QC', destinationRegion: 'NY', equipmentType: 'ALL', loadsSeen: 2, trucksSeen: 4, avgRate: 1990 },
-        { statDate: addDays(today, -1), originRegion: 'ON', destinationRegion: 'MI', equipmentType: 'ALL', loadsSeen: 2, trucksSeen: 3, avgRate: 1400 },
-        { statDate: addDays(today, -2), originRegion: 'QC', destinationRegion: 'NY', equipmentType: 'ALL', loadsSeen: 3, trucksSeen: 2, avgRate: 1950 },
-        { statDate: addDays(today, -2), originRegion: 'ON', destinationRegion: 'MI', equipmentType: 'ALL', loadsSeen: 1, trucksSeen: 2, avgRate: 1380 },
-      ],
-    });
+    const laneStats = [
+      { statDate: today, originRegion: 'QC', destinationRegion: 'NY', equipmentType: 'ALL', loadsSeen: 4, trucksSeen: 3, avgRate: 2100 },
+      { statDate: today, originRegion: 'ON', destinationRegion: 'MI', equipmentType: 'ALL', loadsSeen: 3, trucksSeen: 5, avgRate: 1450 },
+      { statDate: addDays(today, -1), originRegion: 'QC', destinationRegion: 'NY', equipmentType: 'ALL', loadsSeen: 2, trucksSeen: 4, avgRate: 1990 },
+      { statDate: addDays(today, -1), originRegion: 'ON', destinationRegion: 'MI', equipmentType: 'ALL', loadsSeen: 2, trucksSeen: 3, avgRate: 1400 },
+      { statDate: addDays(today, -2), originRegion: 'QC', destinationRegion: 'NY', equipmentType: 'ALL', loadsSeen: 3, trucksSeen: 2, avgRate: 1950 },
+      { statDate: addDays(today, -2), originRegion: 'ON', destinationRegion: 'MI', equipmentType: 'ALL', loadsSeen: 1, trucksSeen: 2, avgRate: 1380 },
+    ];
+
+    // Upsert so the seed is idempotent even when the market worker has
+    // already snapshotted today's lane stats.
+    for (const row of laneStats) {
+      await prisma.laneDailyStat.upsert({
+        where: {
+          statDate_originRegion_destinationRegion_equipmentType: {
+            statDate: row.statDate,
+            originRegion: row.originRegion,
+            destinationRegion: row.destinationRegion,
+            equipmentType: row.equipmentType,
+          },
+        },
+        update: { loadsSeen: row.loadsSeen, trucksSeen: row.trucksSeen, avgRate: row.avgRate },
+        create: row,
+      });
+    }
 
     console.log('Demo tenant seeded:');
     console.log(`  Tenant:   ${tenantName}`);
