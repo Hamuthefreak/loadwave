@@ -1,0 +1,27 @@
+# Loadboard backend — systemd unit
+# Install to /etc/systemd/system/loadboard.service
+# Run: systemctl daemon-reload && systemctl enable --now loadboard
+
+[Unit]
+Description=Loadboard API (Fastify)
+After=network.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/loadboard
+ExecStart=/usr/bin/env NODE_ENV=production node /opt/loadboard/dist/src/main.js
+Restart=always
+RestartSec=5
+EnvironmentFile=/opt/loadboard/.env
+Environment=NODE_ENV=production
+# Hardening (safe for this workload)
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

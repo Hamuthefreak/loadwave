@@ -1,0 +1,577 @@
+// LoadWave TMS - Prisma schema
+// PostgreSQL with PostGIS. Monetary/exchange rate fields use Decimal (numeric).
+// Multi-tenant: every business record carries tenantId with a foreign key to Tenant.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Tenant & identity
+// ---------------------------------------------------------------------------
+
+model Tenant {
+  id               String   @id @default(uuid())
+  name             String
+  baseCurrency     String   @default("CAD") // ISO 4217
+  // Quebec (QC) or Ontario (ON) base jurisdiction for IFTA filing.
+  baseJurisdiction String   @default("QC")
+  // Carrier trust signals, surfaced on the load board.
+  mcNumber         String?
+  usdotNumber      String?
+  createdAt        DateTime @default(now())
+
+  users         User[]
+  drivers       Driver[]
+  assets        Asset[]
+  hosLogs       HosLog[]
+  routePoints   RoutePoint[]
+  fuelTxs       FuelTransaction[]
+  invoices      Invoice[]
+  loads         Load[]
+  bookings      Load[]               @relation("LoadBooking")
+  truckPosts    TruckPost[]
+  truckBookings TruckPost[]          @relation("TruckBooking")
+  routeSegments RouteSegment[]
+  iftaSummaries IftaQuarterSummary[]
+  fxRates       FxRate[]
+  savedSearches SavedSearch[]
+  notifications Notification[]
+  settings      TenantSetting[]
+}
+
+enum UserRole {
+  ADMIN
+  DISPATCHER
+  DRIVER
+}
+
+model User {
+  id           String   @id @default(uuid())
+  tenantId     String
+  email        String   @unique
+  passwordHash String
+  // Prisma does not support arrays of enums on all providers; store as CSV.
+  roles        String   @default("DISPATCHER")
+  driverId     String?
+  createdAt    DateTime @default(now())
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  refreshTokens RefreshToken[]
+
+  @@index([tenantId])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Drivers & Assets
+// ---------------------------------------------------------------------------
+
+enum CycleType {
+  CYCLE_1
+  CYCLE_2
+}
+
+model Driver {
+  id             String    @id @default(uuid())
+  tenantId       String
+  externalEldId  String?
+  name           String
+  licenseNumber  String?
+  homeTerminalTz String    @default("America/Toronto")
+  cycleType      CycleType @default(CYCLE_1)
+  // Federal baseline applied unless tenant opts into intra-provincial regime.
+  status         String    @default("ACTIVE") // ACTIVE | OFF_DUTY | SUSPENDED
+  createdAt      DateTime  @default(now())
+
+  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  hosLogs       HosLog[]
+  routePoints   RoutePoint[]
+  fuelTxs       FuelTransaction[]
+  assignedLoads Load[]            @relation("AssignedDriver")
+
+  @@unique([tenantId, externalEldId])
+  @@index([tenantId])
+}
+
+enum AssetType {
+  TRACTOR
+  TRAILER
+}
+
+model Asset {
+  id              String    @id @default(uuid())
+  tenantId        String
+  vin             String?
+  powerUnitNumber String?
+  assetType       AssetType @default(TRACTOR)
+  eldDeviceId     String?
+  createdAt       DateTime  @default(now())
+
+  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  hosLogs       HosLog[]
+  routePoints   RoutePoint[]
+  fuelTxs       FuelTransaction[]
+  routeSegments RouteSegment[]
+  assignedLoads Load[]            @relation("AssignedAsset")
+
+  @@index([tenantId])
+}
+
+// ---------------------------------------------------------------------------
+// HOS & ELD telemetry
+// ---------------------------------------------------------------------------
+
+enum DutyStatus {
+  OFF_DUTY
+  SLEEPER_BERTH
+  DRIVING
+  ON_DUTY_NOT_DRIVING
+}
+
+model HosLog {
+  id                   String     @id @default(uuid())
+  tenantId             String
+  driverId             String
+  assetId              String?
+  dutyStatus           DutyStatus
+  startTime            DateTime
+  endTime              DateTime?
+  engineHoursStart     Decimal?
+  engineHoursEnd       Decimal?
+  vehicleDistanceStart Decimal?
+  vehicleDistanceEnd   Decimal?
+  sourceEventId        String? // vendor event id for idempotency
+  // Origin of record (WEBHOOK | REST_POLL | MANUAL) for audit.
+  ingestSource         String     @default("WEBHOOK")
+  createdAt            DateTime   @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  driver Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  asset  Asset? @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, sourceEventId])
+  @@index([tenantId, driverId, startTime])
+}
+
+model RoutePoint {
+  id                String   @id @default(uuid())
+  tenantId          String
+  driverId          String
+  assetId           String
+  occurredAt        DateTime
+  lat               Float
+  lon               Float
+  engineHours       Decimal?
+  vehicleDistanceKm Decimal?
+  speed             Decimal?
+  eldEventType      String?
+  // raw source event id for idempotency / dedupe
+  sourceEventId     String?
+  createdAt         DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  driver Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  asset  Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, sourceEventId])
+  @@index([tenantId, assetId, occurredAt])
+}
+
+// ---------------------------------------------------------------------------
+// PostGIS route segments. geom + distance_km are populated by a raw SQL job.
+// ---------------------------------------------------------------------------
+
+model RouteSegment {
+  id               String   @id @default(uuid())
+  tenantId         String
+  assetId          String
+  driverId         String?
+  startTime        DateTime
+  endTime          DateTime
+  distanceKm       Decimal  @db.Decimal(12, 4)
+  jurisdictionCode String? // QC | ON | NY | ...
+  fuelType         String? // DSL (diesel) default for IFTAConsumption
+  // Raw geometry stored as EWKB / WKT text is not ideal; managed via raw SQL
+  // using geometry(LineString,4326). Kept nullable and populated in SQL.
+  geomText         String? // WKT representation for export/debug
+  quarter          String? // e.g. 2026-Q1
+  createdAt        DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  asset  Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, assetId, startTime])
+  @@index([tenantId, quarter, jurisdictionCode])
+}
+
+// ---------------------------------------------------------------------------
+// Fuel transactions, multi-currency, taxes for IFTA & input credits
+// ---------------------------------------------------------------------------
+
+model FuelTransaction {
+  id               String   @id @default(uuid())
+  tenantId         String
+  assetId          String?
+  driverId         String?
+  occurredAt       DateTime
+  jurisdictionCode String // QC | ON | NY | ...
+  locationLat      Float?
+  locationLon      Float?
+
+  volumeLitres       Decimal  @db.Decimal(14, 4)
+  originalVolume     Decimal? @db.Decimal(14, 4)
+  originalVolumeUnit String? // L | GAL
+
+  transactionCurrency String // CAD | USD
+  amountTransaction   Decimal @db.Decimal(18, 6)
+  exchangeRateToBase  Decimal @default(1) @db.Decimal(18, 8)
+  amountBase          Decimal @db.Decimal(18, 6)
+
+  taxGstRate   Decimal? @db.Decimal(6, 4)
+  taxHstRate   Decimal? @db.Decimal(6, 4)
+  taxQstRate   Decimal? @db.Decimal(6, 4)
+  taxGstAmount Decimal? @db.Decimal(14, 6)
+  taxHstAmount Decimal? @db.Decimal(14, 6)
+  taxQstAmount Decimal? @db.Decimal(14, 6)
+
+  fuelType      String?  @default("DSL")
+  sourceEventId String?
+  createdAt     DateTime @default(now())
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  asset  Asset?  @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  driver Driver? @relation(fields: [driverId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, sourceEventId])
+  @@index([tenantId, occurredAt, jurisdictionCode])
+}
+
+// ---------------------------------------------------------------------------
+// Treasury FX rates: keyed by currency pair + IFTA quarter (exact rate used).
+// ---------------------------------------------------------------------------
+
+model FxRate {
+  id           String   @id @default(uuid())
+  tenantId     String
+  fromCurrency String // USD
+  toCurrency   String // CAD
+  rate         Decimal  @db.Decimal(18, 8)
+  quarter      String? // 2026-Q1 (IFTA accepted quarterly exchange rate)
+  rateDate     DateTime
+  createdAt    DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, fromCurrency, toCurrency, quarter, rateDate])
+  @@index([tenantId, fromCurrency, toCurrency, quarter])
+}
+
+// ---------------------------------------------------------------------------
+// Loads & Invoices - GST/HST/QST aware
+// ---------------------------------------------------------------------------
+
+model Load {
+  id                  String  @id @default(uuid())
+  tenantId            String
+  externalLoadboardId String?
+
+  originCountry       String // CA | US
+  originRegion        String // QC | ON | NY | ...
+  destinationCountry  String
+  destinationRegion   String
+  // Locality + coordinates for radius search (origin & destination).
+  originLocality      String? // city / postal prefix text
+  destinationLocality String?
+  originLat           Float?
+  originLon           Float?
+  destinationLat      Float?
+  destinationLon      Float?
+
+  equipmentType  String? // DRY_VAN | REEFER | FLATBED | POWER_ONLY | ...
+  pickupDate     DateTime?
+  deliveryDate   DateTime?
+  pickupFlexible Boolean   @default(false)
+
+  distanceKmEstimate Decimal? @db.Decimal(12, 4)
+
+  // Freight spec (DAT-style load detail).
+  weightKg       Decimal? @db.Decimal(14, 2)
+  commodity      String?
+  hazmat         Boolean  @default(false)
+  temperatureMin Int?
+  temperatureMax Int?
+  teamRequired   Boolean  @default(false)
+  detentionRate  Decimal? @db.Decimal(10, 2) // $/hr after free time
+  accessorials   Json?
+  stopCount      Int      @default(1)
+
+  freightCurrency          String   @default("CAD")
+  freightAmountTransaction Decimal? @db.Decimal(18, 6)
+  freightAmountBase        Decimal? @db.Decimal(18, 6)
+  exchangeRateToBase       Decimal  @default(1) @db.Decimal(18, 8)
+
+  isInternational             Boolean @default(false)
+  isContinuousInboundOutbound Boolean @default(false)
+  interliningPartner          String?
+  status                      String  @default("OPEN") // OPEN | ASSIGNED | IN_TRANSIT | DELIVERED | INVOICED
+
+  // Dispatch / assignment.
+  assigneeDriverId String?
+  assigneeAssetId  String?
+  assignedAt       DateTime?
+
+  // Load marketplace (DAT-style load board) fields.
+  // PRIVATE = only the posting carrier sees it, PUBLIC = on the board,
+  // BOOKED = claimed by another carrier (no longer bookable).
+  marketplaceStatus String    @default("PRIVATE") // PRIVATE | PUBLIC | BOOKED
+  bookedByTenantId  String?
+  bookedAt          DateTime?
+  createdAt         DateTime  @default(now())
+
+  tenant         Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bookedByTenant Tenant?    @relation("LoadBooking", fields: [bookedByTenantId], references: [id])
+  assigneeDriver Driver?    @relation("AssignedDriver", fields: [assigneeDriverId], references: [id], onDelete: SetNull)
+  assigneeAsset  Asset?     @relation("AssignedAsset", fields: [assigneeAssetId], references: [id], onDelete: SetNull)
+  invoices       Invoice[]
+  stops          LoadStop[]
+
+  @@unique([tenantId, externalLoadboardId])
+  @@index([tenantId, status])
+  @@index([marketplaceStatus, originRegion, destinationRegion])
+  @@index([marketplaceStatus, bookedAt])
+}
+
+// Stops on a load (origin + intermediate + delivery). Only used for detailed
+// postings; a simple load has a single delivery stop, count stored on Load.
+model LoadStop {
+  id        String @id @default(uuid())
+  tenantId  String
+  loadId    String
+  kind      String @default("ORIGIN") // ORIGIN | INTERMEDIATE | DELIVERY
+  stopOrder Int    @default(1)
+
+  country  String // CA | US
+  region   String // QC | ON | NY | ...
+  locality String?
+  lat      Float?
+  lon      Float?
+
+  scheduledAt DateTime?
+  notes       String?
+  createdAt   DateTime  @default(now())
+
+  load Load @relation(fields: [loadId], references: [id], onDelete: Cascade)
+
+  @@index([loadId])
+  @@index([tenantId])
+}
+
+// ---------------------------------------------------------------------------
+// Trucks for hire - inverse side of the load board (carriers advertise capacity).
+// ACTIVE = looking for work, BOOKED = claimed by another carrier.
+// ---------------------------------------------------------------------------
+
+model TruckPost {
+  id               String    @id @default(uuid())
+  tenantId         String
+  equipmentType    String // DRY_VAN | REEFER | FLATBED | POWER_ONLY | LOWBOY | ...
+  trailerType      String?
+  locationCountry  String // CA | US
+  locationRegion   String // QC | ON | NY | ...
+  locationLocality String?
+  locationLat      Float?
+  locationLon      Float?
+  availableFrom    DateTime
+  availableTo      DateTime?
+  rateCurrency     String    @default("CAD")
+  rateAmount       Decimal?  @db.Decimal(18, 6)
+  notes            String?
+  status           String    @default("ACTIVE") // ACTIVE | BOOKED
+  bookedByTenantId String?
+  bookedAt         DateTime?
+  createdAt        DateTime  @default(now())
+
+  tenant         Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bookedByTenant Tenant? @relation("TruckBooking", fields: [bookedByTenantId], references: [id])
+
+  @@index([tenantId, status])
+  @@index([status, locationRegion, equipmentType])
+}
+
+enum TaxExemptReason {
+  INTERNATIONAL_OUTBOUND
+  CONTINUOUS_INBOUND
+  INTERLINING
+  OTHER
+}
+
+model Invoice {
+  id         String   @id @default(uuid())
+  tenantId   String
+  customerId String
+  loadId     String?
+  issueDate  DateTime
+  dueDate    DateTime
+
+  currencyTransaction String  @default("CAD")
+  subtotalTransaction Decimal @db.Decimal(18, 6)
+  subtotalBase        Decimal @db.Decimal(18, 6)
+  exchangeRateToBase  Decimal @default(1) @db.Decimal(18, 8)
+
+  gstRate              Decimal? @db.Decimal(6, 4)
+  hstRate              Decimal? @db.Decimal(6, 4)
+  qstRate              Decimal? @db.Decimal(6, 4)
+  gstAmountTransaction Decimal? @db.Decimal(14, 6)
+  hstAmountTransaction Decimal? @db.Decimal(14, 6)
+  qstAmountTransaction Decimal? @db.Decimal(14, 6)
+
+  totalTransaction Decimal @db.Decimal(18, 6)
+  totalBase        Decimal @db.Decimal(18, 6)
+
+  zeroRated       Boolean          @default(false)
+  taxExemptReason TaxExemptReason?
+
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  load   Load?  @relation(fields: [loadId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, issueDate])
+}
+
+// ---------------------------------------------------------------------------
+// IFTA quarterly summaries - matches QC CAZ-510 and Ontario filing schedules
+// ---------------------------------------------------------------------------
+
+model IftaQuarterSummary {
+  id               String  @id @default(uuid())
+  tenantId         String
+  quarter          String // 2026-Q1
+  assetId          String? // null = fleet-wide aggregate
+  fuelType         String  @default("DSL")
+  jurisdictionCode String // QC | ON | NY | ...
+
+  totalKm            Decimal  @db.Decimal(14, 4)
+  taxableKm          Decimal  @db.Decimal(14, 4)
+  litresPurchased    Decimal  @db.Decimal(14, 4)
+  litresConsumed     Decimal  @db.Decimal(14, 6)
+  averageConsumption Decimal  @db.Decimal(12, 8) // L/km snapshot
+  netLitres          Decimal  @db.Decimal(14, 4) // consumed - purchased
+  jurisdictionRate   Decimal  @db.Decimal(10, 4) // $/L fuel tax rate snapshot
+  netTaxDueBase      Decimal  @db.Decimal(16, 6)
+  status             String   @default("DRAFT") // DRAFT | FINAL | FILED
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, quarter, assetId, fuelType, jurisdictionCode])
+  @@index([tenantId, quarter, status])
+}
+
+// ---------------------------------------------------------------------------
+// Geo / radius search + saved searches + notifications + market stats
+// ---------------------------------------------------------------------------
+
+// Curated postal/city places used for radius ("within 250 km of Montreal")
+// search. Seeded from scripts/seed-places.ts � Canada + United States coverage.
+model PostalPlace {
+  id           String   @id @default(uuid())
+  country      String // CA | US
+  // Province code for CA, state code for US (e.g. QC, ON, NY, TX).
+  region       String
+  placeName    String // city / community / locality name
+  postalPrefix String   @default("") // CA FSA (e.g. H2X) or US ZIP prefix
+  lat          Float
+  lon          Float
+  population   Int      @default(0) // sorting weight, larger = more prominent
+  createdAt    DateTime @default(now())
+
+  @@unique([country, region, placeName, postalPrefix])
+  @@index([country, region])
+  @@index([placeName])
+}
+
+// Saved board searches: re-run any filter set, optionally alerted on matches.
+model SavedSearch {
+  id          String    @id @default(uuid())
+  tenantId    String
+  userId      String?
+  name        String
+  filtersJson String // BoardFilters serialized
+  notify      Boolean   @default(false)
+  lastCheckAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+// In-app notification feed (also emailed when SMTP is configured).
+model Notification {
+  id        String    @id @default(uuid())
+  tenantId  String
+  kind      String    @default("system") // load_match | booking | dispatch | system
+  title     String
+  body      String?
+  link      String?
+  payload   Json?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, readAt])
+}
+
+// Per-tenant key/value settings (SMTP, notification toggles). Encrypted/masked
+// secrets are handled at the service layer; password stored here only when set.
+model TenantSetting {
+  id        String   @id @default(uuid())
+  tenantId  String
+  key       String // e.g. smtp, alerts
+  valueJson String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+}
+
+// Daily lane snapshots used by the market/trend tools (worker backfills).
+model LaneDailyStat {
+  id                String   @id @default(uuid())
+  statDate          DateTime @db.Date
+  originRegion      String
+  destinationRegion String
+  equipmentType     String   @default("ALL")
+  loadsSeen         Int      @default(0)
+  trucksSeen        Int      @default(0)
+  avgRate           Decimal? @db.Decimal(14, 2)
+  createdAt         DateTime @default(now())
+
+  @@unique([statDate, originRegion, destinationRegion, equipmentType])
+  @@index([statDate])
+}
