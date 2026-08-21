@@ -17,10 +17,49 @@ set -euo pipefail
 # CONFIG — EDIT THESE
 # =============================================================
 DOMAIN="loadboard.example.com"      # <-- your FreeDNS subdomain
-REPO_URL="https://github.com/Hamuthefreak/loadwave.git"
+# Use the SSH form so the VM can pull the PRIVATE repo with its deploy key.
+REPO_URL="git@github.com:Hamuthefreak/loadwave.git"
 BRANCH="main"
 APP_DIR="/opt/loadboard"
 UBUNTU_USER="ubuntu"                # user that owns the app
+
+# =============================================================
+# 0. GitHub deploy key (lets the VM clone/pull your PRIVATE repo)
+# =============================================================
+echo "==> Preparing GitHub deploy key"
+mkdir -p "$HOME/.ssh"
+chmod 700 "$HOME/.ssh"
+DEPLOY_KEY="$HOME/.ssh/loadboard_deploy"
+if [ ! -f "$DEPLOY_KEY" ]; then
+  ssh-keygen -t ed25519 -N "" -C "loadboard-deploy-$HOSTNAME" -f "$DEPLOY_KEY" >/dev/null
+fi
+cat > "$HOME/.ssh/config" <<'SSH_CFG'
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/loadboard_deploy
+  IdentitiesOnly yes
+SSH_CFG
+chmod 600 "$HOME/.ssh/config"
+
+echo ""
+echo "----------------------------------------------------------------------------------"
+echo " EXIT BLOCK: if git clone below says 'Permission denied (publickey)', you must"
+echo " add this PUBLIC key on GitHub first:"
+echo "   GitHub -> repo -> Settings -> Deploy keys -> Add deploy key (read-only)"
+echo "   Key content (copy the whole line below):"
+echo ""
+cat "$DEPLOY_KEY.pub"
+echo ""
+echo " Then re-run this script."
+echo "----------------------------------------------------------------------------------"
+echo ""
+
+# Quick auth test so the user isn't hit with a confusing error later.
+if ! ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -T git@github.com >/dev/null 2>&1; then
+  echo "WARNING: cannot reach GitHub over SSH as $USER yet."
+  echo "If the key above still needs adding, add it now (Ctrl+C, re-run after)."
+fi
 
 # =============================================================
 # 1. System packages
@@ -39,6 +78,14 @@ sudo apt-get install -y nodejs
 echo "==> Installing PostgreSQL"
 sudo apt-get install -y postgresql postgresql-contrib
 
+echo "==> Verifying Node / npm"
+if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+  echo "ERROR: node or npm still not on PATH after install." >&2
+  echo "This usually means setup_20.x failed or you're on a non-Ubuntu distro." >&2
+  echo "Fix manually, then re-run the script:" >&2
+  echo "  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs" >&2
+  exit 1
+fi
 echo "==> Node version: $(node -v)  npm: $(npm -v)"
 
 # =============================================================
@@ -60,14 +107,20 @@ else
 fi
 
 # =============================================================
-# 4. Database setup
+# 4. Database setup (idempotent — safe to re-run)
 # =============================================================
-echo "==> Creating PostgreSQL role + database"
+echo "==> Creating PostgreSQL role + database (skips if they exist)"
 DB_PASSWORD="${DB_PASSWORD:-$(openssl rand -hex 16)}"
 sudo -u postgres psql <<SQL
-CREATE USER loadboard WITH PASSWORD '$DB_PASSWORD';
-CREATE DATABASE loadboard OWNER loadboard;
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'loadboard') THEN
+    CREATE ROLE loadboard LOGIN PASSWORD '$DB_PASSWORD';
+  END IF;
+END
+\$\$;
 SQL
+sudo -u postgres psql -lqt | grep -qw "loadboard" || sudo -u postgres createdb --owner=loadboard loadboard
 
 # =============================================================
 # 5. Build the app

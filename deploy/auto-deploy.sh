@@ -10,7 +10,22 @@ set -euo pipefail
 APP_DIR="/opt/loadboard"
 export NODE_ENV=production
 
-echo "==> [auto-deploy] $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+# Non-interactive SSH shells (GitHub Actions) don't source ~/.bashrc, so
+# node/npm may be missing from PATH. Explicitly locate them if needed.
+if ! command -v node >/dev/null 2>&1; then
+  for base in "$HOME/.nvm/versions/node" "/usr/local" "/usr"; do
+    if [ -x "$base/bin/node" ]; then
+      export PATH="$base/bin:$PATH"
+      break
+    fi
+  done
+fi
+if ! command -v node >/dev/null 2>&1; then
+  echo "ERROR: node not found — install Node 20 first (see DEPLOY_ORACLE.md)." >&2
+  exit 1
+fi
+
+echo "==> [auto-deploy] $(date -u +%Y-%m-%dT%H:%M:%SZ) — node $(node -v)"
 cd "$APP_DIR"
 
 echo "==> Pulling latest code"

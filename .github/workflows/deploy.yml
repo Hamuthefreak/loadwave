@@ -12,6 +12,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Optional: verify the VM's host key so GitHub Actions can't be
+      # MITMed. Generate with:
+      #   ssh-keyscan <VM_IP> | grep ed25519
+      # then store the line in secret VM_SSH_FINGERPRINT.
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -19,7 +23,8 @@ jobs:
           username: ${{ secrets.VM_USER }}     # usually "ubuntu"
           key: ${{ secrets.VM_SSH_KEY }}       # private key added as a repo secret
           port: 22
-          script_stop: true
+          # script_stop was removed from this action — use `set -e` instead.
           script: |
+            set -e
             echo "Connecting to production..."
             bash /opt/loadboard/deploy/auto-deploy.sh
