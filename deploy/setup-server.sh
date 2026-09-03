@@ -16,7 +16,7 @@ set -euo pipefail
 # =============================================================
 # CONFIG — EDIT THESE
 # =============================================================
-DOMAIN="loadboard.example.com"      # <-- your FreeDNS subdomain
+DOMAIN="loadwave.mooo.com"      # <-- your FreeDNS subdomain
 # Use the SSH form so the VM can pull the PRIVATE repo with its deploy key.
 REPO_URL="git@github.com:Hamuthefreak/loadwave.git"
 BRANCH="main"
