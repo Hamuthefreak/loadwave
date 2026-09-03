@@ -1,4 +1,4 @@
-# LoadWave
+# LoadWaveI
 
 A load board, pay and compliance toolkit built for **owner-operators** and small fleets — modeled on the patterns of DAT / Truckstop, with the paperwork (invoicing, fuel, IFTA) handled in the same app.
 
