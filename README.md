@@ -4,7 +4,7 @@ A load boarde, pay and compliance toolkit built for **owner-operators** and smal
 
 ## What's inside
 
-- **Marketing site** — homepage, role landing pages (`/carrier`, `/broker`, `/shipper`), pricing comparison, FAQ.
+- **Marketing site** — homepage, role landing pages (`/carrier`, `/broker`, `/shipper`), pricing comparison, FAQ. test
 - **Live load board** — lane/equipment/rate search, `$ per mile` on every card, one-tap booking, list / route / compare views, auto-refresh with a "new since last sync" counter.
 - **Search Trucks / Post a Truck** — the inverse marketplace; carriers advertise capacity and get booked.
 - **Trust signals** — verified-carrier badges (MC / USDOT) on board cards.
