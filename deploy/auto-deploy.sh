@@ -34,13 +34,13 @@ git checkout --force main
 git pull --ff-only origin main
 
 echo "==> Backend install + build"
-npm ci
+npm ci --include=dev
 npx prisma generate
 npm run build
 
 echo "==> Frontend install + build"
 cd "$APP_DIR/web"
-npm ci
+npm ci --include=dev
 npm run build
 cd "$APP_DIR"
 
