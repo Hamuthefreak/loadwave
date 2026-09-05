@@ -24,9 +24,12 @@ model Tenant {
   // Carrier trust signals, surfaced on the load board.
   mcNumber         String?
   usdotNumber      String?
+  // Marketplace rating aggregates, maintained by the ratings module.
+  ratingCount      Int      @default(0)
+  ratingAvg        Decimal? @db.Decimal(3, 2)
   createdAt        DateTime @default(now())
 
-  users         User[]
+  users          User[]
   drivers       Driver[]
   assets        Asset[]
   hosLogs       HosLog[]
@@ -43,6 +46,8 @@ model Tenant {
   savedSearches SavedSearch[]
   notifications Notification[]
   settings      TenantSetting[]
+  ratingsReceived CarrierRating[] @relation("RatedTenant")
+  ratingsGiven    CarrierRating[] @relation("RaterTenant")
 }
 
 enum UserRole {
@@ -352,11 +357,31 @@ model Load {
   assigneeAsset  Asset?     @relation("AssignedAsset", fields: [assigneeAssetId], references: [id], onDelete: SetNull)
   invoices       Invoice[]
   stops          LoadStop[]
+  ratings        CarrierRating[]
 
   @@unique([tenantId, externalLoadboardId])
   @@index([tenantId, status])
   @@index([marketplaceStatus, originRegion, destinationRegion])
   @@index([marketplaceStatus, bookedAt])
+}
+
+// Marketplace reviews left on a completed load; the rated party is always the
+// posting carrier. Aggregates are cached on Tenant (ratingCount/ratingAvg).
+model CarrierRating {
+  id            String   @id @default(uuid())
+  loadId        String
+  ratedTenantId String
+  raterTenantId String
+  stars         Int
+  comment       String?
+  createdAt     DateTime @default(now())
+
+  load        Load   @relation(fields: [loadId], references: [id], onDelete: Cascade)
+  ratedTenant Tenant @relation("RatedTenant", fields: [ratedTenantId], references: [id], onDelete: Cascade)
+  raterTenant Tenant @relation("RaterTenant", fields: [raterTenantId], references: [id], onDelete: Cascade)
+
+  @@unique([loadId, raterTenantId])
+  @@index([ratedTenantId])
 }
 
 // Stops on a load (origin + intermediate + delivery). Only used for detailed
