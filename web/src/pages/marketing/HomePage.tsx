@@ -79,13 +79,15 @@ export default function HomePage() {
         <div className="ld-rate-strip">
           <div className="ld-wrap ld-rate-strip-inner">
             <div className="ld-rate-track">
-              {[...RATES, ...RATES].map((r, i) => (
-                <div className="ld-rate-card" key={i} aria-hidden={i >= RATES.length}>
-                  <span className="ld-rate-mode">{r.mode}</span>
-                  <b>{r.lane}</b>
-                  <span className="ld-rate-value">{r.value}</span>
-                </div>
-              ))}
+              <div className="ld-rate-inner">
+                {[...RATES, ...RATES].map((r, i) => (
+                  <div className="ld-rate-card" key={i} aria-hidden={i >= RATES.length}>
+                    <span className="ld-rate-mode">{r.mode}</span>
+                    <b>{r.lane}</b>
+                    <span className="ld-rate-value">{r.value}</span>
+                  </div>
+                ))}
+              </div>
             </div>
             <Link to="/signin?mode=signup" className="ld-rate-more">
               All live loads <ArrowIcon />
