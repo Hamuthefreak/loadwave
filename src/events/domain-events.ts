@@ -8,6 +8,8 @@ export const EVENTS = {
   FUEL_TRANSACTION_IMPORTED: 'FuelTransactionImported',
   IFTA_QUARTER_COMPUTE_REQUESTED: 'IftaQuarterComputeRequested',
   IFTA_QUARTER_COMPUTED: 'IftaQuarterComputed',
+  LOAD_DISPATCHED: 'LoadDispatched',
+  LOAD_STATUS_CHANGED: 'LoadStatusChanged',
 } as const;
 
 export interface DomainEvent<Payload> {
@@ -52,6 +54,18 @@ export class IftaQuarterComputed implements DomainEvent<IftaQuarterComputedPaylo
   readonly name = EVENTS.IFTA_QUARTER_COMPUTED;
   readonly occurredAt = occurred();
   constructor(readonly payload: IftaQuarterComputedPayload) {}
+}
+
+export class LoadDispatched implements DomainEvent<LoadDispatchedPayload> {
+  readonly name = EVENTS.LOAD_DISPATCHED;
+  readonly occurredAt = occurred();
+  constructor(readonly payload: LoadDispatchedPayload) {}
+}
+
+export class LoadStatusChanged implements DomainEvent<LoadStatusChangedPayload> {
+  readonly name = EVENTS.LOAD_STATUS_CHANGED;
+  readonly occurredAt = occurred();
+  constructor(readonly payload: LoadStatusChangedPayload) {}
 }
 
 export interface LoadImportedPayload {
@@ -103,4 +117,33 @@ export interface IftaQuarterComputedPayload {
   summaryCount: number;
   totalKm: string;
   netTaxDueBase: string;
+}
+
+// A load was dispatched (assigned), reassigned, or unassigned. driverId is the
+// new assignee (null on unassign); prevDriverId was the previous one (if any).
+// Emitted only when the driver actually changed.
+export interface LoadDispatchedPayload {
+  tenantId: string;
+  loadId: string;
+  driverId: string | null;
+  prevDriverId: string | null;
+  originCountry: string;
+  originRegion: string;
+  destinationCountry: string;
+  destinationRegion: string;
+}
+
+// A load changed lifecycle status (ASSIGNED/IN_TRANSIT/DELIVERED/...).
+// actorDriverId is set when the driver themself advanced the trip.
+export interface LoadStatusChangedPayload {
+  tenantId: string;
+  loadId: string;
+  fromStatus: string;
+  toStatus: string;
+  actorDriverId: string | null;
+  assigneeDriverId: string | null;
+  originCountry: string;
+  originRegion: string;
+  destinationCountry: string;
+  destinationRegion: string;
 }

@@ -15,7 +15,9 @@ import {
   type FuelTransactionImportedPayload,
   type HosLogUpdatedPayload,
   type IftaQuarterComputeRequestedPayload,
+  type LoadDispatchedPayload,
   type LoadImportedPayload,
+  type LoadStatusChangedPayload,
   type RouteSegmentBatchCompletedPayload,
 } from './events/domain-events';
 
@@ -75,6 +77,9 @@ import { PrismaSavedSearchService } from './modules/search/saved-search.service'
 import { registerSearchRoutes } from './modules/search/saved-search.routes';
 
 import { PrismaNotificationService } from './modules/notification/notification.service';
+import { onLoadDispatched, onLoadStatusChanged } from './modules/notification/dispatch-notifier';
+import { PrismaLoadDocumentService } from './modules/documents/document.service';
+import { registerDocumentRoutes } from './modules/documents/document.routes';
 import { PrismaEmailService, tenantEmail } from './modules/notification/email.service';
 import { registerNotificationRoutes } from './modules/notification/notification.routes';
 
@@ -111,6 +116,7 @@ export interface AppDeps {
   searches: PrismaSavedSearchService;
   notifications: PrismaNotificationService;
   email: PrismaEmailService;
+  documents: PrismaLoadDocumentService;
   importService: PrismaImportService;
 }
 
@@ -180,6 +186,7 @@ function buildBaseServices(
     market,
     searches,
     notifications,
+    documents: overrides.documents ?? new PrismaLoadDocumentService(prisma),
     email,
     importService,
   };
@@ -276,6 +283,7 @@ function registerRoutes(app: FastifyInstance, deps: AppDeps, prisma: PrismaClien
   registerSearchRoutes(app, { searches: deps.searches });
   registerNotificationRoutes(app, { notifications: deps.notifications, email: deps.email });
   registerDispatchRoutes(app, { loads: deps.loads });
+  registerDocumentRoutes(app, { documents: deps.documents });
   registerImportRoutes(app, { importService: deps.importService });
   registerDiagnosticsRoutes(app, { prisma, env });
 }
@@ -340,6 +348,14 @@ function subscribeWorkers(app: FastifyInstance, deps: AppDeps): void {
 
   bus.subscribe<LoadImportedPayload>(EVENTS.LOAD_IMPORTED, async (payload) => {
     app.log.info({ loadId: payload.loadId }, 'load imported (LoadImported)');
+  });
+
+  bus.subscribe<LoadDispatchedPayload>(EVENTS.LOAD_DISPATCHED, async (payload) => {
+    await onLoadDispatched({ prisma: deps.prisma, notifications: deps.notifications, logger: app.log }, payload);
+  });
+
+  bus.subscribe<LoadStatusChangedPayload>(EVENTS.LOAD_STATUS_CHANGED, async (payload) => {
+    await onLoadStatusChanged({ prisma: deps.prisma, notifications: deps.notifications, logger: app.log }, payload);
   });
 
   bus.subscribe<HosLogUpdatedPayload>(EVENTS.HOS_LOG_UPDATED, async (payload) => {

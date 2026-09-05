@@ -20,12 +20,14 @@ const Dashboard = lazy(() => import('./pages/app/Dashboard'));
 const SearchLoads = lazy(() => import('./pages/app/SearchLoads'));
 const SearchTrucks = lazy(() => import('./pages/app/SearchTrucks'));
 const MyLoads = lazy(() => import('./pages/app/MyLoads'));
+const Trips = lazy(() => import('./pages/app/Trips'));
 const Network = lazy(() => import('./pages/app/Network'));
 const Tools = lazy(() => import('./pages/app/Tools'));
 const Ifta = lazy(() => import('./pages/app/Ifta'));
 const Fleet = lazy(() => import('./pages/app/Fleet'));
 const Drivers = lazy(() => import('./pages/app/Drivers'));
 const Team = lazy(() => import('./pages/app/Team'));
+const Billing = lazy(() => import('./pages/app/Billing'));
 
 function RouteFallback() {
   return <div className="route-fallback" aria-label="Loading" />;
@@ -133,11 +135,13 @@ export default function App() {
         <Route path="board" element={<SearchLoads />} />
         <Route path="trucks" element={<SearchTrucks />} />
         <Route path="myloads" element={<MyLoads />} />
+        <Route path="trips" element={<Trips />} />
         <Route path="network" element={<Network />} />
         <Route path="tools" element={<Tools />} />
         <Route path="ifta" element={<Ifta />} />
         <Route path="fleet" element={<Fleet />} />
         <Route path="drivers" element={<Drivers />} />
+        <Route path="billing" element={<Billing />} />
         <Route path="team" element={<Team />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -5,6 +5,7 @@ import { quarterRange, type Quarter } from '../../utils/quarters';
 import type { LoadService } from './load.service';
 import { determineTax } from './tax.policy';
 import type { TaxExemptReason } from './tax.constants';
+import { computeAging, type ArAgingReport, type ArInvoiceRow } from './ar.policy';
 
 export interface InvoiceCreateInput {
   tenantId: string;
@@ -38,12 +39,18 @@ export interface InvoiceRow {
   totalBase: string;
   zeroRated: boolean;
   taxExemptReason: TaxExemptReason | null;
+  paidAt: string | null;
+  paidAmountTransaction: string | null;
+  paidAmountBase: string | null;
 }
 
 export interface InvoiceService {
   createForLoad(input: InvoiceCreateInput): Promise<InvoiceRow>;
   get(tenantId: string, invoiceId: string): Promise<InvoiceRow>;
   list(tenantId: string, filters?: { quarter?: Quarter }): Promise<InvoiceRow[]>;
+  // Marks an invoice paid (or reopens it). paidAt defaults to now.
+  setPaid(tenantId: string, invoiceId: string, opts: { paid: boolean; paidAt?: Date | string }): Promise<InvoiceRow>;
+  aging(tenantId: string, asOf?: Date): Promise<ArAgingReport>;
 }
 
 interface InvoiceDbRow {
@@ -67,6 +74,9 @@ interface InvoiceDbRow {
   totalBase: Decimal;
   zeroRated: boolean;
   taxExemptReason: TaxExemptReason | null;
+  paidAt: Date | null;
+  paidAmountTransaction: Decimal | null;
+  paidAmountBase: Decimal | null;
 }
 
 export class PrismaInvoiceService implements InvoiceService {
@@ -97,6 +107,9 @@ export class PrismaInvoiceService implements InvoiceService {
       totalBase: toDb(d(row.totalBase)),
       zeroRated: row.zeroRated,
       taxExemptReason: row.taxExemptReason,
+      paidAt: row.paidAt ? row.paidAt.toISOString() : null,
+      paidAmountTransaction: row.paidAmountTransaction ? toDb(d(row.paidAmountTransaction)) : null,
+      paidAmountBase: row.paidAmountBase ? toDb(d(row.paidAmountBase)) : null,
     };
   }
 
@@ -182,8 +195,42 @@ export class PrismaInvoiceService implements InvoiceService {
     const rows = await this.prisma.invoice.findMany({
       where: { tenantId, ...(range ? { issueDate: { gte: range.start, lt: range.end } } : {}) },
       orderBy: { issueDate: 'desc' },
-      take: 200,
+      take: 500,
     });
     return (rows as InvoiceDbRow[]).map((r) => this.map(r));
+  }
+
+  async setPaid(
+    tenantId: string,
+    invoiceId: string,
+    opts: { paid: boolean; paidAt?: Date | string },
+  ): Promise<InvoiceRow> {
+    const row = await this.prisma.invoice.findFirst({ where: { id: invoiceId, tenantId } });
+    if (!row) throw notFound('invoice not found');
+    const paidAt = opts.paid ? (opts.paidAt ? new Date(opts.paidAt) : new Date()) : null;
+    const updated = await this.prisma.invoice.update({
+      where: { id: invoiceId },
+      data: {
+        paidAt,
+        paidAmountTransaction: paidAt ? row.totalTransaction : null,
+        paidAmountBase: paidAt ? row.totalBase : null,
+      },
+    });
+    return this.map(updated as InvoiceDbRow);
+  }
+
+  async aging(tenantId: string, asOf: Date = new Date()): Promise<ArAgingReport> {
+    const rows = await this.prisma.invoice.findMany({
+      where: { tenantId },
+      orderBy: { issueDate: 'desc' },
+      take: 1000,
+    });
+    const arRows: ArInvoiceRow[] = rows.map((r) => ({
+      totalBase: toDb(d(r.totalBase)),
+      issueDate: r.issueDate,
+      dueDate: r.dueDate,
+      paidAt: r.paidAt,
+    }));
+    return computeAging(arRows, asOf);
   }
 }

@@ -24,6 +24,21 @@ const statusSchema = {
 } as const;
 
 export function registerDispatchRoutes(app: FastifyInstance, deps: DispatchModuleDeps): void {
+  // Driver trip inbox: loads dispatched to the signed-in driver's linked record.
+  app.get(
+    '/api/loads/mine',
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      if (!request.user.driverId) {
+        return reply
+          .code(403)
+          .send({ error: 'FORBIDDEN', message: 'no driver profile is linked to this account' });
+      }
+      const rows = await deps.loads.listAssignedToDriver(request.user.tenantId, request.user.driverId);
+      return reply.send(rows);
+    },
+  );
+
   app.patch<{ Params: { id: string }; Body: { driverId?: string | null; assetId?: string | null } }>(
     '/api/loads/:id/assign',
     {

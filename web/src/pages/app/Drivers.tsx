@@ -1,19 +1,45 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api } from '../../api';
 import { Badge, Empty, PageHeader } from '../../components/ui';
+import DispatchModal, { type DispatchDriver, type DispatchLoad } from '../../components/DispatchModal';
+import { regionLabel } from '../../utils/format';
 
-interface Driver {
-  id: string;
-  name: string;
+interface Driver extends DispatchDriver {
   externalEldId: string | null;
   licenseNumber: string | null;
   homeTerminalTz: string;
   cycleType: 'CYCLE_1' | 'CYCLE_2';
-  status: string;
+}
+
+// Cycle snapshot served by GET /api/hos/overview.
+interface HosOverviewRow {
+  driverId: string;
+  cycleType: 'CYCLE_1' | 'CYCLE_2';
+  onDutyHours7: number;
+  remaining7: number | null;
+  limit7: number | null;
+  onDutyHours14: number;
+  remaining14: number | null;
+  limit14: number | null;
+  warnings: string[];
+  violations: string[];
+}
+
+function hoursShort(hours: number | null | undefined): string {
+  const h = Number(hours ?? 0);
+  if (!Number.isFinite(h) || h <= 0) return '0h';
+  const whole = Math.floor(h);
+  const mins = Math.round((h - whole) * 60);
+  if (mins >= 60) return `${whole + 1}h`;
+  if (whole >= 10) return `${whole}h`;
+  return mins === 0 ? `${whole}h` : `${whole}h ${mins}m`;
 }
 
 export default function Drivers() {
   const [rows, setRows] = useState<Driver[]>([]);
+  const [onTrip, setOnTrip] = useState<Record<string, string>>({});
+  const [hos, setHos] = useState<Record<string, HosOverviewRow>>({});
+  const [dispatchFor, setDispatchFor] = useState<Driver | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -27,7 +53,24 @@ export default function Drivers() {
     setLoading(true);
     setError(null);
     try {
-      setRows(await api<Driver[]>('/api/drivers'));
+      const [ds, ov, ls] = await Promise.all([
+        api<Driver[]>('/api/drivers'),
+        api<HosOverviewRow[]>('/api/hos/overview').catch(() => [] as HosOverviewRow[]),
+        api<DispatchLoad[]>('/api/loads').catch(() => [] as DispatchLoad[]),
+      ]);
+      setRows(ds);
+      setHos(Object.fromEntries(ov.map((r) => [r.driverId, r])));
+      const trip: Record<string, string> = {};
+      for (const l of ls) {
+        if (
+          l.assigneeDriverId &&
+          ['ASSIGNED', 'IN_TRANSIT'].includes(l.status) &&
+          !trip[l.assigneeDriverId]
+        ) {
+          trip[l.assigneeDriverId] = `${regionLabel(l.originRegion)} → ${regionLabel(l.destinationRegion)}`;
+        }
+      }
+      setOnTrip(trip);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load drivers');
     } finally {
@@ -115,8 +158,11 @@ export default function Drivers() {
                 <th>Name</th>
                 <th>License</th>
                 <th>HOS cycle</th>
+                <th>Hours left</th>
                 <th>Timezone</th>
                 <th>Status</th>
+                <th>On trip</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -128,14 +174,49 @@ export default function Drivers() {
                   </td>
                   <td>{d.licenseNumber ?? '—'}</td>
                   <td>{d.cycleType}</td>
+                  <td title={hos[d.id]?.warnings.join(' · ') || undefined}>
+                    {hos[d.id] ? (
+                      <>
+                        <Badge
+                          tone={
+                            hos[d.id].violations.length > 0
+                              ? 'red'
+                              : hos[d.id].warnings.length > 0
+                                ? 'amber'
+                                : 'green'
+                          }
+                        >
+                          {hoursShort(hos[d.id].remaining7)} left
+                        </Badge>
+                        {hos[d.id].limit14 != null && hos[d.id].remaining14 != null && (
+                          <div className="muted small">14d: {hoursShort(hos[d.id].remaining14)} left</div>
+                        )}
+                      </>
+                    ) : (
+                      <span className="muted small">—</span>
+                    )}
+                  </td>
                   <td>{d.homeTerminalTz}</td>
-                  <td><Badge tone={d.status === 'ACTIVE' ? 'green' : 'gray'}>{d.status}</Badge></td>
+                  <td><Badge tone={d.status === 'ACTIVE' ? 'green' : d.status === 'SUSPENDED' ? 'red' : 'gray'}>{d.status}</Badge></td>
+                  <td>
+                    {onTrip[d.id] ? <Badge tone="cyan">{onTrip[d.id]}</Badge> : <span className="muted small">—</span>}
+                  </td>
+                  <td>
+                    <button className="btn-sm" onClick={() => setDispatchFor(d)}>Dispatch</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      <DispatchModal
+        open={dispatchFor !== null}
+        onClose={() => setDispatchFor(null)}
+        driver={dispatchFor}
+        onSaved={() => load()}
+      />
     </div>
   );
 }

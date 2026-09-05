@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { d, toDb, type Decimal } from '../../utils/decimal';
 import { badRequest, notFound } from '../../utils/errors';
-import { EVENTS, LoadImported } from '../../events/domain-events';
+import { EVENTS, LoadDispatched, LoadImported, LoadStatusChanged } from '../../events/domain-events';
 import type { EventBus } from '../../events/event-bus';
 import { assertTransition, driverMayAdvance } from '../dispatch/dispatch.policy';
 
@@ -124,6 +124,8 @@ export interface LoadService {
   create(tenantId: string, input: LoadCreateInput): Promise<LoadRow>;
   get(tenantId: string, loadId: string): Promise<LoadRow>;
   list(tenantId: string, filters?: LoadListFilters): Promise<LoadRow[]>;
+  // Loads dispatched to a specific driver (their "My Trips" inbox).
+  listAssignedToDriver(tenantId: string, driverId: string): Promise<LoadRow[]>;
   assign(tenantId: string, loadId: string, driverId: string | null, assetId: string | null): Promise<LoadRow>;
   setStatus(tenantId: string, loadId: string, status: string, actorUserId?: string, actorDriverId?: string | null): Promise<LoadRow>;
 }
@@ -408,6 +410,16 @@ export class PrismaLoadService implements LoadService {
     return (rows as unknown as LoadDbRow[]).map((r) => this.map(r));
   }
 
+  async listAssignedToDriver(tenantId: string, driverId: string): Promise<LoadRow[]> {
+    const rows = await this.prisma.load.findMany({
+      where: { tenantId, assigneeDriverId: driverId },
+      select: this.select,
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+    return (rows as unknown as LoadDbRow[]).map((r) => this.map(r));
+  }
+
   async assign(
     tenantId: string,
     loadId: string,
@@ -434,6 +446,25 @@ export class PrismaLoadService implements LoadService {
       },
       select: this.select,
     });
+
+    // Notify whoever is affected when the driver actually changes: the new
+    // assignee, and the displaced one when the trip moved or was unassigned.
+    if (driverId !== row.assigneeDriverId) {
+      await this.bus.publish(
+        EVENTS.LOAD_DISPATCHED,
+        new LoadDispatched({
+          tenantId,
+          loadId,
+          driverId,
+          prevDriverId: row.assigneeDriverId,
+          originCountry: updated.originCountry,
+          originRegion: updated.originRegion,
+          destinationCountry: updated.destinationCountry,
+          destinationRegion: updated.destinationRegion,
+        }).payload,
+      );
+    }
+
     return this.map(updated as unknown as LoadDbRow);
   }
 
@@ -460,6 +491,23 @@ export class PrismaLoadService implements LoadService {
       data: { status },
       select: this.select,
     });
+
+    await this.bus.publish(
+      EVENTS.LOAD_STATUS_CHANGED,
+      new LoadStatusChanged({
+        tenantId,
+        loadId,
+        fromStatus: row.status,
+        toStatus: status,
+        actorDriverId: actorDriverId ?? null,
+        assigneeDriverId: updated.assigneeDriverId,
+        originCountry: updated.originCountry,
+        originRegion: updated.originRegion,
+        destinationCountry: updated.destinationCountry,
+        destinationRegion: updated.destinationRegion,
+      }).payload,
+    );
+
     return this.map(updated as unknown as LoadDbRow);
   }
 }

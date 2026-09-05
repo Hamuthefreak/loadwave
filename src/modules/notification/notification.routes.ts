@@ -20,8 +20,12 @@ export function registerNotificationRoutes(app: FastifyInstance, deps: Notificat
       const unreadOnly = request.query.unreadOnly === 'true';
       const limit = Number(request.query.limit ?? 50);
       const [items, unread] = await Promise.all([
-        deps.notifications.list(request.user.tenantId, { unreadOnly, limit: Number.isFinite(limit) ? limit : 50 }),
-        deps.notifications.unreadCount(request.user.tenantId),
+        deps.notifications.list(request.user.tenantId, {
+          userId: request.user.sub,
+          unreadOnly,
+          limit: Number.isFinite(limit) ? limit : 50,
+        }),
+        deps.notifications.unreadCount(request.user.tenantId, request.user.sub),
       ]);
       return { items, unread };
     },
@@ -31,7 +35,7 @@ export function registerNotificationRoutes(app: FastifyInstance, deps: Notificat
     '/api/notifications/read-all',
     { preHandler: app.authenticate },
     async (request) => {
-      const count = await deps.notifications.markAllRead(request.user.tenantId);
+      const count = await deps.notifications.markAllRead(request.user.tenantId, request.user.sub);
       return { read: count };
     },
   );
@@ -40,7 +44,7 @@ export function registerNotificationRoutes(app: FastifyInstance, deps: Notificat
     '/api/notifications/:id/read',
     { preHandler: app.authenticate },
     async (request, reply) => {
-      const row = await deps.notifications.markRead(request.user.tenantId, request.params.id);
+      const row = await deps.notifications.markRead(request.user.tenantId, request.params.id, request.user.sub);
       if (!row) return reply.code(404).send({ error: 'NOT_FOUND', message: 'notification not found' });
       return reply.send(row);
     },

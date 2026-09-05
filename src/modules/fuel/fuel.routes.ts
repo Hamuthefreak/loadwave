@@ -9,6 +9,22 @@ export interface FuelModuleDeps {
   fx: FxService;
 }
 
+// Compact cab-side payload: a driver logs volume + unit + price at a pump.
+// The service handles L/GAL conversion, FX and IFTA bookkeeping.
+const driverFuelSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['jurisdictionCode', 'volume', 'unit', 'amountTransaction'],
+  properties: {
+    occurredAt: { type: 'string', format: 'date-time' },
+    jurisdictionCode: { type: 'string', minLength: 2, maxLength: 4 },
+    volume: { type: ['string', 'number'], minimum: 0 },
+    unit: { type: 'string', enum: ['L', 'GAL'] },
+    amountTransaction: { type: ['string', 'number'], minimum: 0 },
+    transactionCurrency: { type: 'string', enum: ['CAD', 'USD'] },
+  },
+} as const;
+
 const fuelTxSchema = {
   type: 'object',
   additionalProperties: false,
@@ -82,6 +98,51 @@ export function registerFuelRoutes(app: FastifyInstance, deps: FuelModuleDeps): 
       const rows = await deps.fuel.list(request.user.tenantId, {
         quarter: request.query.quarter as Quarter | undefined,
       });
+      return reply.send(rows);
+    },
+  );
+
+  app.post<{ Body: { occurredAt?: string; jurisdictionCode: string; volume: string | number; unit: 'L' | 'GAL'; amountTransaction: string | number; transactionCurrency?: 'CAD' | 'USD' } }>(
+    '/api/fuel/me',
+    {
+      schema: { body: driverFuelSchema },
+      preHandler: app.authenticate,
+    },
+    async (request, reply) => {
+      const driverId = request.user.driverId;
+      if (!driverId) {
+        return reply
+          .code(403)
+          .send({ error: 'FORBIDDEN', message: 'no driver profile is linked to this account' });
+      }
+      const assetId = await deps.fuel.resolveDriverAssetId(request.user.tenantId, driverId);
+      const created = await deps.fuel.importOne({
+        tenantId: request.user.tenantId,
+        driverId,
+        assetId,
+        occurredAt: request.body.occurredAt ?? new Date().toISOString(),
+        jurisdictionCode: request.body.jurisdictionCode,
+        originalVolume: request.body.volume,
+        originalVolumeUnit: request.body.unit,
+        amountTransaction: request.body.amountTransaction,
+        transactionCurrency: request.body.transactionCurrency ?? 'CAD',
+      });
+      return reply.code(201).send(created);
+    },
+  );
+
+  app.get<{ Querystring: { limit?: string } }>(
+    '/api/fuel/me',
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const driverId = request.user.driverId;
+      if (!driverId) {
+        return reply
+          .code(403)
+          .send({ error: 'FORBIDDEN', message: 'no driver profile is linked to this account' });
+      }
+      const limit = Number(request.query.limit ?? 5);
+      const rows = await deps.fuel.listForDriver(request.user.tenantId, driverId, Number.isFinite(limit) ? Math.min(50, limit) : 5);
       return reply.send(rows);
     },
   );

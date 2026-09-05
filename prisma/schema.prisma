@@ -37,6 +37,7 @@ model Tenant {
   fuelTxs       FuelTransaction[]
   invoices      Invoice[]
   loads         Load[]
+  loadDocuments LoadDocument[]
   bookings      Load[]               @relation("LoadBooking")
   truckPosts    TruckPost[]
   truckBookings TruckPost[]          @relation("TruckBooking")
@@ -69,6 +70,7 @@ model User {
 
   tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   refreshTokens RefreshToken[]
+  notifications Notification[]
 
   @@index([tenantId])
 }
@@ -111,6 +113,30 @@ model TeamInvite {
   @@index([tenantId, acceptedAt])
 }
 
+// Delivery paperwork attached to a load (POD, BOL, damage photos, ...). Binary
+// data lives in Postgres so the platform stays single-instance deployable;
+// swap for object storage if volumes grow.
+model LoadDocument {
+  id           String   @id @default(uuid())
+  tenantId     String
+  loadId       String
+  driverId     String? // uploading driver, when logged from the cab
+  kind         String   @default("POD") // POD | BOL | DAMAGE | OTHER
+  fileName     String
+  mimeType     String   @default("application/octet-stream")
+  sizeBytes    Int
+  data         Bytes
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  load   Load   @relation(fields: [loadId], references: [id], onDelete: Cascade)
+  driver Driver? @relation(fields: [driverId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, loadId, createdAt])
+}
+
+
 // ---------------------------------------------------------------------------
 // Drivers & Assets
 // ---------------------------------------------------------------------------
@@ -138,6 +164,7 @@ model Driver {
   fuelTxs       FuelTransaction[]
   assignedLoads Load[]            @relation("AssignedDriver")
   teamInvites   TeamInvite[]
+  loadDocuments LoadDocument[]
 
   @@unique([tenantId, externalEldId])
   @@index([tenantId])
@@ -383,6 +410,7 @@ model Load {
   assigneeDriver Driver?    @relation("AssignedDriver", fields: [assigneeDriverId], references: [id], onDelete: SetNull)
   assigneeAsset  Asset?     @relation("AssignedAsset", fields: [assigneeAssetId], references: [id], onDelete: SetNull)
   invoices       Invoice[]
+  documents      LoadDocument[]
   stops          LoadStop[]
   ratings        CarrierRating[]
 
@@ -501,12 +529,18 @@ model Invoice {
   zeroRated       Boolean          @default(false)
   taxExemptReason TaxExemptReason?
 
+  // Payment state for AR tracking: null paidAt = outstanding (pending).
+  paidAt             DateTime?
+  paidAmountTransaction Decimal? @db.Decimal(18, 6)
+  paidAmountBase     Decimal? @db.Decimal(18, 6)
+
   createdAt DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   load   Load?  @relation(fields: [loadId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, issueDate])
+  @@index([tenantId, paidAt])
 }
 
 // ---------------------------------------------------------------------------
@@ -580,9 +614,12 @@ model SavedSearch {
 }
 
 // In-app notification feed (also emailed when SMTP is configured).
+// Rows with a userId are private to that account (e.g. "a load was assigned
+// to you"); rows without one are tenant-wide (visible to every member).
 model Notification {
   id        String    @id @default(uuid())
   tenantId  String
+  userId    String? // null = tenant-wide feed
   kind      String    @default("system") // load_match | booking | dispatch | system
   title     String
   body      String?
@@ -592,9 +629,11 @@ model Notification {
   createdAt DateTime  @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, createdAt])
   @@index([tenantId, readAt])
+  @@index([tenantId, userId])
 }
 
 // Per-tenant key/value settings (SMTP, notification toggles). Encrypted/masked

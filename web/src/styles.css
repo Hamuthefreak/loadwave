@@ -3111,3 +3111,376 @@ html[data-theme='light'] .stat-green .stat-value {
 html[data-theme='light'] .lane-arrow {
   color: #67b02f;
 }
+
+/* ---------- Driver duty status (sidebar + mobile bar) ---------- */
+
+.side-duty {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-2);
+}
+
+.side-duty-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--faint);
+  font-weight: 700;
+}
+
+.duty-seg {
+  display: flex;
+  gap: 3px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 3px;
+}
+
+.duty-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 6px 4px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.duty-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.duty-btn.duty-on {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.duty-btn.duty-off {
+  background: var(--panel);
+  color: var(--text);
+}
+
+.duty-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex-shrink: 0;
+}
+
+.duty-on .duty-dot {
+  background: var(--green);
+}
+
+.mobile-duty {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  font-family: inherit;
+  border: none;
+  background: none;
+  padding: 4px 8px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.mobile-duty:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.mobile-duty .duty-dot {
+  width: 7px;
+  height: 7px;
+  display: block;
+}
+
+.mobile-duty.on {
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.mobile-duty.on .duty-dot {
+  background: var(--green);
+}
+
+/* ---------- My Trips (driver) ---------- */
+
+.trip-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+
+.section-sub {
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--faint);
+}
+
+.trip-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.trip-card .trip-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.trip-card .trip-head-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.trip-card .trip-amount {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.trip-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px 20px;
+  margin: 16px 0 0;
+  padding: 16px 0 0;
+  border-top: 1px dashed var(--border);
+}
+
+.trip-fact {
+  margin: 0;
+}
+
+.trip-fact dt {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--faint);
+  font-weight: 700;
+}
+
+.trip-fact dd {
+  margin: 2px 0 0;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+
+.trip-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* ---------- HOS hours this cycle (driver dashboard) ---------- */
+
+.hos-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.hos-row + .hos-row {
+  margin-top: 16px;
+}
+
+.hos-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.hos-meta strong {
+  color: var(--text);
+}
+
+.hos-bar {
+  height: 8px;
+  background: var(--panel-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.hos-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--green);
+  transition: width 0.3s ease;
+}
+
+.hos-bar.hos-warn .hos-fill {
+  background: var(--amber);
+}
+
+.hos-bar.hos-over .hos-fill {
+  background: var(--red);
+}
+
+.hos-alert {
+  margin-top: 16px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid;
+  font-size: 0.85rem;
+  background: var(--panel-2);
+}
+
+.hos-alert strong {
+  color: var(--text);
+}
+
+.hos-alert ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+.hos-alert li {
+  margin: 2px 0;
+}
+
+.hos-alert-warn {
+  border-color: rgba(217, 161, 60, 0.35);
+}
+
+.hos-alert-warn strong {
+  color: var(--amber);
+}
+
+.hos-alert-over {
+  border-color: rgba(212, 103, 95, 0.4);
+}
+
+.hos-alert-over strong {
+  color: var(--red);
+}
+
+/* ---------- Cab-side fuel stops ---------- */
+
+.fuel-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.fuel-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  font-size: 0.9rem;
+  padding: 7px 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.fuel-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.fuel-item strong {
+  min-width: 96px;
+}
+
+.fuel-item .mono-num {
+  margin-left: auto;
+  color: var(--text);
+}
+
+.fuel-item time {
+  min-width: 64px;
+  text-align: right;
+}
+
+/* ---------- Wrap-up column + delivery paperwork ---------- */
+
+.row-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.doc-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.doc-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.9rem;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.doc-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.doc-item strong {
+  word-break: break-word;
+}
+
+/* ---------- Billing & AR ---------- */
+
+.billing-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.billing-quarter {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.billing-quarter select {
+  max-width: 150px;
+}

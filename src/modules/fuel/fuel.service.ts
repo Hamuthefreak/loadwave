@@ -65,6 +65,10 @@ export interface FuelService {
   importOne(input: FuelTransactionInput): Promise<FuelTransactionRow>;
   importMany(inputs: FuelTransactionInput[]): Promise<FuelTransactionRow[]>;
   list(tenantId: string, filters?: { quarter?: Quarter }): Promise<FuelTransactionRow[]>;
+  // Cab-side logging: a driver's own recent fuel transactions.
+  listForDriver(tenantId: string, driverId: string, limit?: number): Promise<FuelTransactionRow[]>;
+  // The unit (tractor) currently assigned to the driver's active trip, if any.
+  resolveDriverAssetId(tenantId: string, driverId: string): Promise<string | null>;
   aggregateByJurisdiction(filter: FuelPeriodFilter): Promise<FuelAggregateRow[]>;
 }
 
@@ -234,6 +238,29 @@ export class PrismaFuelService implements FuelService {
       take: 200,
     });
     return rows.map((r) => this.map(r as unknown as FuelDbRow));
+  }
+
+  async listForDriver(tenantId: string, driverId: string, limit = 20): Promise<FuelTransactionRow[]> {
+    const rows = await this.prisma.fuelTransaction.findMany({
+      where: { tenantId, driverId },
+      orderBy: { occurredAt: 'desc' },
+      take: limit,
+    });
+    return rows.map((r) => this.map(r as unknown as FuelDbRow));
+  }
+
+  async resolveDriverAssetId(tenantId: string, driverId: string): Promise<string | null> {
+    const load = await this.prisma.load.findFirst({
+      where: {
+        tenantId,
+        assigneeDriverId: driverId,
+        status: { in: ['ASSIGNED', 'IN_TRANSIT'] },
+        assigneeAssetId: { not: null },
+      },
+      orderBy: { assignedAt: 'desc' },
+      select: { assigneeAssetId: true },
+    });
+    return (load?.assigneeAssetId as string | null) ?? null;
   }
 
   async aggregateByJurisdiction(filter: FuelPeriodFilter): Promise<FuelAggregateRow[]> {

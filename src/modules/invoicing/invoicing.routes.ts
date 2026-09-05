@@ -49,6 +49,45 @@ const invoiceSchema = {
 } as const;
 
 export function registerInvoicingRoutes(app: FastifyInstance, deps: InvoicingModuleDeps): void {
+  app.patch<{ Params: { invoiceId: string }; Body: { paid?: boolean; paidAt?: string } }>(
+    '/api/invoices/:invoiceId/pay',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            paid: { type: 'boolean', default: true },
+            paidAt: { type: 'string', format: 'date-time' },
+          },
+        },
+      },
+      preHandler: async (request, reply) => {
+        await app.requireRoles(['ADMIN', 'DISPATCHER'] as UserRole[])(request, reply);
+      },
+    },
+    async (request, reply) => {
+      const row = await deps.invoices.setPaid(request.user.tenantId, request.params.invoiceId, {
+        paid: request.body?.paid ?? true,
+        paidAt: request.body?.paidAt,
+      });
+      return reply.send(row);
+    },
+  );
+
+  app.get(
+    '/api/ar/aging',
+    {
+      preHandler: async (request, reply) => {
+        await app.requireRoles(['ADMIN', 'DISPATCHER'] as UserRole[])(request, reply);
+      },
+    },
+    async (request, reply) => {
+      const report = await deps.invoices.aging(request.user.tenantId);
+      return reply.send(report);
+    },
+  );
+
   app.post<{ Body: LoadCreateInput }>(
     '/api/loads',
     {

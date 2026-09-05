@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api } from '../../api';
 import { Badge, Empty, Lane, PageHeader } from '../../components/ui';
+import DispatchModal, { type DispatchLoad } from '../../components/DispatchModal';
+import { LoadDocumentsModal } from '../../components/LoadDocumentsModal';
+import { InvoiceLoadModal } from '../../components/InvoiceLoadModal';
 import { km, money, perMile, regionLabel, shortDate } from '../../utils/format';
 import { EQUIPMENT_TYPES, equipmentLabel, REGION_OPTIONS } from './regions';
-import type { BoardLoad, TruckRow } from './boardTypes';
+import type { TruckRow } from './boardTypes';
 import { Link } from 'react-router-dom';
 
 type Tab = 'loads' | 'trucks';
@@ -29,8 +32,27 @@ export default function MyLoads() {
   );
 }
 
+// A tenant-owned load as served by GET /api/loads — richer than the board view:
+// includes the dispatch lifecycle (status, assignee driver/unit).
+interface OwnLoad extends DispatchLoad {
+  equipmentType: string | null;
+  distanceKmEstimate: string | null;
+  freightCurrency: string;
+  freightAmountBase: string | null;
+  freightAmountTransaction: string | null;
+  createdAt: string;
+}
+
+function laneText(l: Pick<OwnLoad, 'originRegion' | 'destinationRegion'>): string {
+  return `${regionLabel(l.originRegion)} → ${regionLabel(l.destinationRegion)}`;
+}
+
 function MyLoadsTab() {
-  const [rows, setRows] = useState<BoardLoad[]>([]);
+  const [rows, setRows] = useState<OwnLoad[]>([]);
+  const [driverNames, setDriverNames] = useState<Record<string, string>>({});
+  const [dispatchFor, setDispatchFor] = useState<OwnLoad | null>(null);
+  const [podFor, setPodFor] = useState<OwnLoad | null>(null);
+  const [invoiceFor, setInvoiceFor] = useState<OwnLoad | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,7 +72,7 @@ function MyLoadsTab() {
     setLoading(true);
     setError(null);
     try {
-      setRows(await api<BoardLoad[]>('/api/board/loads/my'));
+      setRows(await api<OwnLoad[]>('/api/loads'));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load loads');
     } finally {
@@ -61,6 +83,15 @@ function MyLoadsTab() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Resolve assignee ids to names for the Dispatch column.
+  useEffect(() => {
+    api<Array<{ id: string; name: string }>>('/api/drivers')
+      .then((ds) => setDriverNames(Object.fromEntries(ds.map((d) => [d.id, d.name]))))
+      .catch(() => {
+        /* labels are best-effort */
+      });
+  }, []);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -201,7 +232,9 @@ function MyLoadsTab() {
                 <th>Rate</th>
                 <th>$ / mile</th>
                 <th>Status</th>
+                <th>Dispatch</th>
                 <th>Action</th>
+                <th>Wrap-up</th>
               </tr>
             </thead>
             <tbody>
@@ -220,6 +253,25 @@ function MyLoadsTab() {
                     {l.marketplaceStatus === 'PRIVATE' && <Badge tone="gray">Private</Badge>}
                   </td>
                   <td>
+                    {!l.bookedByTenantId &&
+                    (l.marketplaceStatus === 'PRIVATE'
+                      ? ['OPEN', 'ASSIGNED', 'IN_TRANSIT'].includes(l.status)
+                      : !!l.assigneeDriverId) ? (
+                      <>
+                        <button className="btn-sm" onClick={() => setDispatchFor(l)}>
+                          {l.assigneeDriverId ? 'Change driver' : 'Dispatch'}
+                        </button>
+                        {l.assigneeDriverId && (
+                          <div className="muted small" style={{ marginTop: 2 }}>
+                            {driverNames[l.assigneeDriverId] ?? 'Assigned'}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <span className="muted small">—</span>
+                    )}
+                  </td>
+                  <td>
                     {l.marketplaceStatus === 'PRIVATE' ? (
                       <button className="btn-sm" onClick={() => void postToBoard(l.id)}>Post to board</button>
                     ) : l.marketplaceStatus === 'PUBLIC' ? (
@@ -228,12 +280,51 @@ function MyLoadsTab() {
                       <span className="muted small">{l.bookedByTenantId ? 'Taken by partner' : 'Taken'}</span>
                     )}
                   </td>
+                  <td>
+                    {l.status === 'DELIVERED' ? (
+                      <span className="row-actions">
+                        <button className="btn-sm" onClick={() => setPodFor(l)}>Add POD</button>
+                        <button className="btn-sm" onClick={() => setInvoiceFor(l)}>Create invoice</button>
+                      </span>
+                    ) : l.status === 'INVOICED' ? (
+                      <span className="row-actions">
+                        <button className="btn-sm" onClick={() => setPodFor(l)}>Add POD</button>
+                        <Badge tone="green">Invoiced</Badge>
+                      </span>
+                    ) : (
+                      <span className="muted small">—</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      <DispatchModal
+        open={dispatchFor !== null}
+        onClose={() => setDispatchFor(null)}
+        load={dispatchFor}
+        onSaved={() => load()}
+      />
+
+      <LoadDocumentsModal
+        open={podFor !== null}
+        onClose={() => setPodFor(null)}
+        loadId={podFor?.id ?? null}
+        laneLabel={podFor ? laneText(podFor) : undefined}
+      />
+
+      <InvoiceLoadModal
+        open={invoiceFor !== null}
+        onClose={() => setInvoiceFor(null)}
+        load={invoiceFor}
+        onInvoiced={async () => {
+          setSuccess('Invoice created — the load is marked Invoiced.');
+          await load();
+        }}
+      />
     </div>
   );
 }

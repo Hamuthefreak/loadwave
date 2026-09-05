@@ -99,6 +99,20 @@ export function registerEldRoutes(app: FastifyInstance, deps: EldModuleDeps): vo
     },
   );
 
+  // Fleet-wide cycle snapshot for the Drivers page (remaining hours per driver).
+  app.get(
+    '/api/hos/overview',
+    {
+      preHandler: async (request, reply) => {
+        await app.requireRoles(['ADMIN', 'DISPATCHER'] as UserRole[])(request, reply);
+      },
+    },
+    async (request, reply) => {
+      const rows = await deps.hos.overview(request.user.tenantId);
+      return reply.send(rows);
+    },
+  );
+
   app.get<{ Params: { driverId: string } }>(
     '/api/hos/status/:driverId',
     { preHandler: app.authenticate },

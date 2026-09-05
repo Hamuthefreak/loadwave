@@ -64,6 +64,34 @@ export function registerDriverRoutes(app: FastifyInstance, deps: DriverModuleDep
     },
   );
 
+  // Self-service duty toggle: a driver may flip their own status between
+  // ACTIVE (on duty) and OFF_DUTY. SUSPENDED stays a dispatcher action.
+  app.patch<{ Body: { status?: 'ACTIVE' | 'OFF_DUTY' } }>(
+    '/api/drivers/me/status',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['status'],
+          properties: { status: { type: 'string', enum: ['ACTIVE', 'OFF_DUTY'] } },
+        },
+      },
+      preHandler: app.authenticate,
+    },
+    async (request, reply) => {
+      if (!request.user.driverId) {
+        return reply
+          .code(403)
+          .send({ error: 'FORBIDDEN', message: 'no driver profile is linked to this account' });
+      }
+      const row = await deps.drivers.update(request.user.tenantId, request.user.driverId, {
+        status: request.body.status,
+      });
+      return reply.send(row);
+    },
+  );
+
   app.patch<{ Params: { driverId: string }; Body: UpdateDriverBody }>(
     '/api/drivers/:driverId',
     {

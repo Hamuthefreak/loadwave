@@ -25,7 +25,7 @@ interface NotifRow {
   createdAt: string;
 }
 
-const GROUPS: Array<{ label: string; items: Array<{ to: string; label: string; mark: JSX.Element; opsOnly?: boolean; adminOnly?: boolean }> }> = [
+const GROUPS: Array<{ label: string; items: Array<{ to: string; label: string; mark: JSX.Element; opsOnly?: boolean; adminOnly?: boolean; driverOnly?: boolean }> }> = [
   {
     label: 'Overview',
     items: [{ to: '/app/dashboard', label: 'Dashboard', mark: <IconHome /> }],
@@ -35,6 +35,7 @@ const GROUPS: Array<{ label: string; items: Array<{ to: string; label: string; m
     items: [
       { to: '/app/board', label: 'Search Loads', mark: <IconSearch /> },
       { to: '/app/trucks', label: 'Search Trucks', mark: <IconTruck /> },
+      { to: '/app/trips', label: 'My Trips', mark: <IconRoute />, driverOnly: true },
       { to: '/app/myloads', label: 'My Loads', mark: <IconList />, opsOnly: true },
     ],
   },
@@ -44,6 +45,10 @@ const GROUPS: Array<{ label: string; items: Array<{ to: string; label: string; m
       { to: '/app/network', label: 'Private Network', mark: <IconNetwork />, opsOnly: true },
       { to: '/app/tools', label: 'Tools & Rates', mark: <IconGauge /> },
     ],
+  },
+  {
+    label: 'Finance',
+    items: [{ to: '/app/billing', label: 'Billing & AR', mark: <IconMoney />, opsOnly: true }],
   },
   {
     label: 'Compliance',
@@ -62,7 +67,7 @@ const GROUPS: Array<{ label: string; items: Array<{ to: string; label: string; m
 // These routes exist, but are blocked by the backend for the roles shown — the
 // UI never lets those users in, so no broken pages with "requires ADMIN role".
 const RESTRICTED_PATHS = GROUPS.flatMap((g) => g.items)
-  .filter((i) => i.opsOnly || i.adminOnly)
+  .filter((i) => i.opsOnly || i.adminOnly || i.driverOnly)
   .map((i) => i.to);
 
 export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
@@ -72,6 +77,8 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
   const [notifOpen, setNotifOpen] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [showOnboard, setShowOnboard] = useState(false);
+  const [duty, setDuty] = useState<'ACTIVE' | 'OFF_DUTY' | 'SUSPENDED' | null>(null);
+  const [dutyBusy, setDutyBusy] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -80,6 +87,36 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
   const canManage = canManageRoles(roles);
   const isAdmin = roles.includes('ADMIN');
   const roleBadges = roleLabels(roles);
+
+  const setDutyStatus = async (next: 'ACTIVE' | 'OFF_DUTY') => {
+    if (dutyBusy || !user?.driverId) return;
+    setDutyBusy(true);
+    try {
+      await api('/api/drivers/me/status', { method: 'PATCH', body: { status: next } });
+      setDuty(next);
+    } catch {
+      /* keep last known state */
+    } finally {
+      setDutyBusy(false);
+    }
+  };
+
+  // Load the linked driver's duty status so the driver shell can show a toggle.
+  useEffect(() => {
+    if (!user?.driverId || canManage) return;
+    let alive = true;
+    api<{ status: string }>(`/api/drivers/${user.driverId}`)
+      .then((d) => {
+        if (!alive) return;
+        if (d.status === 'ACTIVE' || d.status === 'OFF_DUTY' || d.status === 'SUSPENDED') setDuty(d.status);
+      })
+      .catch(() => {
+        /* profile not linked yet */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [user, canManage]);
 
   const loadNotifs = useCallback(async () => {
     try {
@@ -143,7 +180,12 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
     () =>
       GROUPS.map((g) => ({
         ...g,
-        items: g.items.filter((i) => ((i.opsOnly ? canManage : true) && (i.adminOnly ? isAdmin : true))),
+        items: g.items.filter(
+          (i) =>
+            (i.opsOnly ? canManage : true) &&
+            (i.adminOnly ? isAdmin : true) &&
+            (i.driverOnly ? !canManage : true),
+        ),
       })).filter((g) => g.items.length > 0),
     [canManage, isAdmin],
   );
@@ -155,6 +197,7 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
     if (!item) return false;
     if (item.opsOnly && !canManage) return true;
     if (item.adminOnly && !isAdmin) return true;
+    if (item.driverOnly && canManage) return true;
     return false;
   });
 
@@ -181,6 +224,36 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
             <span className="bell-label">Notifications</span>
           </button>
         </div>
+
+        {user?.driverId && !canManage && (
+          <div className="side-duty">
+            <span className="side-duty-label">Duty status</span>
+            {duty === 'SUSPENDED' ? (
+              <span className="badge badge-red">Suspended by dispatch</span>
+            ) : (
+              <div className="duty-seg" role="group" aria-label="Duty status">
+                <button
+                  type="button"
+                  className={`duty-btn ${duty === 'ACTIVE' ? 'duty-on' : ''}`}
+                  disabled={dutyBusy || !duty}
+                  onClick={() => void setDutyStatus('ACTIVE')}
+                >
+                  <span className="duty-dot" aria-hidden />
+                  On duty
+                </button>
+                <button
+                  type="button"
+                  className={`duty-btn ${duty === 'OFF_DUTY' ? 'duty-off' : ''}`}
+                  disabled={dutyBusy || !duty}
+                  onClick={() => void setDutyStatus('OFF_DUTY')}
+                >
+                  <span className="duty-dot" aria-hidden />
+                  Off duty
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <nav className="sidebar-nav" aria-label="Primary">
           {groups.map((group) => (
@@ -243,6 +316,23 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
           {blockedPath ? <Navigate to="/app/dashboard" replace /> : <Outlet />}
         </main>
         <nav className="mobile-bottom-nav" aria-label="Primary">
+          {user?.driverId && !canManage && (
+            <button
+              type="button"
+              className={`mobile-duty ${duty === 'ACTIVE' ? 'on' : ''}`}
+              disabled={dutyBusy || !duty || duty === 'SUSPENDED'}
+              onClick={() => void setDutyStatus(duty === 'ACTIVE' ? 'OFF_DUTY' : 'ACTIVE')}
+              aria-pressed={duty === 'ACTIVE'}
+              aria-label={
+                duty === 'ACTIVE'
+                  ? 'Duty status: on duty. Tap to go off duty.'
+                  : 'Duty status: off duty. Tap to go on duty.'
+              }
+            >
+              <span className="duty-dot" aria-hidden />
+              <span>Duty {duty === 'ACTIVE' ? 'on' : 'off'}</span>
+            </button>
+          )}
           {allItems.map((item) => (
             <NavLink
               key={item.to}
@@ -380,6 +470,9 @@ function IconTruck() {
 function IconList() {
   return <Icon d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01" />;
 }
+function IconRoute() {
+  return <Icon d="M4 21V4M4 5h16l-3 3.5L20 12H4" />;
+}
 function IconNetwork() {
   return <Icon d="M12 3v6m0 6v6M5 12a7 7 0 0 1 14 0M8 12a4 4 0 0 1 8 0" />;
 }
@@ -398,6 +491,9 @@ function IconId() {
 
 function IconTeam() {
   return <Icon d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2.5 20c.8-3.2 3.1-5 5.5-5s4.7 1.8 5.5 5M17.5 7a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM15 20c.6-2.2 2.1-3.5 4-3.5s3.4 1.3 4 3.5" />;
+}
+function IconMoney() {
+  return <Icon d="M2 6h20v12H2zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM6 9h.01M18 9h.01M6 15h.01M18 15h.01" />;
 }
 
 function BellIcon() {
