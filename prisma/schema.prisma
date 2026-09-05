@@ -48,6 +48,7 @@ model Tenant {
   settings      TenantSetting[]
   ratingsReceived CarrierRating[] @relation("RatedTenant")
   ratingsGiven    CarrierRating[] @relation("RaterTenant")
+  teamInvites   TeamInvite[]
 }
 
 enum UserRole {
@@ -85,6 +86,31 @@ model RefreshToken {
   @@index([userId])
 }
 
+// Invitation for a new person to join an existing tenant. The roles granted on
+// acceptance are fixed at invite time; the raw token is returned to the inviter
+// once and stored here only as a hash (same pattern as refresh tokens).
+model TeamInvite {
+  id          String    @id @default(uuid())
+  tenantId    String
+  email       String
+  // CSV of ADMIN | DISPATCHER | DRIVER, mirroring User.roles.
+  roles       String
+  driverId    String? // required when roles include DRIVER so the driver app links up
+  invitedById String?
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  driver Driver? @relation(fields: [driverId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([tenantId, acceptedAt])
+}
+
 // ---------------------------------------------------------------------------
 // Drivers & Assets
 // ---------------------------------------------------------------------------
@@ -111,6 +137,7 @@ model Driver {
   routePoints   RoutePoint[]
   fuelTxs       FuelTransaction[]
   assignedLoads Load[]            @relation("AssignedDriver")
+  teamInvites   TeamInvite[]
 
   @@unique([tenantId, externalEldId])
   @@index([tenantId])

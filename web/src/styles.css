@@ -1341,6 +1341,41 @@ tfoot td {
   color: #fff;
 }
 
+.side-company-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* ---------- Team & invites ---------- */
+.badge-row {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.invite-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.invite-link-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.invite-link {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl; /* keep the tail (token) visible when truncated */
+  text-align: left;
+}
+
 .shell-main {
   min-width: 0;
 }

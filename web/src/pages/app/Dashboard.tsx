@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api } from '../../api';
+import { api, canManageRoles, getTokenUser } from '../../api';
 import { Badge, Lane, PageHeader, Stat } from '../../components/ui';
 import { currencyOf, km, money, perMile, regionLabel, timeAgo } from '../../utils/format';
 
@@ -68,6 +68,12 @@ function currentQuarter(): string {
 }
 
 export default function Dashboard() {
+  const user = useMemo(() => getTokenUser(), []);
+  const canManage = canManageRoles(user?.roles);
+  return canManage ? <ManagerDashboard /> : <DriverDashboard />;
+}
+
+function ManagerDashboard() {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [loads, setLoads] = useState<LoadRow[]>([]);
   const [board, setBoard] = useState<BoardLoad[]>([]);
@@ -330,4 +336,198 @@ export default function Dashboard() {
       )}
     </div>
   );
+}
+
+interface DriverRow {
+  id: string;
+  name: string;
+  externalEldId: string | null;
+  licenseNumber: string | null;
+  homeTerminalTz: string;
+  cycleType: 'CYCLE_1' | 'CYCLE_2';
+  status: string;
+}
+
+interface TruckMini {
+  id: string;
+  status: string;
+}
+
+// Driver-facing dashboard: shows the live board and the driver's own status,
+// and leaves out the ops tooling (revenue, fuel, IFTA, fleet, drivers) that a
+// DRIVER account can't access anyway.
+function DriverDashboard() {
+  const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [open, setOpen] = useState<BoardLoad[]>([]);
+  const [trucks, setTrucks] = useState<TruckMini[]>([]);
+  const [driver, setDriver] = useState<DriverRow | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const user = useMemo(() => getTokenUser(), []);
+
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      const [t, o, tr] = await Promise.all([
+        api<Tenant>('/api/tenants/me'),
+        api<BoardLoad[]>('/api/board/loads').catch(() => []),
+        api<TruckMini[]>('/api/trucks').catch(() => []),
+      ]);
+      setTenant(t);
+      setOpen(o);
+      setTrucks(tr);
+      if (user?.driverId) {
+        try {
+          setDriver(await api<DriverRow>(`/api/drivers/${user.driverId}`));
+        } catch {
+          /* driver profile not linked yet */
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load dashboard');
+    }
+  }, [user]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (error) {
+    return (
+      <div>
+        <PageHeader title="Dashboard" sub="Here is what's happening on your board." />
+        <div className="alert alert-error">{error}</div>
+      </div>
+    );
+  }
+
+  if (!tenant) {
+    return (
+      <div className="spinner-wrap">
+        <span className="spinner" aria-hidden />
+        <span className="muted small">Loading dashboard…</span>
+      </div>
+    );
+  }
+
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const openCount = open.filter((l) => l.marketplaceStatus === 'PUBLIC').length;
+  const unitsReady = trucks.filter((t) => t.status === 'ACTIVE').length;
+  const hauled = open.filter((l) => l.bookedByTenantId === tenant.id);
+  const nowHauling = hauled.find((r) => r.marketplaceStatus === 'BOOKED') ?? hauled[0] ?? null;
+
+  return (
+    <div>
+      <PageHeader
+        title={`${greeting}, ${driver?.name ?? tenant.name}`}
+        sub={driver ? 'Here is what is live for you on the board.' : 'Here is what is live for your fleet on the board.'}
+        actions={<button className="btn-ghost" onClick={() => void load()}>↻ Refresh</button>}
+      />
+
+      <div className="grid">
+        <Stat label="Loads open on the board" value={openCount} sub="Live from verified partner carriers" tone="green" />
+        <Stat label="Units available" value={unitsReady} sub="Equipment posted by partner carriers" />
+        <Stat
+          label={driver ? 'Your duty status' : 'Carrier'}
+          value={driver ? cycleLabel(driver.cycleType) : tenant.name}
+          sub={driver ? (driver.status === 'ACTIVE' ? 'On duty / available' : driver.status) : 'Hauling under this carrier'}
+          tone="cyan"
+        />
+      </div>
+
+      <h2>Right now</h2>
+      <div className="card now-loading" style={nowHauling ? {} : { opacity: 0.75 }}>
+        {nowHauling ? (
+          <>
+            <Lane
+              big
+              originCountry={nowHauling.originCountry}
+              originRegion={nowHauling.originRegion}
+              destinationCountry={nowHauling.destinationCountry}
+              destinationRegion={nowHauling.destinationRegion}
+            />
+            <div>
+              <div className="amount">{money(nowHauling.freightAmountBase ?? nowHauling.freightAmountTransaction, nowHauling.freightCurrency)}</div>
+              <div className="muted small">
+                {km(nowHauling.distanceKmEstimate)}
+                {nowHauling.distanceKmEstimate
+                  ? ` · ${perMile(nowHauling.freightAmountBase ?? nowHauling.freightAmountTransaction, nowHauling.distanceKmEstimate) ?? '—'}/mi`
+                  : ''}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div>
+            <strong>No active load right now.</strong>
+            <p className="muted small">
+              {openCount > 0
+                ? `${openCount} load${openCount === 1 ? '' : 's'} on the board waiting for a carrier.`
+                : 'Nothing on the board yet — check back soon or ask your dispatcher to post loads.'}
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <h3>Jump in</h3>
+        <div className="quick-actions">
+          <button className="quick-action" onClick={() => navigate('/app/board')}>
+            <strong>Find loads</strong><span>Search the board · book in one tap</span>
+          </button>
+          <button className="quick-action" onClick={() => navigate('/app/trucks')}>
+            <strong>Browse trucks</strong><span>See available equipment</span>
+          </button>
+          <button className="quick-action" onClick={() => navigate('/app/tools')}>
+            <strong>Rate check</strong><span>Lane benchmarks and market tools</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="grid">
+        <div className="card">
+          <h3>Driver profile</h3>
+          {driver ? (
+            <dl className="detail-list">
+              <div className="detail-row"><dt>Name</dt><dd>{driver.name}</dd></div>
+              <div className="detail-row"><dt>HOS cycle</dt><dd>{cycleLabel(driver.cycleType)}</dd></div>
+              <div className="detail-row"><dt>Home timezone</dt><dd>{tzLabel(driver.homeTerminalTz)}</dd></div>
+              <div className="detail-row"><dt>License</dt><dd>{driver.licenseNumber ?? '—'}</dd></div>
+              <div className="detail-row"><dt>Status</dt><dd><Badge tone={driver.status === 'ACTIVE' ? 'green' : 'gray'}>{driver.status}</Badge></dd></div>
+            </dl>
+          ) : (
+            <p className="muted small">
+              No driver profile linked to this account yet — your dispatcher connects it on the
+              Drivers page.
+            </p>
+          )}
+        </div>
+        <div className="card">
+          <h3>Company profile</h3>
+          <dl className="detail-list">
+            <div className="detail-row"><dt>Carrier</dt><dd>{tenant.name}</dd></div>
+            <div className="detail-row">
+              <dt>Verification</dt>
+              <dd>
+                {tenant.verified ? <Badge tone="green"><span className="badge-dot" /> Verified</Badge> : <Badge tone="gray">Unverified</Badge>}
+              </dd>
+            </div>
+            <div className="detail-row"><dt>MC / USDOT</dt><dd>{tenant.mcNumber ? `MC ${tenant.mcNumber}` : '—'}{tenant.usdotNumber ? ` · USDOT ${tenant.usdotNumber}` : ''}</dd></div>
+          </dl>
+          <p className="muted small">
+            Fuel, IFTA, fleet and driver management are handled by your dispatcher — you won't
+            see those tools in this view.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function cycleLabel(cycle: string): string {
+  return cycle === 'CYCLE_2' ? 'Cycle 2 · 120h / 14 days' : 'Cycle 1 · 70h / 7 days';
+}
+
+function tzLabel(tz: string): string {
+  return tz.replace('America/', '').replace('_', ' ');
 }

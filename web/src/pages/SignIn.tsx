@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, setToken } from '../api';
 
@@ -8,7 +8,7 @@ interface AuthResponse {
   tokens: { accessToken: string };
 }
 
-type Mode = 'signin' | 'signup';
+type Mode = 'signin' | 'signup' | 'invite';
 
 export default function SignIn() {
   const [params] = useSearchParams();
@@ -16,7 +16,12 @@ export default function SignIn() {
   const location = useLocation();
   const state = location.state as { from?: string } | null;
 
-  const [mode, setMode] = useState<Mode>(params.get('mode') === 'signup' ? 'signup' : 'signin');
+  const inviteToken = params.get('invite');
+  const [mode, setMode] = useState<Mode>(inviteToken ? 'invite' : params.get('mode') === 'signup' ? 'signup' : 'signin');
+
+  useEffect(() => {
+    if (inviteToken && mode !== 'invite') setMode('invite');
+  }, [inviteToken, mode]);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -42,7 +47,13 @@ export default function SignIn() {
     setError(null);
     setLoading(true);
     try {
-      if (mode === 'signin') {
+      if (mode === 'invite') {
+        const res = await api<AuthResponse>('/api/team/invites/accept', {
+          method: 'POST',
+          body: { token: inviteToken, email, password },
+        });
+        finish(res);
+      } else if (mode === 'signin') {
         const res = await api<AuthResponse>('/auth/login', { method: 'POST', body: { email, password } });
         finish(res);
       } else {
@@ -93,6 +104,13 @@ export default function SignIn() {
               Loadwave<span className="ld-wordmark-dot">.</span>
             </span>
           </div>
+          {mode === 'invite' && (
+            <p className="small" style={{ margin: '0 0 14px', lineHeight: 1.5 }}>
+              <strong>You've been invited to join a carrier team.</strong> Finish creating your
+              account below to get your role and sign in.
+            </p>
+          )}
+          {mode !== 'invite' && (
           <div className="tabs" data-mode={mode} role="tablist" aria-label="Account mode">
             <span className="tabs-ind" aria-hidden />
             <button
@@ -114,10 +132,11 @@ export default function SignIn() {
               Create account
             </button>
           </div>
+          )}
 
           <form onSubmit={submit} style={{ display: 'contents' }}>
             <div className="ld-auth-fields" key={mode}>
-            {mode === 'signin' ? (
+            {mode === 'signin' || mode === 'invite' ? (
               <>
                 <label>
                   Email
@@ -180,13 +199,24 @@ export default function SignIn() {
             {error && <div className="alert alert-error">{error}</div>}
 
             <button type="submit" disabled={loading} className="btn-block">
-              {loading ? 'One moment…' : mode === 'signin' ? 'Sign in' : 'Create my account'}
+              {loading
+                ? 'One moment…'
+                : mode === 'invite'
+                  ? 'Accept invite & sign in'
+                  : mode === 'signin'
+                    ? 'Sign in'
+                    : 'Create my account'}
             </button>
           </form>
 
           {mode === 'signin' && (
             <p className="ld-muted small" style={{ margin: 0 }}>
               New here? Use the <strong>Create account</strong> tab — it takes 20 seconds.
+            </p>
+          )}
+          {mode === 'invite' && (
+            <p className="ld-muted small" style={{ margin: 0 }}>
+              Didn't expect this? <Link to="/signin" style={{ color: 'var(--body)' }}>Sign in normally</Link> instead.
             </p>
           )}
 

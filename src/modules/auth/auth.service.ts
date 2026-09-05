@@ -126,6 +126,28 @@ export class AuthService {
     };
   }
 
+  /** Mints a fresh session for an already-authenticated internal user (e.g. an
+   *  invite that was just accepted). No password check — callers must have
+   *  already verified the invitation. */
+  async sessionForUser(userId: string): Promise<FreshSession> {
+    const row = await this.repo.findUserById(userId);
+    if (!row) throw unauthorized('invalid credentials');
+    const user = toPublicUser(row);
+    const tokens = await this.issueTokens(user.id, user.tenantId, user.roles, user.driverId);
+    return {
+      user,
+      tokens,
+      tenant: {
+        id: row.tenantId,
+        name: row.tenantName,
+        baseCurrency: row.baseCurrency,
+        baseJurisdiction: row.baseJurisdiction,
+        mcNumber: row.mcNumber,
+        usdotNumber: row.usdotNumber,
+      },
+    };
+  }
+
   async refresh(refreshToken: string): Promise<FreshSession> {
     if (!refreshToken) throw badRequest('refreshToken is required');
     const row = await this.repo.findRefreshToken(sha256(refreshToken));

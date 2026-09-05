@@ -25,6 +25,55 @@ export function setToken(token: string | null): void {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
+export interface TokenUser {
+  sub: string;
+  tenantId: string;
+  roles: string[];
+  driverId: string | null;
+}
+
+// The access token is a signed JWT whose payload carries the session's roles
+// and driver link (see src/modules/auth). Decoding it locally lets the UI gate
+// nav and pages without an extra round trip. Returns null when there is no
+// token or the payload can't be decoded.
+export function getTokenUser(): TokenUser | null {
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const segment = token.split('.')[1];
+    if (!segment) return null;
+    const b64 = segment.replace(/-/g, '+').replace(/_/g, '/');
+    const json = atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, '='));
+    const data = JSON.parse(json) as {
+      sub?: string;
+      tenantId?: string;
+      roles?: unknown;
+      driverId?: string | null;
+    };
+    return {
+      sub: String(data.sub ?? ''),
+      tenantId: String(data.tenantId ?? ''),
+      roles: Array.isArray(data.roles) ? data.roles.map(String) : [],
+      driverId: data.driverId != null ? String(data.driverId) : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// True for users who run the office side of the TMS (posting, fuel, IFTA,
+// fleet and driver management). Pure DRIVER accounts get a read-only,
+// driver-facing experience instead.
+export function canManageRoles(roles: string[] | null | undefined): boolean {
+  if (!roles || roles.length === 0) return true; // unknown token → don't lock anything out
+  return roles.includes('ADMIN') || roles.includes('DISPATCHER');
+}
+
+export function roleLabels(roles: string[] | null | undefined): string[] {
+  const LABELS: Record<string, string> = { ADMIN: 'Admin', DISPATCHER: 'Dispatcher', DRIVER: 'Driver' };
+  return (roles ?? []).map((r) => LABELS[r] ?? r);
+}
+
 export async function api<T>(
   path: string,
   options: { method?: string; body?: unknown } = {},

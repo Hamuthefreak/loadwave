@@ -27,6 +27,9 @@ import { PrismaAuthRepository } from './modules/auth/auth.repo';
 import { FastifyTokenService } from './modules/auth/token.service';
 import { registerAuthRoutes } from './modules/auth/auth.routes';
 
+import { PrismaTeamService } from './modules/team/team.service';
+import { registerTeamRoutes } from './modules/team/team.routes';
+
 import { PrismaTenantService } from './modules/tenant/tenant.service';
 import { registerTenantRoutes } from './modules/tenant/tenant.routes';
 
@@ -89,6 +92,7 @@ export interface AppDeps {
   prisma: PrismaClient;
   bus: EventBus;
   auth: AuthService;
+  team: PrismaTeamService;
   tenants: PrismaTenantService;
   drivers: PrismaDriverService;
   assets: PrismaAssetService;
@@ -126,7 +130,7 @@ function buildBaseServices(
   prisma: PrismaClient,
   bus: EventBus,
   overrides: Partial<AppDeps>,
-): Omit<AppDeps, 'auth'> {
+): Omit<AppDeps, 'auth' | 'team'> {
   const geometry = overrides.geometry ?? new PostgisRouteGeometryService(prisma);
   const fx = overrides.fx ?? new PrismaFxService(prisma);
   const fuel = overrides.fuel ?? new PrismaFuelService(prisma, bus, fx);
@@ -150,7 +154,7 @@ function buildBaseServices(
     );
   const importService = overrides.importService ?? new PrismaImportService(prisma, loads);
 
-  const unlocked: Omit<AppDeps, 'auth'> = {
+  const unlocked: Omit<AppDeps, 'auth' | 'team'> = {
     prisma,
     bus,
     tenants: overrides.tenants ?? new PrismaTenantService(prisma),
@@ -220,8 +224,11 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       new FastifyTokenService(app.jwt, { secret: env.JWT_ACCESS_SECRET, expiresIn: env.JWT_ACCESS_TTL }),
       { accessTtlSeconds: env.JWT_ACCESS_TTL, refreshTtlSeconds: env.JWT_REFRESH_TTL },
     );
+  const team =
+    opts.deps?.team ??
+    new PrismaTeamService(prisma, auth);
 
-  const deps: AppDeps = { ...base, auth };
+  const deps: AppDeps = { ...base, auth, team };
 
   registerRoutes(server, deps, prisma, env);
   subscribeWorkers(server, deps);
@@ -250,6 +257,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
 function registerRoutes(app: FastifyInstance, deps: AppDeps, prisma: PrismaClient, env: AppEnv): void {
   registerAuthRoutes(app, { auth: deps.auth });
+  registerTeamRoutes(app, { team: deps.team });
   registerTenantRoutes(app, { tenants: deps.tenants });
   registerDriverRoutes(app, { drivers: deps.drivers });
   registerAssetRoutes(app, { assets: deps.assets });

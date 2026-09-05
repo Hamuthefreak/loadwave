@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { api } from '../../api';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { api, canManageRoles, getTokenUser, roleLabels } from '../../api';
 import { Modal } from '../../components/ui';
 import ThemeToggle from '../../components/ThemeToggle';
 import { timeAgo } from '../../utils/format';
@@ -25,7 +25,7 @@ interface NotifRow {
   createdAt: string;
 }
 
-const GROUPS: Array<{ label: string; items: Array<{ to: string; label: string; mark: JSX.Element }> }> = [
+const GROUPS: Array<{ label: string; items: Array<{ to: string; label: string; mark: JSX.Element; opsOnly?: boolean; adminOnly?: boolean }> }> = [
   {
     label: 'Overview',
     items: [{ to: '/app/dashboard', label: 'Dashboard', mark: <IconHome /> }],
@@ -35,25 +35,35 @@ const GROUPS: Array<{ label: string; items: Array<{ to: string; label: string; m
     items: [
       { to: '/app/board', label: 'Search Loads', mark: <IconSearch /> },
       { to: '/app/trucks', label: 'Search Trucks', mark: <IconTruck /> },
-      { to: '/app/myloads', label: 'My Loads', mark: <IconList /> },
+      { to: '/app/myloads', label: 'My Loads', mark: <IconList />, opsOnly: true },
     ],
   },
   {
     label: 'Network & Tools',
     items: [
-      { to: '/app/network', label: 'Private Network', mark: <IconNetwork /> },
+      { to: '/app/network', label: 'Private Network', mark: <IconNetwork />, opsOnly: true },
       { to: '/app/tools', label: 'Tools & Rates', mark: <IconGauge /> },
     ],
   },
   {
     label: 'Compliance',
     items: [
-      { to: '/app/ifta', label: 'Fuel & IFTA', mark: <IconFuel /> },
-      { to: '/app/fleet', label: 'Fleet', mark: <IconFleet /> },
-      { to: '/app/drivers', label: 'Drivers', mark: <IconId /> },
+      { to: '/app/ifta', label: 'Fuel & IFTA', mark: <IconFuel />, opsOnly: true },
+      { to: '/app/fleet', label: 'Fleet', mark: <IconFleet />, opsOnly: true },
+      { to: '/app/drivers', label: 'Drivers', mark: <IconId />, opsOnly: true },
     ],
   },
+  {
+    label: 'Account',
+    items: [{ to: '/app/team', label: 'Team & invites', mark: <IconTeam />, adminOnly: true }],
+  },
 ];
+
+// These routes exist, but are blocked by the backend for the roles shown — the
+// UI never lets those users in, so no broken pages with "requires ADMIN role".
+const RESTRICTED_PATHS = GROUPS.flatMap((g) => g.items)
+  .filter((i) => i.opsOnly || i.adminOnly)
+  .map((i) => i.to);
 
 export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
   const [tenant, setTenant] = useState<Tenant | null>(null);
@@ -63,6 +73,13 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [showOnboard, setShowOnboard] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const user = useMemo(() => getTokenUser(), []);
+  const roles = user?.roles ?? [];
+  const canManage = canManageRoles(roles);
+  const isAdmin = roles.includes('ADMIN');
+  const roleBadges = roleLabels(roles);
 
   const loadNotifs = useCallback(async () => {
     try {
@@ -122,7 +139,24 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
     navigate(to);
   };
 
-  const allItems = GROUPS.flatMap((g) => g.items);
+  const groups = useMemo(
+    () =>
+      GROUPS.map((g) => ({
+        ...g,
+        items: g.items.filter((i) => ((i.opsOnly ? canManage : true) && (i.adminOnly ? isAdmin : true))),
+      })).filter((g) => g.items.length > 0),
+    [canManage, isAdmin],
+  );
+  const allItems = groups.flatMap((g) => g.items);
+
+  const blockedPath = RESTRICTED_PATHS.some((p) => {
+    if (location.pathname !== p && !location.pathname.startsWith(`${p}/`)) return false;
+    const item = GROUPS.flatMap((g) => g.items).find((i) => i.to === p);
+    if (!item) return false;
+    if (item.opsOnly && !canManage) return true;
+    if (item.adminOnly && !isAdmin) return true;
+    return false;
+  });
 
   return (
     <div className="app-shell">
@@ -130,7 +164,7 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
         <div className="sidebar-brand" onClick={() => navigate('/app/dashboard')}>
           <span className="sidebar-brand-text">
             Loadwave
-            <small>Owner-Operator TMS</small>
+            <small>{canManage ? 'Owner-Operator TMS' : 'Driver app'}</small>
           </span>
         </div>
 
@@ -149,7 +183,7 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
         </div>
 
         <nav className="sidebar-nav" aria-label="Primary">
-          {GROUPS.map((group) => (
+          {groups.map((group) => (
             <div className="side-group" key={group.label}>
               <span className="side-group-label">{group.label}</span>
               {group.items.map((item) => (
@@ -173,11 +207,16 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
           </div>
           <div className="side-company">
             <strong>{tenant?.name ?? '…'}</strong>
-            {tenant?.verified ? (
-              <span className="badge badge-green badge-dot">Verified carrier</span>
-            ) : (
-              <span className="badge badge-gray">Unverified</span>
-            )}
+            <span className="side-company-badges">
+              {roleBadges.map((r) => (
+                <span className="badge badge-gray" key={r}>{r}</span>
+              ))}
+              {tenant?.verified ? (
+                <span className="badge badge-green badge-dot">Verified carrier</span>
+              ) : (
+                <span className="badge badge-gray">Unverified</span>
+              )}
+            </span>
             {tenant?.mcNumber && <small className="muted">MC {tenant.mcNumber}</small>}
           </div>
           <button className="nav-link logout" onClick={() => setConfirmSignOut(true)}>
@@ -201,7 +240,7 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
           </button>
         </header>
         <main className="content">
-          <Outlet />
+          {blockedPath ? <Navigate to="/app/dashboard" replace /> : <Outlet />}
         </main>
         <nav className="mobile-bottom-nav" aria-label="Primary">
           {allItems.map((item) => (
@@ -246,26 +285,45 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
         }
       >
         <p className="muted small" style={{ margin: 0 }}>
-          You're in. Here are four quick wins to get your first week moving — each takes under a
-          minute.
+          {canManage
+            ? "You're in. Here are four quick wins to get your first week moving — each takes under a minute."
+            : "You're in. Here's how to find your next load and keep your week moving."}
         </p>
         <div className="onboarding-steps" style={{ marginTop: 0 }}>
-          <button className="onboarding-step" onClick={() => onboardStep('/app/myloads')}>
-            <span className="onboarding-check" aria-hidden>1</span>
-            <span className="onboarding-step-label">Post your first load</span>
-          </button>
-          <button className="onboarding-step" onClick={() => onboardStep('/app/board')}>
-            <span className="onboarding-check" aria-hidden>2</span>
-            <span className="onboarding-step-label">Find and book a load</span>
-          </button>
-          <button className="onboarding-step" onClick={() => onboardStep('/app/ifta')}>
-            <span className="onboarding-check" aria-hidden>3</span>
-            <span className="onboarding-step-label">Log your first fuel purchase</span>
-          </button>
-          <button className="onboarding-step" onClick={() => onboardStep('/app/fleet')}>
-            <span className="onboarding-check" aria-hidden>4</span>
-            <span className="onboarding-step-label">Add your tractor to the fleet</span>
-          </button>
+          {canManage ? (
+            <>
+              <button className="onboarding-step" onClick={() => onboardStep('/app/myloads')}>
+                <span className="onboarding-check" aria-hidden>1</span>
+                <span className="onboarding-step-label">Post your first load</span>
+              </button>
+              <button className="onboarding-step" onClick={() => onboardStep('/app/board')}>
+                <span className="onboarding-check" aria-hidden>2</span>
+                <span className="onboarding-step-label">Find and book a load</span>
+              </button>
+              <button className="onboarding-step" onClick={() => onboardStep('/app/ifta')}>
+                <span className="onboarding-check" aria-hidden>3</span>
+                <span className="onboarding-step-label">Log your first fuel purchase</span>
+              </button>
+              <button className="onboarding-step" onClick={() => onboardStep('/app/fleet')}>
+                <span className="onboarding-check" aria-hidden>4</span>
+                <span className="onboarding-step-label">Add your tractor to the fleet</span>
+              </button>
+            </>            ) : (
+            <>
+              <button className="onboarding-step" onClick={() => onboardStep('/app/board')}>
+                <span className="onboarding-check" aria-hidden>1</span>
+                <span className="onboarding-step-label">Find and book a load</span>
+              </button>
+              <button className="onboarding-step" onClick={() => onboardStep('/app/trucks')}>
+                <span className="onboarding-check" aria-hidden>2</span>
+                <span className="onboarding-step-label">Browse available equipment</span>
+              </button>
+              <button className="onboarding-step" onClick={() => onboardStep('/app/tools')}>
+                <span className="onboarding-check" aria-hidden>3</span>
+                <span className="onboarding-step-label">Check rates with the market tools</span>
+              </button>
+            </>
+          )}
         </div>
       </Modal>
 
@@ -336,6 +394,10 @@ function IconFleet() {
 }
 function IconId() {
   return <Icon d="M3 5h18v14H3zM7.5 12.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM4.5 17c.6-1.8 1.7-2.5 3-2.5s2.4.7 3 2.5M14 9h4M14 13h4" />;
+}
+
+function IconTeam() {
+  return <Icon d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2.5 20c.8-3.2 3.1-5 5.5-5s4.7 1.8 5.5 5M17.5 7a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM15 20c.6-2.2 2.1-3.5 4-3.5s3.4 1.3 4 3.5" />;
 }
 
 function BellIcon() {

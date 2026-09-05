@@ -25,6 +25,7 @@ const Tools = lazy(() => import('./pages/app/Tools'));
 const Ifta = lazy(() => import('./pages/app/Ifta'));
 const Fleet = lazy(() => import('./pages/app/Fleet'));
 const Drivers = lazy(() => import('./pages/app/Drivers'));
+const Team = lazy(() => import('./pages/app/Team'));
 
 function RouteFallback() {
   return <div className="route-fallback" aria-label="Loading" />;
@@ -137,6 +138,7 @@ export default function App() {
         <Route path="ifta" element={<Ifta />} />
         <Route path="fleet" element={<Fleet />} />
         <Route path="drivers" element={<Drivers />} />
+        <Route path="team" element={<Team />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
