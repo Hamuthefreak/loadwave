@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, setToken } from '../api';
-import { LogoMark } from '../components/Marketing';
 
 interface AuthResponse {
   user: { email: string; roles: string[] };
@@ -69,12 +68,11 @@ export default function SignIn() {
   };
 
   return (
-    <div className="ld-auth-wrap">
+    <div className="ld-mkt ld-auth-wrap">
       <div className="ld-auth-shell">
         <div className="ld-auth-hero">
           <div className="ld-brand ld-brand-light">
-            <LogoMark />
-            <span className="ld-wordmark">Loadboard.</span>
+            <span className="ld-wordmark">Loadwave.</span>
           </div>
           <h1>Run your truck like a business.</h1>
           <p>
@@ -91,14 +89,16 @@ export default function SignIn() {
 
         <div className="ld-auth-card">
           <div className="ld-auth-brand">
-            <LogoMark size={30} />
-            <span className="ld-wordmark" style={{ fontSize: '1.05rem' }}>
-              Loadboard<span className="ld-wordmark-dot">.</span>
+            <span className="ld-wordmark" style={{ fontSize: '1.15rem' }}>
+              Loadwave<span className="ld-wordmark-dot">.</span>
             </span>
           </div>
-          <div className="tabs">
+          <div className="tabs" data-mode={mode} role="tablist" aria-label="Account mode">
+            <span className="tabs-ind" aria-hidden />
             <button
               type="button"
+              role="tab"
+              aria-selected={mode === 'signin'}
               className={mode === 'signin' ? 'active' : ''}
               onClick={() => { setMode('signin'); setError(null); }}
             >
@@ -106,6 +106,8 @@ export default function SignIn() {
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={mode === 'signup'}
               className={mode === 'signup' ? 'active' : ''}
               onClick={() => { setMode('signup'); setError(null); }}
             >
@@ -114,6 +116,7 @@ export default function SignIn() {
           </div>
 
           <form onSubmit={submit} style={{ display: 'contents' }}>
+            <div className="ld-auth-fields" key={mode}>
             {mode === 'signin' ? (
               <>
                 <label>
@@ -172,6 +175,7 @@ export default function SignIn() {
                 </p>
               </>
             )}
+            </div>
 
             {error && <div className="alert alert-error">{error}</div>}
 

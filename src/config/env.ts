@@ -17,6 +17,8 @@ export interface AppEnv {
   LNG_COUNTRY: string;
   SMTP_URL: string;
   MAIL_FROM: string;
+  DIAGNOSTICS_ADMIN_KEY: string;
+  DIAGNOSTICS_KEY_FILE: string;
 }
 
 const schema = {
@@ -37,6 +39,8 @@ const schema = {
     IFTA_JURISDICTION_RATES: { type: 'string', default: '' },
     SMTP_URL: { type: 'string', default: '' },
     MAIL_FROM: { type: 'string', default: '' },
+    DIAGNOSTICS_ADMIN_KEY: { type: 'string', default: '' },
+    DIAGNOSTICS_KEY_FILE: { type: 'string', default: '' },
     LNG: { type: 'string', enum: ['en', 'fr'], default: 'en' },
     LNG_COUNTRY: { type: 'string', default: 'CA' },
   },

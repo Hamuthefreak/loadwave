@@ -1,20 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MarketingLayout } from '../../components/Marketing';
 
 const IMGS = {
-  sea: '/assets/images/2.png',
-  air: '/assets/images/3.png',
-  train: '/assets/images/4.png',
-  split: '/assets/images/5.png',
-  number1: '/assets/images/6.png',
-  mapThumb: '/assets/images/7.png',
+  sea: '/assets/images/2.webp',
+  air: '/assets/images/3.webp',
+  train: '/assets/images/4.webp',
+  split: '/assets/images/5.webp',
+  number1: '/assets/images/6.webp',
+  mapThumb: '/assets/images/7.webp',
 };
 
 const RATES = [
-  { lane: 'Shanghai → Los Angeles', mode: 'Sea · 24d', value: 'from $1,940' },
-  { lane: 'Frankfurt → New York', mode: 'Air · 2d', value: 'from $3,120' },
-  { lane: 'Chicago → Vancouver', mode: 'Train · 5d', value: 'from $1,260' },
+  { lane: 'Montréal → Toronto', mode: 'Dry van · 350 mi', value: '$2,150' },
+  { lane: 'Chicago → Dallas', mode: 'Reefer · 950 mi', value: '$1,850' },
+  { lane: 'Vancouver → Calgary', mode: 'Flatbed · 620 mi', value: '$1,275' },
 ];
 
 export default function HomePage() {
@@ -23,51 +23,53 @@ export default function HomePage() {
 
   const onTrack = (e: React.FormEvent) => {
     e.preventDefault();
-    setTracked('LS-8842-GBL');
+    setTracked('12 loads · MTL → TOR');
   };
 
   return (
     <MarketingLayout>
-      {/* -------- Hero — Version A: search-driven -------- */}
-      <section className="ld-hero">
+      {/* -------- Hero — search-driven load board -------- */}
+      <section id="board" className="ld-hero">
         <div className="ld-wrap ld-hero-inner">
-          <span className="ld-hero-badge">Worldwide Cargo Experts</span>
+          <span className="ld-hero-badge">Live freight marketplace</span>
           <h1 className="ld-h1">
-            Delivering Your <span className="accent">Cargo</span> Worldwide
+            Loads that <span className="accent">pay</span>. Trucks that move.
           </h1>
           <p className="ld-hero-sub">
-            Sea, air and rail freight for every lane, plus container leasing in 40+ locations.
-            Track every shipment from pickup to delivery.
+            Live loads from verified carriers across the US and Canada. Filter by lane,
+            equipment and rate — then book in one tap, with $/mile on every card.
           </p>
 
           <form className="ld-searchbar" onSubmit={(e) => e.preventDefault()}>
             <span className="ld-search-field">
               <PinIcon />
-              <input type="text" placeholder="Enter pickup location" aria-label="Pickup location" />
+              <input type="text" placeholder="Enter pickup city or zip" aria-label="Pickup location" />
             </span>
             <span className="ld-search-divider" aria-hidden />
             <span className="ld-search-field">
               <PinIcon />
-              <input type="text" placeholder="Enter destination location" aria-label="Destination location" />
+              <input type="text" placeholder="Enter destination city or zip" aria-label="Destination location" />
             </span>
-            <Link to="/signin?mode=signup" className="ld-search-go" aria-label="Search">
+            <Link to="/signin?mode=signup" className="ld-search-go" aria-label="Search loads">
               <SearchIcon />
             </Link>
           </form>
           <p className="ld-hero-note">
-            <CheckIcon /> <b>No credit card</b> · trusted by 12,000+ shippers · live lane rates below
+            <CheckIcon /> <b>No credit card</b> · trusted by 12,000+ carriers · live loads below
           </p>
 
           <div className="ld-hero-visual">
             <span className="ld-container-glow" aria-hidden />
             <img
-              src="/assets/images/container.png"
-              alt="3D shipping container"
+              src="/assets/images/container.webp"
+              alt="Loadwave freight — every load at a glance"
               className="ld-container-img"
+              fetchPriority="high"
+              decoding="async"
             />
-            <span className="ld-anno ld-anno-360">360°</span>
+            <span className="ld-anno ld-anno-360">Live</span>
             <span className="ld-anno ld-anno-gps">GPS ✓</span>
-            <span className="ld-anno ld-anno-cloud">Live</span>
+            <span className="ld-anno ld-anno-cloud">$/mi</span>
             <span className="ld-connector ld-connector-a" aria-hidden />
             <span className="ld-connector ld-connector-b" aria-hidden />
             <span className="ld-connector ld-connector-c" aria-hidden />
@@ -76,49 +78,40 @@ export default function HomePage() {
 
         <div className="ld-rate-strip">
           <div className="ld-wrap ld-rate-strip-inner">
-            {RATES.map((r) => (
-              <div className="ld-rate-card" key={r.lane}>
-                <span className="ld-rate-mode">{r.mode}</span>
-                <b>{r.lane}</b>
-                <span className="ld-rate-value">{r.value}</span>
-              </div>
-            ))}
+            <div className="ld-rate-track">
+              {[...RATES, ...RATES].map((r, i) => (
+                <div className="ld-rate-card" key={i} aria-hidden={i >= RATES.length}>
+                  <span className="ld-rate-mode">{r.mode}</span>
+                  <b>{r.lane}</b>
+                  <span className="ld-rate-value">{r.value}</span>
+                </div>
+              ))}
+            </div>
             <Link to="/signin?mode=signup" className="ld-rate-more">
-              All live rates <ArrowIcon />
+              All live loads <ArrowIcon />
             </Link>
-          </div>
-        </div>
-
-        <div className="ld-logo-band">
-          <div className="ld-wrap">
-            <span>Maersk Line</span>
-            <span>MSC Cargo</span>
-            <span>Hapag-Lloyd</span>
-            <span>COSCO SHIP</span>
-            <span>CMA CGM</span>
-            <span>Evergreen</span>
           </div>
         </div>
       </section>
 
-      {/* -------- Shipping & Logistics Services — Version B category cards -------- */}
+      {/* -------- Marketplace services — category cards -------- */}
       <section id="services" className="ld-section ld-cats">
         <div className="ld-wrap">
-          <span className="ld-kicker center-kicker">Our Services</span>
+          <span className="ld-kicker center-kicker">The Marketplace</span>
           <h2 className="ld-h2 center">
-            Shipping & <span className="accent">Logistics</span> Services
+            Everything a carrier needs, <span className="accent">on one board</span>
           </h2>
           <p className="ld-sub center">
-            One contract, three modes, endless lanes. Pick the speed your cargo needs.
+            Loads, trucks, rates and fuel — the tools that actually make money, in one place.
           </p>
           <div className="ld-cat-grid">
-            <CategoryCard img={IMGS.sea} label="Sea Shipping" caption="Ocean freight across 4 continents" tag="Starting $1,940" />
-            <CategoryCard img={IMGS.air} label="Air Shipping" caption="Express air freight, door to door" tag="Starting $3,120" />
-            <CategoryCard img={IMGS.train} label="Train Shipping" caption="Intermodal rail for heavy cargo" tag="Starting $1,260" />
+            <CategoryCard img={IMGS.sea} label="Search Loads" caption="Van, reefer and flatbed freight across the US & Canada" tag="From $1.20/mi" />
+            <CategoryCard img={IMGS.air} label="Post Your Truck" caption="Tell the market where your equipment is" tag="Free to post" />
+            <CategoryCard img={IMGS.train} label="Fuel & IFTA" caption="Pump logging and quarterly summaries that compute themselves" tag="Included free" />
           </div>
           <div className="ld-cats-foot center">
             <Link to="/pricing" className="ld-pill ld-pill-ghost">
-              Compare all services <ArrowIcon />
+              See plans & pricing <ArrowIcon />
             </Link>
           </div>
         </div>
@@ -129,49 +122,50 @@ export default function HomePage() {
         <div className="ld-wrap">
           <span className="ld-kicker center-kicker">How it works</span>
           <h2 className="ld-h2 center">
-            Ship in <span className="accent">three steps</span>
+            Make money in <span className="accent">three steps</span>
           </h2>
           <div className="ld-step-grid">
-            <Step n="01" title="Book a service" text="Pick sea, air or train — or lease a container — and lock your lane in seconds." />
-            <Step n="02" title="We move the cargo" text="Verified carriers handle pickup, customs and the haul while you watch live." />
-            <Step n="03" title="Track to the door" text="Event-level tracking with instant alerts, right up to final delivery." />
+            <Step n="01" title="Search the board" text="Filter live loads by lane, equipment and rate — $/mile on every card." />
+            <Step n="02" title="Book in one tap" text="Lock the load instantly. No phone games, no double booking." />
+            <Step n="03" title="Run the paperwork" text="Invoices, fuel and IFTA summaries build themselves as you go." />
           </div>
         </div>
       </section>
 
-      {/* -------- Powering logistics across business -------- */}
+      {/* -------- Why Loadwave split -------- */}
       <section className="ld-section ld-split">
         <div className="ld-wrap ld-split-grid">
-          <div className="ld-split-copy">
-            <span className="ld-kicker">Why Loadboard</span>
+          <div className="ld-split-copy" data-reveal>
+            <span className="ld-kicker">Why Loadwave</span>
             <h2 className="ld-h2">
-              Powering logistics across <span className="accent">business</span>
+              Powering carriers across <span className="accent">North America</span>
             </h2>
             <p className="ld-muted">
-              One platform for freight, containers and cargo — trusted by shippers, brokers and
-              carriers on both sides of the border.
+              One workspace for loads, trucks and books — used by owner-operators and small
+              fleets on both sides of the border.
             </p>
             <ul className="ld-feature-list">
-              <FeatureBullet title="Nationwide carrier network">
-                Verified carriers with MC/USDOT numbers on every card — know who moves your freight
+              <FeatureBullet title="Verified carrier network">
+                MC/USDOT numbers and star ratings on every card — know who you're hauling for
                 before you book.
               </FeatureBullet>
-              <FeatureBullet title="Fully-featured logistics software">
-                Loads, trucks, rates, invoices and IFTA summaries in one live workspace.
+              <FeatureBullet title="One app for the back office">
+                Loads, trucks, rates, invoices and IFTA summaries in one live workspace — no
+                more bouncing between apps.
               </FeatureBullet>
-              <FeatureBullet title="Exception tracing & live support">
-                Event-level tracking with alerts, plus real support when a shipment deviates.
+              <FeatureBullet title="Saved searches & rate alerts">
+                Set a lane once; we ping you the moment a matching load posts, day or night.
               </FeatureBullet>
             </ul>
             <Link to="/signin?mode=signup" className="ld-pill ld-pill-orange ld-split-cta">
-              Start shipping free <ArrowIcon />
+              Start hauling free <ArrowIcon />
             </Link>
           </div>
-          <div className="ld-photo-wrap">
+          <div className="ld-photo-wrap" data-reveal style={{ '--reveal-delay': '120ms' } as React.CSSProperties}>
             <span className="ld-photo-glow" aria-hidden />
-            <img src={IMGS.split} alt="Orange shipping containers at a port" className="ld-photo ld-photo-dark" />
+            <img src={IMGS.split} alt="Freight trucks on the road" className="ld-photo ld-photo-dark" loading="lazy" decoding="async" />
             <span className="ld-photo-chip">
-              <span className="ld-photo-chip-tag">Live</span> 14,208 containers tracked
+              <span className="ld-photo-chip-tag">Live</span> 14,208 loads posted
             </span>
           </div>
         </div>
@@ -190,28 +184,29 @@ export default function HomePage() {
           <div className="ld-number-grid">
             <div className="ld-number-photo">
               <span className="ld-photo-glow ld-photo-glow-dark" aria-hidden />
-              <img src={IMGS.number1} alt="Logistics warehouse with containers" className="ld-photo" />
+              <img src={IMGS.number1} alt="Carrier network across the country" className="ld-photo" loading="lazy" decoding="async" />
             </div>
             <div className="ld-number-copy">
               <span className="ld-number-badge">
                 <b>#1</b> Nationwide
               </span>
               <h2 className="ld-h2 ld-h2-light">
-                Nationwide Delivery <span className="accent-grad">Logistics Solution</span>
+                North America's <span className="accent-grad">Freight Marketplace</span>
               </h2>
               <p className="ld-muted ld-muted-light">
-                Founded in 1998 with 3 trucks and a phone line, Loadboard has grown into a 2,400-vehicle
-                fleet with 92 vessels and 64 owned container depots. Awarded best-in-class dispatch
-                software six years running by the North American Freight Association.
+                Built by truckers for truckers: thousands of carriers post and book freight on
+                Loadwave every day. Live market data, verified partners and one-tap booking —
+                rated best-in-class dispatch software six years running by the North American
+                Freight Association.
               </p>
               <div className="ld-metrics">
-                <Metric value="2,400+" label="Vehicles" />
-                <Metric value="92" label="Vessels" />
-                <Metric value="64" label="Depots" />
+                <Metric value="2,400+" label="Active carriers" />
+                <Metric value="14K" label="Loads posted weekly" />
+                <Metric value="92%" label="Booked same day" />
                 <Metric value="6×" label="Award winner" />
               </div>
               <Link to="/signin?mode=signup" className="ld-pill ld-pill-light">
-                Work with us <ArrowIcon />
+                Join the board <ArrowIcon />
               </Link>
             </div>
           </div>
@@ -223,31 +218,31 @@ export default function HomePage() {
         <div className="ld-wrap">
           <span className="ld-kicker center-kicker">Reviews</span>
           <h2 className="ld-h2 center">
-            Loved by shippers <span className="accent">on both sides</span> of the border
+            Loved by carriers <span className="accent">on both sides</span> of the border
           </h2>
           <div className="ld-review-grid">
-            <Review name="Sarah Connors" role="Dispatch Lead · Northline" text="Loadboard cut our quoting time from forty minutes to five. Every lane is live and trackable." />
-            <Review name="Miguel Santos" role="Owner-Operator · 3 trucks" text="I booked a container lease from California and tracked it to Montréal in the same app. Unreal." />
-            <Review name="Priya Natarajan" role="Freight Manager · BlueHarbor" text="The exception alerts save us daily. When a vessel moves, everyone knows before the phone rings." />
+            <Review name="Sarah Connors" role="Dispatch Lead · Northline" text="Loadwave cut our quoting time from forty minutes to five. Every lane is live and trackable." />
+            <Review name="Miguel Santos" role="Owner-Operator · 3 trucks" text="I posted my truck at 6 AM and had three booking offers before lunch. Booked one in two taps." />
+            <Review name="Priya Natarajan" role="Freight Manager · BlueHarbor" text="The saved-search alerts save us daily. When a load matches our lane, everyone knows before the phone rings." />
           </div>
         </div>
       </section>
 
-      {/* -------- World map / locations -------- */}
+      {/* -------- Lane map / coverage -------- */}
       <section id="locations" className="ld-section ld-map-section">
         <div className="ld-wrap">
-          <span className="ld-kicker center-kicker">Global Footprint</span>
+          <span className="ld-kicker center-kicker">Where the freight is</span>
           <h2 className="ld-h2 center">
-            Find Locations To Buy, Sell Or <span className="accent">Lease Containers</span>
+            Search loads by lane, <span className="accent">anywhere on the map</span>
           </h2>
-          <div className="ld-lease-chips">
-            <Link to="/signin?mode=signup">Buy containers</Link>
-            <Link to="/signin?mode=signup">Sell containers</Link>
-            <Link to="/signin?mode=signup">Lease containers</Link>
+          <div className="ld-lease-chips" data-reveal>
+            <Link to="/signin?mode=signup">Find loads</Link>
+            <Link to="/signin?mode=signup">Post your truck</Link>
+            <Link to="/signin?mode=signup">Market rates</Link>
           </div>
-          <div className="ld-world">
+          <div className="ld-world" data-reveal style={{ '--reveal-delay': '120ms' } as React.CSSProperties}>
             <WorldMap />
-            <MapCard img={IMGS.mapThumb} name="California, USA" sub="Los Angeles · Long Beach · Oakland" active />
+            <MapCard img={IMGS.mapThumb} name="California, USA" sub="LA · Oakland · San Diego" active />
             <MapPin x={21} y={32} />
             <MapPin x={38} y={26} />
             <MapPin x={54} y={30} />
@@ -256,84 +251,85 @@ export default function HomePage() {
             <MapPin x={86} y={62} />
           </div>
           <p className="ld-map-foot center">
-            40+ depots and 1,200+ drop-off points across North America, Europe and Asia — filter by
-            container type and lease term in-app.
+            Live load postings across the US and Canada — filter by lane, equipment and radius
+            right on the board.
           </p>
         </div>
       </section>
 
-      {/* -------- Tracking CTA — dark split -------- */}
+      {/* -------- Freight tools CTA — dark split -------- */}
       <section id="track" className="ld-cta">
         <div className="ld-wrap ld-cta-grid">
-          <div className="ld-cta-copy">
-            <span className="ld-kicker ld-kicker-light">Shipment Tracking</span>
-            <h2 className="ld-h2 ld-h2-light">Track or Calculate your shipments</h2>
-            <div className="ld-toggle" role="tablist" aria-label="Tracking mode">
-              <button className={mode === 'track' ? 'active' : ''} role="tab" aria-selected={mode === 'track'} onClick={() => setMode('track')}>Shipment Tracking</button>
-              <button className={mode === 'calc' ? 'active' : ''} role="tab" aria-selected={mode === 'calc'} onClick={() => setMode('calc')}>Calculator</button>
+          <div className="ld-cta-copy" data-reveal>
+            <span className="ld-kicker ld-kicker-light">Freight tools</span>
+            <h2 className="ld-h2 ld-h2-light">Find loads or check lane rates</h2>
+            <div className="ld-toggle" role="tablist" aria-label="Board tool">
+              <button className={mode === 'track' ? 'active' : ''} role="tab" aria-selected={mode === 'track'} onClick={() => setMode('track')}>Find loads</button>
+              <button className={mode === 'calc' ? 'active' : ''} role="tab" aria-selected={mode === 'calc'} onClick={() => setMode('calc')}>Rate check</button>
             </div>
             <p className="ld-muted ld-muted-light ld-cta-hint">
               {mode === 'track'
-                ? 'Enter your tracking reference below and we’ll show every event in real time.'
-                : 'Estimate sea, air and rail rates for any lane in under ten seconds.'}
+                ? "Enter your lane below and we'll show the live loads that match."
+                : 'Estimate the going rate for any lane in under ten seconds.'}
             </p>
           </div>
           {mode === 'track' ? (
             <div className="ld-track-card">
-              <h3 className="ld-track-title">Quickly Track your Shipments</h3>
+              <h3 className="ld-track-title">Search the load board</h3>
               <form onSubmit={onTrack}>
                 <label>
-                  Tracking reference
+                  Origin
                   <div className="ld-input-wrap">
                     <PinIcon />
-                    <input type="text" placeholder="e.g. LS-8842" aria-label="Tracking reference" required />
+                    <input type="text" placeholder="e.g. Montréal, QC" aria-label="Origin" required />
                   </div>
                 </label>
                 <label>
-                  Service
-                  <select defaultValue="" aria-label="Service">
+                  Equipment type
+                  <select defaultValue="" aria-label="Equipment type">
                     <option value="" disabled>
-                      Select Your Service
+                      Select Equipment
                     </option>
-                    <option>Sea Shipping</option>
-                    <option>Air Shipping</option>
-                    <option>Train Shipping</option>
-                    <option>Container Leasing</option>
+                    <option>Dry Van</option>
+                    <option>Reefer</option>
+                    <option>Flatbed</option>
+                    <option>Step Deck</option>
+                    <option>Power Only</option>
                   </select>
                 </label>
                 <button type="submit" className="ld-pill ld-pill-orange ld-pill-block">
-                  Track <ArrowIcon />
+                  Find loads <ArrowIcon />
                 </button>
               </form>
               {tracked && (
                 <div className="ld-track-result">
                   <span className="ld-track-result-dot" aria-hidden />
                   <span>
-                    <b>{tracked}</b> · In transit from Shanghai → Los Angeles · expected in 6 days
+                    <b>{tracked}</b> · $/mi shown on every card · book in one tap
                   </span>
                 </div>
               )}
             </div>
           ) : (
             <div className="ld-track-card">
-              <h3 className="ld-track-title">Rate Calculator</h3>
+              <h3 className="ld-track-title">Lane Rate Check</h3>
               <form onSubmit={(e) => e.preventDefault()}>
                 <label>
                   Origin
                   <div className="ld-input-wrap">
                     <PinIcon />
-                    <input type="text" placeholder="Enter origin location" aria-label="Origin" />
+                    <input type="text" placeholder="Enter origin city" aria-label="Origin" />
                   </div>
                 </label>
                 <label>
                   Destination
                   <div className="ld-input-wrap">
                     <PinIcon />
-                    <input type="text" placeholder="Enter destination location" aria-label="Destination" />
+                    <input type="text" placeholder="Enter destination city" aria-label="Destination" />
                   </div>
                 </label>
                 <label>
-                  Weight <span className="ld-field-note">(est. container tonnage)</span>
+                  Load <span className="ld-field-note">(est. weight)</span>
                   <select defaultValue="" aria-label="Weight">
                     <option value="" disabled>
                       Select Your Weight
@@ -345,7 +341,7 @@ export default function HomePage() {
                   </select>
                 </label>
                 <button type="submit" className="ld-pill ld-pill-orange ld-pill-block">
-                  Calculate <ArrowIcon />
+                  Estimate rate <ArrowIcon />
                 </button>
               </form>
             </div>
@@ -355,11 +351,11 @@ export default function HomePage() {
 
       {/* -------- Final CTA banner -------- */}
       <section className="ld-final">
-        <div className="ld-wrap ld-final-inner">
+        <div className="ld-wrap ld-final-inner" data-reveal>
           <div>
             <span className="ld-kicker">Get started</span>
             <h2 className="ld-h2">Create your free account today</h2>
-            <p className="ld-muted">No credit card. Live rates the moment you sign up.</p>
+            <p className="ld-muted">No credit card. Live loads the moment you sign up.</p>
           </div>
           <div className="ld-final-actions">
             <Link to="/signin?mode=signup" className="ld-pill ld-pill-orange">
@@ -374,12 +370,11 @@ export default function HomePage() {
     </MarketingLayout>
   );
 }
-
 function CategoryCard({ img, label, caption, tag }: { img: string; label: string; caption: string; tag?: string }) {
   return (
-    <Link to="/signin?mode=signup" className="ld-cat-card">
+    <Link to="/signin?mode=signup" className="ld-cat-card" data-reveal>
       <span className="ld-cat-glow" aria-hidden />
-      <img src={img} alt={label} />
+      <img src={img} alt={label} loading="lazy" decoding="async" />
       {tag && <span className="ld-cat-tag">{tag}</span>}
       <span className="ld-cat-label">
         <span>
@@ -396,7 +391,7 @@ function CategoryCard({ img, label, caption, tag }: { img: string; label: string
 
 function Step({ n, title, text }: { n: string; title: string; text: string }) {
   return (
-    <div className="ld-step">
+    <div className="ld-step" data-reveal>
       <span className="ld-step-num">{n}</span>
       <h3>{title}</h3>
       <p>{text}</p>
@@ -419,9 +414,45 @@ function FeatureBullet({ title, children }: { title: string; children: React.Rea
 }
 
 function Metric({ value, label }: { value: string; label: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [display, setDisplay] = useState(value);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const m = value.match(/^([\d,.]+)(.*)$/);
+    if (!m) return;
+    const target = parseFloat(m[1].replace(/,/g, ''));
+    const suffix = m[2];
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    let raf = 0;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0].isIntersecting) return;
+        io.disconnect();
+        const t0 = performance.now();
+        const dur = 1100;
+        const tick = (t: number) => {
+          const p = Math.min(1, (t - t0) / dur);
+          const eased = 1 - Math.pow(1 - p, 3);
+          const n = target * eased;
+          setDisplay((n >= 100 ? Math.round(n) : Math.round(n * 10) / 10).toLocaleString('en-US') + suffix);
+          if (p < 1) raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+      },
+      { threshold: 0.4 },
+    );
+    io.observe(el);
+    return () => {
+      io.disconnect();
+      cancelAnimationFrame(raf);
+    };
+  }, [value]);
+
   return (
-    <div className="ld-metric">
-      <b>{value}</b>
+    <div className="ld-metric" data-reveal ref={ref}>
+      <b>{display}</b>
       <span>{label}</span>
     </div>
   );
@@ -429,7 +460,7 @@ function Metric({ value, label }: { value: string; label: string }) {
 
 function Review({ name, role, text }: { name: string; role: string; text: string }) {
   return (
-    <figure className="ld-review">
+    <figure className="ld-review" data-reveal>
       <span className="ld-review-stars" aria-label="5 out of 5 stars">
         <StarIcon /><StarIcon /><StarIcon /><StarIcon /><StarIcon />
       </span>
@@ -461,7 +492,7 @@ function MapCard({ img, name, sub, active }: { img: string; name: string; sub: s
       to="/signin?mode=signup"
       className={active ? 'ld-map-card ld-map-card-active' : 'ld-map-card'}
     >
-      <img src={img} alt={name} />
+      <img src={img} alt={name} loading="lazy" decoding="async" />
       <span className="ld-map-card-meta">
         <b>{name}</b>
         <small>{sub}</small>

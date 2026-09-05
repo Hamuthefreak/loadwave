@@ -3,6 +3,16 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        // Stable vendor chunk so react/router updates don't invalidate app chunks
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     // During development the browser calls `/auth` and `/api`, which Vite

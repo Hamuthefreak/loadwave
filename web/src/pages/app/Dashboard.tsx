@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api';
 import { Badge, Lane, PageHeader, Stat } from '../../components/ui';
 import { currencyOf, km, money, perMile, regionLabel, timeAgo } from '../../utils/format';
@@ -56,6 +56,11 @@ function currentMonthKey(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function monthLabel(key: string): string {
+  const m = new Date(`${key}-01T00:00:00`);
+  return m.toLocaleString('en-US', { month: 'short' });
+}
+
 function currentQuarter(): string {
   const now = new Date();
   const q = Math.floor(now.getMonth() / 3) + 1;
@@ -95,6 +100,23 @@ export default function Dashboard() {
     void load();
   }, [load]);
 
+  const trendMonths = useMemo(() => {
+    const months: string[] = [];
+    const d = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const dd = new Date(d.getFullYear(), d.getMonth() - i, 1);
+      months.push(`${dd.getFullYear()}-${String(dd.getMonth() + 1).padStart(2, '0')}`);
+    }
+    const sums = months.reduce<Record<string, number>>((acc, m) => {
+      acc[m] = invoices
+        .filter((i) => (i.issueDate ?? '').startsWith(m))
+        .reduce((s, i) => s + Number(i.totalBase ?? 0), 0);
+      return acc;
+    }, {});
+    const max = Math.max(...Object.values(sums), 0);
+    return { months, sums, max };
+  }, [invoices]);
+
   if (error) {
     return (
       <div>
@@ -130,10 +152,19 @@ export default function Dashboard() {
   const openBookings = board.filter((r) => r.marketplaceStatus === 'PUBLIC').length;
   const perMileOverall = revenueMonth > 0 && totalKm > 0 ? perMile(revenueMonth, totalKm) : null;
 
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+
+  const setupSteps = [
+    { label: 'Post your first load', done: loads.length > 0, to: '/app/myloads' },
+    { label: 'Log a fuel purchase', done: fuel.length > 0, to: '/app/ifta' },
+    { label: 'Book a load on the board', done: board.some((r) => r.bookedByTenantId === tenant.id), to: '/app/board' },
+  ];
+
   return (
     <div>
       <PageHeader
-        title={`Good day, ${tenant.name}`}
+        title={`${greeting}, ${tenant.name}`}
         sub="Here is how your operation is doing."
         actions={<button className="btn-ghost" onClick={() => void load()}>↻ Refresh</button>}
       />
@@ -143,6 +174,28 @@ export default function Dashboard() {
         <Stat label="Loaded miles" value={km(totalKm)} sub={`${loads.length} loads on file`} />
         <Stat label="Avg rate / load" value={money(avgRate, base)} sub={perMileOverall ? `≈ ${perMileOverall}/mile overall` : 'Add a distance to see $/mile'} tone="cyan" />
         <Stat label={`Fuel · ${currentQuarter()}`} value={money(fuelSpendQuarter, base)} sub="Quarter-to-date fuel spend" tone="amber" />
+      </div>
+
+      <h2>Revenue trend</h2>
+      <div className="card">
+        {trendMonths.max === 0 ? (
+          <p className="muted small" style={{ margin: 0 }}>
+            No invoiced revenue yet — revenue appears here as you invoice loads.
+          </p>
+        ) : (
+          <div className="revenue-bars" role="img" aria-label="Revenue over the last 6 months">
+            {trendMonths.months.map((m) => {
+              const v = trendMonths.sums[m] ?? 0;
+              const pct = trendMonths.max ? (v / trendMonths.max) * 100 : 0;
+              return (
+                <div className="revenue-bar" key={m} title={money(v, base)}>
+                  <div className="revenue-bar-fill" style={{ height: `${pct}%` }} />
+                  <span className="revenue-bar-label">{monthLabel(m)}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <h2>Right now</h2>
@@ -177,6 +230,21 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {!setupSteps.every((s) => s.done) && (
+        <div className="card onboarding">
+          <h3>Get set up</h3>
+          <p className="muted small" style={{ marginTop: 4 }}>A few quick wins to get your operation moving.</p>
+          <div className="onboarding-steps">
+            {setupSteps.map((s) => (
+              <Link key={s.label} to={s.to} className={`onboarding-step ${s.done ? 'done' : ''}`}>
+                <span className="onboarding-check" aria-hidden>{s.done ? '✓' : '○'}</span>
+                <span>{s.label}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid">
         <div className="card">

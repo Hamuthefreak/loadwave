@@ -85,7 +85,7 @@ export default function PricingPage() {
         <div className="ld-wrap">
           <div className="ld-plan-grid">
             {PLANS.map((p) => (
-              <div key={p.name} className={p.highlight ? 'ld-plan-card ld-plan-card-hot' : 'ld-plan-card'}>
+              <div key={p.name} className={p.highlight ? 'ld-plan-card ld-plan-card-hot' : 'ld-plan-card'} data-reveal>
                 {p.highlight && <span className="ld-plan-tag">Most popular</span>}
                 <h3>{p.name}</h3>
                 <p className="ld-muted small">{p.tagline}</p>
@@ -111,7 +111,7 @@ export default function PricingPage() {
 
       <section className="ld-section ld-plan-compare">
         <div className="ld-wrap">
-          <div className="ld-compare-head">
+          <div className="ld-compare-head" data-reveal>
             <div>
               <span className="ld-kicker">Comparison</span>
               <h2 className="ld-h2">Full feature comparison</h2>
@@ -120,7 +120,7 @@ export default function PricingPage() {
               {showFull ? 'Show core features' : 'Full feature chart'}
             </button>
           </div>
-          <div className="ld-table-card">
+          <div className="ld-table-card" data-reveal style={{ '--reveal-delay': '120ms' } as React.CSSProperties}>
             <div className="ld-table-scroll">
               <table className="ld-compare-table">
                 <thead>
@@ -164,7 +164,7 @@ export default function PricingPage() {
       </section>
 
       <section className="ld-section ld-cta ld-cta-flat">
-        <div className="ld-wrap ld-callout">
+        <div className="ld-wrap ld-callout" data-reveal>
           <div>
             <span className="ld-kicker ld-kicker-light">Not sure yet?</span>
             <h2 className="ld-h2 ld-h2-light">30-day free trial on every plan.</h2>

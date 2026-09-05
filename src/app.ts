@@ -80,6 +80,8 @@ import { registerDispatchRoutes } from './modules/dispatch/dispatch.routes';
 import { PrismaImportService } from './modules/import/import.service';
 import { registerImportRoutes } from './modules/import/import.routes';
 
+import { registerDiagnosticsRoutes } from './modules/diagnostics/diagnostics.routes';
+
 import type { Quarter } from './utils/quarters';
 import type { BoardFilters } from './modules/board/board.policy';
 
@@ -267,6 +269,7 @@ function registerRoutes(app: FastifyInstance, deps: AppDeps, prisma: PrismaClien
   registerNotificationRoutes(app, { notifications: deps.notifications, email: deps.email });
   registerDispatchRoutes(app, { loads: deps.loads });
   registerImportRoutes(app, { importService: deps.importService });
+  registerDiagnosticsRoutes(app, { prisma, env });
 }
 
 function startSchedule(deps: AppDeps): void {

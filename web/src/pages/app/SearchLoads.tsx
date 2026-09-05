@@ -307,9 +307,18 @@ export function LoadCard({
 
   return (
     <div className={compareMode ? 'load-card compare-on' : 'load-card'}>
-      <button className="compare-toggle" onClick={onCompare} aria-label="Compare">
-        {compareMode ? '✓' : '+'}
-      </button>
+      <div className="load-card-bar">
+        <span className="load-card-id">{load.id.slice(0, 8).toUpperCase()}</span>
+        <button
+          className={compareMode ? 'compare-toggle on' : 'compare-toggle'}
+          onClick={onCompare}
+          aria-pressed={compareMode}
+          aria-label={compareMode ? 'Remove from comparison' : 'Add to comparison'}
+          title={compareMode ? 'Remove from comparison' : 'Add to comparison'}
+        >
+          {compareMode ? '✓' : '+'}
+        </button>
+      </div>
       <div className="load-card-top" onClick={onSelect}>
         <div>
           <div className="lane lane-big">
@@ -322,8 +331,7 @@ export function LoadCard({
             <span>
               {equipmentLabel(load.equipmentType)}
             </span>
-            {load.isInternational && <Badge tone="cyan">Cross-border</Badge>}
-            {load.isInternational && ' · '}
+            {load.isInternational && <Badge tone="blue">Cross-border</Badge>}
             <span className="muted">{timeAgo(load.createdAt)}</span>
           </div>
         </div>
@@ -336,7 +344,7 @@ export function LoadCard({
         <span className="carrier-name">{load.postedByTenantName}</span>
         {verified ? (
           <Badge tone="green">
-            <span className="badge-dot" /> Verified{load.postedByMcNumber ? ` · MC ${load.postedByMcNumber}` : ''}
+            <span className="badge-dot" /> Verified{load.postedByMcNumber ? ` · ${/^(MC|USDOT)/i.test(load.postedByMcNumber) ? load.postedByMcNumber : `MC ${load.postedByMcNumber}`}` : ''}
           </Badge>
         ) : (
           <Badge tone="gray">New carrier</Badge>
@@ -508,7 +516,7 @@ function DetailDrawer({ load, onClose, onBook }: { load: BoardLoad; onClose: () 
           <div className="drawer-carrier">
             <div className="carrier-name">{load.postedByTenantName}</div>
             {verified ? (
-              <Badge tone="green"><span className="badge-dot" /> Verified carrier · MC {load.postedByMcNumber ?? '—'} / USDOT {load.postedByUsdotNumber ?? '—'}</Badge>
+              <Badge tone="green"><span className="badge-dot" /> Verified carrier · {[/^(MC|USDOT)/i.test(load.postedByMcNumber ?? '') ? load.postedByMcNumber : load.postedByMcNumber ? `MC ${load.postedByMcNumber}` : null, load.postedByUsdotNumber].filter(Boolean).join(' / ')}</Badge>
             ) : (
               <Badge tone="gray">New carrier</Badge>
             )}

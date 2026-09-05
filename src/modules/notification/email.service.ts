@@ -49,7 +49,7 @@ export class PrismaEmailService implements EmailService {
     env: { SMTP_URL?: string; MAIL_FROM?: string },
   ) {
     this.envSettings = env.SMTP_URL
-      ? { enabled: true, from: env.MAIL_FROM ?? 'dispatch@loadboard.app', ...parseUrl(env.SMTP_URL) }
+      ? { enabled: true, from: env.MAIL_FROM ?? 'dispatch@loadwave.app', ...parseUrl(env.SMTP_URL) }
       : { enabled: false };
   }
 
@@ -88,7 +88,7 @@ export class PrismaEmailService implements EmailService {
         auth: settings.user ? { user: settings.user, pass: settings.password ?? '' } : undefined,
       });
       await transport.sendMail({
-        from: settings.from ?? 'dispatch@loadboard.app',
+        from: settings.from ?? 'dispatch@loadwave.app',
         to,
         subject,
         text,
