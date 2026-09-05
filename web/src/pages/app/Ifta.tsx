@@ -43,8 +43,14 @@ const QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'];
 
 function quarterOptions(): string[] {
   const year = new Date().getFullYear();
+  const current = Number(currentQuarter().split('-')[1].slice(1));
   const out: string[] = [];
-  for (const y of [year, year - 1]) for (const q of QUARTERS) out.push(`${y}-${q}`);
+  for (const y of [year, year - 1]) {
+    for (const q of QUARTERS) {
+      if (y === year && Number(q.slice(1)) > current) continue; // don't offer quarters that haven't started
+      out.push(`${y}-${q}`);
+    }
+  }
   return out;
 }
 

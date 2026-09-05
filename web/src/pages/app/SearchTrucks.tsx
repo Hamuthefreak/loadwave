@@ -18,6 +18,8 @@ export default function SearchTrucks() {
   const [minRate, setMinRate] = useState('');
 
   const [showPost, setShowPost] = useState(false);
+  const [booking, setBooking] = useState<TruckRow | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -60,12 +62,16 @@ export default function SearchTrucks() {
   }, [open]);
 
   const book = async (target: TruckRow) => {
+    setBusy(true);
     setError(null);
     try {
       await api<TruckRow>(`/api/trucks/${target.id}/book`, { method: 'POST', body: {} });
+      setBooking(null);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Booking failed');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -169,7 +175,7 @@ export default function SearchTrucks() {
                   {taken ? (
                     <Badge tone="gray"><span className="badge-dot" /> Booked</Badge>
                   ) : (
-                    <button className="btn-green" onClick={() => void book(t)}>Book equipment</button>
+                    <button className="btn-green" onClick={() => setBooking(t)}>Book equipment</button>
                   )}
                 </div>
               </div>
@@ -217,6 +223,13 @@ export default function SearchTrucks() {
           setShowPost(false);
           await load();
         }}
+      />
+
+      <BookTruckModal
+        truck={booking}
+        busy={busy}
+        onClose={() => setBooking(null)}
+        onConfirm={(t) => void book(t)}
       />
     </div>
   );
@@ -327,4 +340,51 @@ function PostTruckModal({
 
 function locationRegionCode(region: string): string {
   return ['QC', 'ON', 'AB', 'BC', 'MB', 'NB', 'NS', 'PE', 'SK', 'NL'].includes(region) ? 'CA' : 'US';
+}
+
+function BookTruckModal({
+  truck,
+  busy,
+  onClose,
+  onConfirm,
+}: {
+  truck: TruckRow | null;
+  busy: boolean;
+  onClose: () => void;
+  onConfirm: (t: TruckRow) => void;
+}) {
+  return (
+    <Modal
+      open={truck !== null}
+      onClose={onClose}
+      title="Book this equipment?"
+      footer={
+        <>
+          <button className="btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn-green" onClick={() => truck && onConfirm(truck)} disabled={busy}>
+            {busy ? 'Booking…' : 'Confirm booking'}
+          </button>
+        </>
+      }
+    >
+      {truck && (
+        <>
+          <div className="lane lane-big">
+            <span className="lane-city">{equipmentLabel(truck.equipmentType)}</span>
+          </div>
+          <dl className="detail-list">
+            <div className="detail-row"><dt>Rate</dt><dd style={{ color: 'var(--green)' }}>{money(truck.rateAmount, truck.rateCurrency)}</dd></div>
+            <div className="detail-row"><dt>Location</dt><dd>{regionLabel(truck.locationRegion)}</dd></div>
+            <div className="detail-row"><dt>Available</dt><dd>{shortDate(truck.availableFrom)}{truck.availableTo ? ` → ${shortDate(truck.availableTo)}` : ''}</dd></div>
+            <div className="detail-row"><dt>Listed by</dt><dd>{truck.postedByTenantName}</dd></div>
+          </dl>
+          {truck.notes && <p className="muted small">{truck.notes}</p>}
+          <p className="muted small">
+            Booking is final and instant. Once booked, the unit is marked taken for every carrier
+            on the board.
+          </p>
+        </>
+      )}
+    </Modal>
+  );
 }

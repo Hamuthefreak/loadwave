@@ -236,7 +236,7 @@ export default function SearchLoads() {
       {loading && rows.length === 0 ? (
         <Spinner label="Loading the board…" />
       ) : view === 'list' ? (
-        rows.length === 0 ? (
+        filtered.length === 0 ? (
           <EmptyState
             title="No loads match right now"
             sub="Try a wider lane or lower the minimum rate. New loads appear the moment a partner posts."
@@ -374,7 +374,7 @@ function RouteView({ rows, onOpen }: { rows: BoardLoad[]; onOpen: (l: BoardLoad)
       cur.count += 1;
       map.set(key, cur);
     }
-    return [...map.values()].sort((a, b) => a.count - b.count) as Array<{
+    return [...map.values()].sort((a, b) => b.count - a.count) as Array<{
       from: string; to: string; loads: number; avg: number; count: number;
     }>;
   }, [rows]);

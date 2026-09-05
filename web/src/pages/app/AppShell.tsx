@@ -60,6 +60,8 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
   const [notifs, setNotifs] = useState<NotifRow[]>([]);
   const [unread, setUnread] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const [showOnboard, setShowOnboard] = useState(false);
   const navigate = useNavigate();
 
   const loadNotifs = useCallback(async () => {
@@ -98,8 +100,26 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
   };
 
   const signOut = () => {
+    setConfirmSignOut(false);
     onSignOut();
     navigate('/', { replace: true });
+  };
+
+  // First-login onboarding: show once per tenant account.
+  useEffect(() => {
+    if (!tenant) return;
+    const key = onboardKey(tenant.id);
+    if (!localStorage.getItem(key)) setShowOnboard(true);
+  }, [tenant]);
+
+  const dismissOnboard = () => {
+    if (tenant) localStorage.setItem(onboardKey(tenant.id), '1');
+    setShowOnboard(false);
+  };
+
+  const onboardStep = (to: string) => {
+    dismissOnboard();
+    navigate(to);
   };
 
   const allItems = GROUPS.flatMap((g) => g.items);
@@ -160,7 +180,7 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
             )}
             {tenant?.mcNumber && <small className="muted">MC {tenant.mcNumber}</small>}
           </div>
-          <button className="nav-link logout" onClick={signOut}>
+          <button className="nav-link logout" onClick={() => setConfirmSignOut(true)}>
             Sign out
           </button>
         </div>
@@ -176,7 +196,7 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
             <BellIcon />
             {unread > 0 && <span className="bell-count">{unread > 9 ? '9+' : unread}</span>}
           </button>
-          <button className="nav-link logout" onClick={signOut}>
+          <button className="nav-link logout" onClick={() => setConfirmSignOut(true)}>
             Sign out
           </button>
         </header>
@@ -196,6 +216,58 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
           ))}
         </nav>
       </div>
+
+      <Modal
+        open={confirmSignOut}
+        onClose={() => setConfirmSignOut(false)}
+        title="Sign out?"
+        footer={
+          <>
+            <button className="btn-ghost" onClick={() => setConfirmSignOut(false)}>Cancel</button>
+            <button className="btn-danger" onClick={signOut}>Sign out</button>
+          </>
+        }
+      >
+        <p className="muted" style={{ margin: 0 }}>
+          You'll be signed out of <strong>{tenant?.name ?? 'Loadwave'}</strong> on this device.
+          Your loads, fuel records and IFTA data stay safe — sign back in anytime to pick up
+          where you left off.
+        </p>
+      </Modal>
+
+      <Modal
+        open={showOnboard}
+        onClose={dismissOnboard}
+        title={`Welcome to Loadwave${tenant ? `, ${tenant.name}` : ''}`}
+        footer={
+          <button className="btn-green" onClick={dismissOnboard}>
+            Start using Loadwave
+          </button>
+        }
+      >
+        <p className="muted small" style={{ margin: 0 }}>
+          You're in. Here are four quick wins to get your first week moving — each takes under a
+          minute.
+        </p>
+        <div className="onboarding-steps" style={{ marginTop: 0 }}>
+          <button className="onboarding-step" onClick={() => onboardStep('/app/myloads')}>
+            <span className="onboarding-check" aria-hidden>1</span>
+            <span className="onboarding-step-label">Post your first load</span>
+          </button>
+          <button className="onboarding-step" onClick={() => onboardStep('/app/board')}>
+            <span className="onboarding-check" aria-hidden>2</span>
+            <span className="onboarding-step-label">Find and book a load</span>
+          </button>
+          <button className="onboarding-step" onClick={() => onboardStep('/app/ifta')}>
+            <span className="onboarding-check" aria-hidden>3</span>
+            <span className="onboarding-step-label">Log your first fuel purchase</span>
+          </button>
+          <button className="onboarding-step" onClick={() => onboardStep('/app/fleet')}>
+            <span className="onboarding-check" aria-hidden>4</span>
+            <span className="onboarding-step-label">Add your tractor to the fleet</span>
+          </button>
+        </div>
+      </Modal>
 
       <Modal
         open={notifOpen}
@@ -273,6 +345,10 @@ function BellIcon() {
       <path d="M13.7 21a2 2 0 0 1-3.4 0" />
     </svg>
   );
+}
+
+function onboardKey(tenantId: string): string {
+  return `loadwave.onboarded.${tenantId}`;
 }
 
 function LiveBanner() {

@@ -96,7 +96,7 @@ export default function Tools() {
             </div>
             <div className="card">
               <span className="stat-label">Market freshness</span>
-              <div className="stat-value"><span className="live-dot" aria-hidden /></div>
+              <div className="stat-value"><span className="live-dot" aria-hidden /> Live</div>
               <span className="stat-sub">Listings refresh every 30s</span>
             </div>
           </div>

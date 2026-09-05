@@ -405,6 +405,16 @@ button:disabled {
   filter: none;
 }
 
+.btn-danger {
+  background: var(--red);
+  color: #fff;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--red);
+  filter: brightness(0.92);
+}
+
 .btn-sm {
   padding: 5px 10px;
   font-size: 0.8rem;
@@ -2623,6 +2633,18 @@ textarea:focus {
 .onboarding-step.done .onboarding-check {
   border-color: var(--green);
   color: var(--green);
+}
+
+button.onboarding-step {
+  font-family: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-align: left;
+  background: var(--panel);
+}
+
+button.onboarding-step:hover {
+  background: var(--panel-2);
 }
 
 /* ---------- Notifications bell + drawer ---------- */
