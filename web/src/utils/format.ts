@@ -153,6 +153,28 @@ export function fullDate(iso: string | null | undefined): string {
   return d.toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+/** Whole days from today to the given date (negative = in the past, 0 = today). */
+export function daysUntil(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const now = new Date();
+  const a = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  const b = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((a - b) / 86_400_000);
+}
+
+/** Human urgency label for a date: "Tomorrow", "In 3 days", "Today", "2 days ago". */
+export function daysLabel(iso: string | null | undefined): string | null {
+  const days = daysUntil(iso);
+  if (days === null) return null;
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Tomorrow';
+  if (days === -1) return 'Yesterday';
+  if (days > 1) return `In ${days} days`;
+  return `${Math.abs(days)} days ago`;
+}
+
 export function timeAgo(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);

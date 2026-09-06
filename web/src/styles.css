@@ -3484,3 +3484,102 @@ html[data-theme='light'] .lane-arrow {
 .billing-quarter select {
   max-width: 150px;
 }
+
+/* ---------- Detail polish ---------- */
+
+/* Bell rows are now real buttons */
+.bell-panel .bell-item {
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.bell-panel .bell-item:hover,
+.bell-panel .bell-item:focus-visible {
+  border-color: var(--accent);
+  background: var(--panel-2, var(--panel));
+  outline: none;
+}
+.bell-panel .bell-item > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Board: pickup urgency chip */
+.pickup-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.pickup-hint .pickup-date {
+  font-weight: 400;
+}
+.pickup-hint.pickup-soon { color: var(--amber); }
+.pickup-hint.pickup-today { color: var(--accent); }
+.pickup-hint.pickup-overdue { color: var(--red, #c0392b); }
+
+/* Board: sort control */
+.board-sort {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.board-sort select {
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+/* Trip: delivery deadline hint */
+.delivery-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.delivery-count {
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--panel-2, var(--panel));
+  color: var(--muted);
+}
+.delivery-hint.delivery-soon .delivery-count { color: var(--amber); }
+.delivery-hint.delivery-today .delivery-count { background: var(--accent); color: #fff; }
+.delivery-hint.delivery-overdue .delivery-count { background: var(--red, #c0392b); color: #fff; }
+
+/* Sign-in: show/hide password */
+.pw-wrap {
+  position: relative;
+  display: block;
+}
+.pw-wrap input {
+  padding-right: 62px;
+}
+.pw-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.pw-toggle:hover { color: var(--accent); }

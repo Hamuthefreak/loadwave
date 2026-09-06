@@ -63,6 +63,7 @@ export function registerSearchRoutes(app: FastifyInstance, deps: SearchModuleDep
         name: request.body?.name,
         filters: request.body?.filters ?? {},
         notify: request.body?.notify ?? false,
+        userId: request.user.sub,
       });
       return reply.code(201).send(row);
     },

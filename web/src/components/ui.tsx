@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { regionLabel } from '../utils/format';
 
 export type Tone = 'green' | 'amber' | 'red' | 'blue' | 'gray' | 'cyan' | 'purple';
@@ -107,6 +107,11 @@ export function Lane({
   );
 }
 
+/** Lock page scroll while an overlay (modal/drawer) is open. */
+export function lockScroll(lock: boolean): void {
+  document.body.style.overflow = lock ? 'hidden' : '';
+}
+
 export function Modal({
   open,
   onClose,
@@ -120,20 +125,29 @@ export function Modal({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    lockScroll(true);
+    // Focus the first real field so keyboard users land ready to type.
+    const first = ref.current?.querySelector<HTMLElement>('input, select, textarea');
+    first?.focus();
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      lockScroll(false);
+    };
   }, [open, onClose]);
 
   if (!open) return null;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal" ref={ref} onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h3>{title}</h3>
           <button className="icon-btn" onClick={onClose} aria-label="Close">

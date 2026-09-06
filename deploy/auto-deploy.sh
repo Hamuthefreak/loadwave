@@ -47,6 +47,9 @@ cd "$APP_DIR"
 echo "==> Migrations"
 npm run prisma:migrate:deploy
 
+echo "==> Enabling PostGIS (idempotent)"
+npm run db:postgis
+
 echo "==> Seeding geo places (idempotent)"
 npm run db:seed-places
 

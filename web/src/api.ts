@@ -15,14 +15,49 @@ export class ApiError extends Error {
 }
 
 const TOKEN_KEY = 'loadwave.accessToken';
+const REFRESH_KEY = 'loadwave.refreshToken';
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
 
+function getRefreshToken(): string | null {
+  return localStorage.getItem(REFRESH_KEY);
+}
+
+export function setTokens(accessToken: string, refreshToken?: string): void {
+  localStorage.setItem(TOKEN_KEY, accessToken);
+  if (refreshToken) localStorage.setItem(REFRESH_KEY, refreshToken);
+}
+
 export function setToken(token: string | null): void {
   if (token) localStorage.setItem(TOKEN_KEY, token);
   else localStorage.removeItem(TOKEN_KEY);
+}
+
+function clearTokens(): void {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REFRESH_KEY);
+}
+
+/**
+ * Signs out everywhere: best-effort revocation of the refresh token on the
+ * server (so the session cannot be replayed), then clears local storage.
+ */
+export async function signOut(): Promise<void> {
+  const refreshToken = getRefreshToken();
+  if (refreshToken) {
+    try {
+      await api<{ ok: boolean }>('/auth/logout', {
+        method: 'POST',
+        body: { refreshToken },
+        noAuthRefresh: true,
+      });
+    } catch {
+      // Local sign-out must never be blocked by a failed network call.
+    }
+  }
+  clearTokens();
 }
 
 export interface TokenUser {
@@ -74,26 +109,77 @@ export function roleLabels(roles: string[] | null | undefined): string[] {
   return (roles ?? []).map((r) => LABELS[r] ?? r);
 }
 
+interface ApiOptions {
+  method?: string;
+  body?: unknown;
+  /** Internal: skip the 401 → refresh retry (refresh/logout calls only). */
+  noAuthRefresh?: boolean;
+}
+
+// One in-flight refresh at a time; concurrent 401s all await the same promise.
+let refreshPromise: Promise<boolean> | null = null;
+
+async function tryRefresh(): Promise<boolean> {
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = (async () => {
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) return false;
+    try {
+      const res = await fetch('/auth/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+      const text = await res.text();
+      const data = text ? safeJson(text) : null;
+      if (!res.ok) return false;
+      const tokens = (data as { tokens?: { accessToken?: string; refreshToken?: string } } | null)?.tokens;
+      if (!tokens?.accessToken) return false;
+      setTokens(tokens.accessToken, tokens.refreshToken);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
+}
+
 export async function api<T>(
   path: string,
-  options: { method?: string; body?: unknown } = {},
+  options: ApiOptions = {},
 ): Promise<T> {
   const headers: Record<string, string> = {};
   const token = getToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
 
-  const res = await fetch(path, {
-    method: options.method ?? 'GET',
-    headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-  });
+  const doFetch = async (): Promise<Response> =>
+    fetch(path, {
+      method: options.method ?? 'GET',
+      headers,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    });
+
+  let res = await doFetch();
+
+  // Access token expired: try the refresh token once, then replay the request.
+  // Any real auth failure (bad credentials, revoked session) skips this.
+  if (res.status === 401 && !options.noAuthRefresh) {
+    const refreshed = await tryRefresh();
+    if (refreshed) {
+      const fresh = getToken();
+      if (fresh) headers['Authorization'] = `Bearer ${fresh}`;
+      res = await doFetch();
+    }
+    if (!refreshed) clearTokens();
+  }
 
   const text = await res.text();
   const data = text ? safeJson(text) : null;
 
   if (!res.ok) {
-    if (res.status === 401) setToken(null); // force re-login
     const message =
       (data as { message?: string } | null)?.message ?? `Request failed (${res.status})`;
     throw new ApiError(message, res.status, data);

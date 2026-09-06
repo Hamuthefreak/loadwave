@@ -1,11 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { api, setToken } from '../api';
+import { api, setTokens } from '../api';
 
 interface AuthResponse {
   user: { email: string; roles: string[] };
   tenant: { id: string; name: string; baseCurrency: string; baseJurisdiction: string };
-  tokens: { accessToken: string };
+  tokens: { accessToken: string; refreshToken: string };
 }
 
 type Mode = 'signin' | 'signup' | 'invite';
@@ -36,9 +36,25 @@ export default function SignIn() {
 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showPw, setShowPw] = useState(false);
+
+  const pwProps = { show: showPw, onToggle: () => setShowPw((s) => !s) };
+
+  const toggleBtn = (visible: boolean, toggle: () => void) => (
+    <button
+      type="button"
+      className="pw-toggle"
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={toggle}
+      aria-label={visible ? 'Hide password' : 'Show password'}
+      tabIndex={-1}
+    >
+      {visible ? 'Hide' : 'Show'}
+    </button>
+  );
 
   const finish = (res: AuthResponse) => {
-    setToken(res.tokens.accessToken);
+    setTokens(res.tokens.accessToken, res.tokens.refreshToken);
     navigate(state?.from ?? '/app/dashboard', { replace: true });
   };
 
@@ -144,7 +160,10 @@ export default function SignIn() {
                 </label>
                 <label>
                   Password
-                  <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
+                  <span className="pw-wrap">
+                    <input type={showPw ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
+                    {toggleBtn(showPw, pwProps.onToggle)}
+                  </span>
                 </label>
               </>
             ) : (
@@ -160,7 +179,10 @@ export default function SignIn() {
                 <label>
                   Password
                   <span className="small">At least 8 characters.</span>
-                  <input type="password" required minLength={8} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="••••••••" autoComplete="new-password" />
+                  <span className="pw-wrap">
+                    <input type={showPw ? 'text' : 'password'} required minLength={8} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="••••••••" autoComplete="new-password" />
+                    {toggleBtn(showPw, pwProps.onToggle)}
+                  </span>
                 </label>
                 <div className="form-grid">
                   <label>

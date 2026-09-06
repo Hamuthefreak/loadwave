@@ -62,16 +62,27 @@ export function registerDispatchRoutes(app: FastifyInstance, deps: DispatchModul
     '/api/loads/:id/status',
     {
       schema: { body: statusSchema },
-      preHandler: app.authenticate,
+      preHandler: async (request, reply) => {
+        // Any signed-in user may attempt this, but only ops roles or the
+        // load's assigned driver (enforced in the service) can actually
+        // transition it. An unlinked DRIVER account gets a clean 403 here
+        // instead of being silently treated as ops.
+        await app.authenticate(request, reply);
+        if (reply.sent) return;
+        const isOps = (request.user.roles as string[]).some((r) => r === 'ADMIN' || r === 'DISPATCHER');
+        if (!isOps && !request.user.driverId) {
+          return reply
+            .code(403)
+            .send({ error: 'FORBIDDEN', message: 'no driver profile is linked to this account' });
+        }
+      },
     },
     async (request, reply) => {
-      const row = await deps.loads.setStatus(
-        request.user.tenantId,
-        request.params.id,
-        request.body.status,
-        request.user.sub,
-        request.user.driverId,
-      );
+      const isOps = (request.user.roles as string[]).some((r) => r === 'ADMIN' || r === 'DISPATCHER');
+      const row = await deps.loads.setStatus(request.user.tenantId, request.params.id, request.body.status, {
+        isOps,
+        driverId: request.user.driverId,
+      });
       return reply.send({ ok: true, load: row });
     },
   );

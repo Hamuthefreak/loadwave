@@ -19,6 +19,8 @@ export interface AppEnv {
   MAIL_FROM: string;
   DIAGNOSTICS_ADMIN_KEY: string;
   DIAGNOSTICS_KEY_FILE: string;
+  /** Comma-separated allowed origins; empty = same-origin only (no CORS). */
+  CORS_ORIGIN: string;
 }
 
 const schema = {
@@ -41,6 +43,7 @@ const schema = {
     MAIL_FROM: { type: 'string', default: '' },
     DIAGNOSTICS_ADMIN_KEY: { type: 'string', default: '' },
     DIAGNOSTICS_KEY_FILE: { type: 'string', default: '' },
+    CORS_ORIGIN: { type: 'string', default: '' },
     LNG: { type: 'string', enum: ['en', 'fr'], default: 'en' },
     LNG_COUNTRY: { type: 'string', default: 'CA' },
   },

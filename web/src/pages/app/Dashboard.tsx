@@ -177,7 +177,12 @@ function ManagerDashboard() {
       />
 
       <div className="grid">
-        <Stat label={`Revenue · ${monthKey}`} value={money(revenueMonth, base)} sub={`Invoiced this month (${tenant.baseCurrency} base)`} tone="green" />
+        <Stat
+          label={`Revenue · ${monthLabel(monthKey)} ${monthKey.slice(0, 4)}`}
+          value={money(revenueMonth, base)}
+          sub={`Invoiced this month (${tenant.baseCurrency} base)`}
+          tone="green"
+        />
         <Stat label="Loaded miles" value={km(totalKm)} sub={`${loads.length} loads on file`} />
         <Stat label="Avg rate / load" value={money(avgRate, base)} sub={perMileOverall ? `≈ ${perMileOverall}/mile overall` : 'Add a distance to see $/mile'} tone="cyan" />
         <Stat label={`Fuel · ${currentQuarter()}`} value={money(fuelSpendQuarter, base)} sub="Quarter-to-date fuel spend" tone="amber" />

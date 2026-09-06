@@ -41,6 +41,13 @@ async function main() {
       }),
     ]);
 
+    // Link the demo DRIVER login to Maria Chen — she carries the private load
+    // seeded below, so signing in as the driver shows My Trips immediately.
+    await prisma.user.update({
+      where: { email: `driver${stamp}@loadboard.app` },
+      data: { driverId: driverB.id },
+    });
+
     const tractor = await prisma.asset.create({
       data: { tenantId: tenant.id, assetType: 'TRACTOR', powerUnitNumber: 'PU-100', vin: '1HDT12345STAMP01', eldDeviceId: 'ELD-A001' },
     });

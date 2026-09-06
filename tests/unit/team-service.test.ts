@@ -46,11 +46,25 @@ class FakeDb {
   user = {
     findUnique: async ({ where }: { where: { email: string } }) =>
       this.users.find((u) => u.email === where.email) ?? null,
+    findFirst: async ({ where }: { where: { id?: string; tenantId: string; driverId?: string; NOT?: { id: string } } }) =>
+      this.users.find(
+        (u) =>
+          (where.id === undefined || u.id === where.id) &&
+          u.tenantId === where.tenantId &&
+          (where.driverId === undefined || u.driverId === where.driverId) &&
+          (where.NOT === undefined || u.id !== where.NOT.id),
+      ) ?? null,
     findMany: async ({ where }: { where: { tenantId: string } }) =>
       this.users.filter((u) => u.tenantId === where.tenantId),
     create: async ({ data }: { data: Omit<UserRow, 'id' | 'createdAt'> }) => {
       const row: UserRow = { ...data, id: nextId('user'), createdAt: new Date() };
       this.users.push(row);
+      return row;
+    },
+    update: async ({ where, data }: { where: { id: string }; data: Partial<UserRow> }) => {
+      const row = this.users.find((u) => u.id === where.id);
+      if (!row) throw new Error('not found');
+      Object.assign(row, data);
       return row;
     },
   };
@@ -325,5 +339,74 @@ describe('PrismaTeamService — invites', () => {
     expect(invites[0].id).toBe(invite.id);
     expect(invites[0].status).toBe('PENDING');
     expect(invites[0].driverName).toBe('Marie Tremblay');
+  });
+});
+
+describe('PrismaTeamService — setDriverLink', () => {
+  beforeEach(() => {
+    seq = 0;
+  });
+
+  it('links a DRIVER member to a driver of the tenant', async () => {
+    const db = new FakeDb();
+    const service = makeService(db);
+    const driver = db.seedDriver('tenant-1', 'Maria Chen');
+    const member = db.seedUser('tenant-1', 'maria@carrier.ca', ['DRIVER']);
+
+    const row = await service.setDriverLink('tenant-1', member.id, driver.id);
+    expect(row.driverId).toBe(driver.id);
+    expect(row.driverName).toBe('Maria Chen');
+    expect(db.users.find((u) => u.id === member.id)?.driverId).toBe(driver.id);
+  });
+
+  it('rejects a driver from another tenant', async () => {
+    const db = new FakeDb();
+    const service = makeService(db);
+    db.seedDriver('tenant-2');
+    const member = db.seedUser('tenant-1', 'd@carrier.ca', ['DRIVER']);
+
+    await expect(service.setDriverLink('tenant-1', member.id, 'driver-1')).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('rejects linking a non-DRIVER account', async () => {
+    const db = new FakeDb();
+    const service = makeService(db);
+    const driver = db.seedDriver('tenant-1');
+    const member = db.seedUser('tenant-1', 'admin@carrier.ca', ['ADMIN']);
+
+    await expect(service.setDriverLink('tenant-1', member.id, driver.id)).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('rejects linking a driver that another member already owns', async () => {
+    const db = new FakeDb();
+    const service = makeService(db);
+    const driver = db.seedDriver('tenant-1');
+    db.seedUser('tenant-1', 'first@carrier.ca', ['DRIVER']);
+    const second = db.seedUser('tenant-1', 'second@carrier.ca', ['DRIVER']);
+    db.users[db.users.length - 2].driverId = driver.id; // first member owns it
+
+    await expect(service.setDriverLink('tenant-1', second.id, driver.id)).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it('unlinks by passing null and resolves the name to null', async () => {
+    const db = new FakeDb();
+    const service = makeService(db);
+    const driver = db.seedDriver('tenant-1');
+    const member = db.seedUser('tenant-1', 'maria@carrier.ca', ['DRIVER']);
+    db.users[0].driverId = driver.id;
+
+    const row = await service.setDriverLink('tenant-1', member.id, null);
+    expect(row.driverId).toBeNull();
+    expect(row.driverName).toBeNull();
+    expect(db.users[0].driverId).toBeNull();
+  });
+
+  it('404s for a user outside the tenant', async () => {
+    const db = new FakeDb();
+    const service = makeService(db);
+    const driver = db.seedDriver('tenant-1');
+    const member = db.seedUser('tenant-2', 'other@carrier.ca', ['DRIVER']);
+
+    await expect(service.setDriverLink('tenant-1', member.id, driver.id)).rejects.toMatchObject({ statusCode: 404 });
   });
 });

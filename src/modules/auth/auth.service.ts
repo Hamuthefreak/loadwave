@@ -148,6 +148,17 @@ export class AuthService {
     };
   }
 
+  /**
+   * Revokes a refresh token (idempotent). Used by /auth/logout so a signed-out
+   * session cannot be replayed for the rest of its TTL.
+   */
+  async logout(refreshToken: string): Promise<void> {
+    if (!refreshToken) throw badRequest('refreshToken is required');
+    const row = await this.repo.findRefreshToken(sha256(refreshToken));
+    if (!row || row.revokedAt) return; // already gone — nothing to do
+    await this.repo.revokeRefreshToken(row.id);
+  }
+
   async refresh(refreshToken: string): Promise<FreshSession> {
     if (!refreshToken) throw badRequest('refreshToken is required');
     const row = await this.repo.findRefreshToken(sha256(refreshToken));

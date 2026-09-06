@@ -1,8 +1,17 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { api } from '../../api';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { api, getTokenUser } from '../../api';
 import { Badge, Empty, PageHeader } from '../../components/ui';
 import DispatchModal, { type DispatchDriver, type DispatchLoad } from '../../components/DispatchModal';
+import { LinkDriverModal } from '../../components/LinkDriverModal';
 import { regionLabel } from '../../utils/format';
+
+interface TeamMember {
+  id: string;
+  email: string;
+  roles: string[];
+  driverId: string | null;
+  driverName: string | null;
+}
 
 interface Driver extends DispatchDriver {
   externalEldId: string | null;
@@ -39,10 +48,15 @@ export default function Drivers() {
   const [rows, setRows] = useState<Driver[]>([]);
   const [onTrip, setOnTrip] = useState<Record<string, string>>({});
   const [hos, setHos] = useState<Record<string, HosOverviewRow>>({});
+  const [linkedByDriver, setLinkedByDriver] = useState<Record<string, string>>({});
   const [dispatchFor, setDispatchFor] = useState<Driver | null>(null);
+  const [linkFor, setLinkFor] = useState<Driver | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  const user = useMemo(() => getTokenUser(), []);
+  const isAdmin = user?.roles.includes('ADMIN') ?? false;
 
   const [name, setName] = useState('');
   const [license, setLicense] = useState('');
@@ -53,13 +67,21 @@ export default function Drivers() {
     setLoading(true);
     setError(null);
     try {
-      const [ds, ov, ls] = await Promise.all([
+      const [ds, ov, ls, tm] = await Promise.all([
         api<Driver[]>('/api/drivers'),
         api<HosOverviewRow[]>('/api/hos/overview').catch(() => [] as HosOverviewRow[]),
         api<DispatchLoad[]>('/api/loads').catch(() => [] as DispatchLoad[]),
+        isAdmin
+          ? api<{ members: TeamMember[] }>('/api/team').catch(() => null)
+          : Promise.resolve(null),
       ]);
       setRows(ds);
       setHos(Object.fromEntries(ov.map((r) => [r.driverId, r])));
+      const byDriver: Record<string, string> = {};
+      for (const m of tm?.members ?? []) {
+        if (m.driverId && m.roles.includes('DRIVER')) byDriver[m.driverId] = m.email;
+      }
+      setLinkedByDriver(byDriver);
       const trip: Record<string, string> = {};
       for (const l of ls) {
         if (
@@ -76,7 +98,7 @@ export default function Drivers() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     void load();
@@ -170,6 +192,11 @@ export default function Drivers() {
                 <tr key={d.id}>
                   <td>
                     <strong>{d.name}</strong>
+                    {linkedByDriver[d.id] ? (
+                      <div className="muted small">Login: {linkedByDriver[d.id]}</div>
+                    ) : (
+                      <div className="muted small">No linked login</div>
+                    )}
                     {d.externalEldId && <div className="muted small">ELD: {d.externalEldId}</div>}
                   </td>
                   <td>{d.licenseNumber ?? '—'}</td>
@@ -202,7 +229,14 @@ export default function Drivers() {
                     {onTrip[d.id] ? <Badge tone="cyan">{onTrip[d.id]}</Badge> : <span className="muted small">—</span>}
                   </td>
                   <td>
-                    <button className="btn-sm" onClick={() => setDispatchFor(d)}>Dispatch</button>
+                    <span className="row-actions" style={{ flexDirection: 'row' }}>
+                      <button className="btn-sm" onClick={() => setDispatchFor(d)}>Dispatch</button>
+                      {isAdmin && (
+                        <button className="btn-sm" onClick={() => setLinkFor(d)}>
+                          {linkedByDriver[d.id] ? 'Login' : 'Link'}
+                        </button>
+                      )}
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -215,6 +249,13 @@ export default function Drivers() {
         open={dispatchFor !== null}
         onClose={() => setDispatchFor(null)}
         driver={dispatchFor}
+        onSaved={() => load()}
+      />
+
+      <LinkDriverModal
+        open={linkFor !== null}
+        onClose={() => setLinkFor(null)}
+        driver={linkFor}
         onSaved={() => load()}
       />
     </div>

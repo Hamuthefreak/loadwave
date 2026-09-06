@@ -3,7 +3,7 @@ import { d, toDb, type Decimal } from '../../utils/decimal';
 import { badRequest, notFound } from '../../utils/errors';
 import { EVENTS, LoadDispatched, LoadImported, LoadStatusChanged } from '../../events/domain-events';
 import type { EventBus } from '../../events/event-bus';
-import { assertTransition, driverMayAdvance } from '../dispatch/dispatch.policy';
+import { assertTransition, canAdvance, type StatusActor } from '../dispatch/dispatch.policy';
 
 export interface LoadStopRow {
   id: string;
@@ -127,7 +127,7 @@ export interface LoadService {
   // Loads dispatched to a specific driver (their "My Trips" inbox).
   listAssignedToDriver(tenantId: string, driverId: string): Promise<LoadRow[]>;
   assign(tenantId: string, loadId: string, driverId: string | null, assetId: string | null): Promise<LoadRow>;
-  setStatus(tenantId: string, loadId: string, status: string, actorUserId?: string, actorDriverId?: string | null): Promise<LoadRow>;
+  setStatus(tenantId: string, loadId: string, status: string, actor: StatusActor): Promise<LoadRow>;
 }
 
 interface LoadDbRow {
@@ -436,13 +436,22 @@ export class PrismaLoadService implements LoadService {
       const asset = await this.prisma.asset.findFirst({ where: { id: assetId, tenantId } });
       if (!asset) throw notFound('asset not found for this tenant');
     }
+    // Assigning an OPEN load moves it to ASSIGNED; pulling the driver off an
+    // ASSIGNED load reverts it to OPEN so it can be dispatched again (never
+    // downgrades IN_TRANSIT+ — those require an explicit status change).
+    const nextStatus =
+      driverId && row.status === 'OPEN'
+        ? 'ASSIGNED'
+        : !driverId && row.status === 'ASSIGNED'
+          ? 'OPEN'
+          : row.status;
     const updated = await this.prisma.load.update({
       where: { id: loadId },
       data: {
         assigneeDriverId: driverId,
         assigneeAssetId: assetId,
-        assignedAt: new Date(),
-        status: row.status === 'OPEN' ? 'ASSIGNED' : row.status,
+        assignedAt: driverId ? new Date() : null,
+        status: nextStatus,
       },
       select: this.select,
     });
@@ -468,21 +477,15 @@ export class PrismaLoadService implements LoadService {
     return this.map(updated as unknown as LoadDbRow);
   }
 
-  async setStatus(
-    tenantId: string,
-    loadId: string,
-    status: string,
-    actorUserId?: string,
-    actorDriverId?: string | null,
-  ): Promise<LoadRow> {
-    void actorUserId;
+  async setStatus(tenantId: string, loadId: string, status: string, actor: StatusActor): Promise<LoadRow> {
     const row = await this.prisma.load.findFirst({ where: { id: loadId, tenantId } });
     if (!row) throw notFound('load not found');
 
     assertTransition(row.status, status);
 
-    // DRIVER role may only advance loads assigned to them.
-    if (!driverMayAdvance(row.assigneeDriverId, actorDriverId ?? null)) {
+    // Only ops roles may advance a load, or the DRIVER it is assigned to.
+    // Unlinked driver accounts are explicitly denied — never treated as ops.
+    if (!canAdvance(row.assigneeDriverId, actor)) {
       throw badRequest('this load is not assigned to you');
     }
 
@@ -499,7 +502,7 @@ export class PrismaLoadService implements LoadService {
         loadId,
         fromStatus: row.status,
         toStatus: status,
-        actorDriverId: actorDriverId ?? null,
+        actorDriverId: actor.driverId ?? null,
         assigneeDriverId: updated.assigneeDriverId,
         originCountry: updated.originCountry,
         originRegion: updated.originRegion,

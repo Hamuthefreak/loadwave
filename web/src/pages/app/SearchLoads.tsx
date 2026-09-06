@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api';
-import { Badge, Spinner, Modal } from '../../components/ui';
-import { km, money, perMile, regionLabel, shortDate, timeAgo } from '../../utils/format';
+import { Badge, Spinner, Modal, lockScroll } from '../../components/ui';
+import { SaveSearchModal } from '../../components/SaveSearchModal';
+import { daysLabel, daysUntil, km, money, perMile, regionLabel, shortDate, timeAgo } from '../../utils/format';
 import {
   EQUIPMENT_TYPES,
   equipmentLabel,
@@ -34,12 +35,15 @@ export default function SearchLoads() {
   const [minRate, setMinRate] = useState('');
   const [dateAfter, setDateAfter] = useState('');
   const [preset, setPreset] = useState<string | null>(null);
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
   const [view, setView] = useState<View>('list');
   const [compare, setCompare] = useState<BoardLoad[]>([]);
   const [selected, setSelected] = useState<BoardLoad | null>(null);
   const [booking, setBooking] = useState<BoardLoad | null>(null);
   const [busy, setBusy] = useState(false);
+  const [sort, setSort] = useState('newest');
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -80,7 +84,21 @@ export default function SearchLoads() {
     });
   }, [rows, equipment, dateAfter]);
 
-  const open = filtered.filter((l) => l.marketplaceStatus === 'PUBLIC');
+  // Client-side sort on top of the board's newest-first feed.
+  const sorted = useMemo(() => {
+    const perMileNum = (l: BoardLoad): number => {
+      const r = Number(l.freightAmountBase ?? l.freightAmountTransaction ?? 0);
+      const k = Number(l.distanceKmEstimate ?? 0);
+      return r > 0 && k > 0 ? r / k / 0.621371 : -1;
+    };
+    const list = [...filtered];
+    if (sort === 'rate') list.sort((a, b) => Number(b.freightAmountBase ?? b.freightAmountTransaction ?? 0) - Number(a.freightAmountBase ?? a.freightAmountTransaction ?? 0));
+    else if (sort === 'perMile') list.sort((a, b) => perMileNum(b) - perMileNum(a));
+    else if (sort === 'distance') list.sort((a, b) => Number(a.distanceKmEstimate ?? Infinity) - Number(b.distanceKmEstimate ?? Infinity));
+    return list;
+  }, [filtered, sort]);
+
+  const open = sorted.filter((l) => l.marketplaceStatus === 'PUBLIC');
   const avgRate = useMemo(() => {
     const rates = filtered
       .map((l) => Number(l.freightAmountBase ?? l.freightAmountTransaction ?? 0))
@@ -110,6 +128,20 @@ export default function SearchLoads() {
     setDateAfter('');
     setPreset(null);
   };
+
+  // Snapshot of the current filters for the "save & alert me" flow.
+  const saveFilters = (): Record<string, string> => {
+    const f: Record<string, string> = {};
+    if (origin) f.originRegion = origin;
+    if (destination) f.destinationRegion = destination;
+    if (equipment) f.equipmentType = equipment;
+    if (minRate.trim()) f.minFreight = String(Number(minRate));
+    if (dateAfter) f.pickupAfter = dateAfter;
+    return f;
+  };
+  const laneLabel = origin || destination
+    ? `${origin ? regionLabel(origin) : 'Any'} → ${destination ? regionLabel(destination) : 'Any'}`
+    : null;
 
   const book = async (target: BoardLoad) => {
     setBusy(true);
@@ -220,6 +252,25 @@ export default function SearchLoads() {
       </form>
 
       {error && <div className="alert alert-error">{error}</div>}
+      {savedMsg && <div className="alert alert-success">{savedMsg}</div>}
+
+      <div className="board-tools">
+        <span className="muted small">
+          {laneLabel
+            ? `Watching ${laneLabel}`
+            : 'Tip: narrow the search first, or this alerts you on every posted load.'}
+        </span>
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={() => {
+            setSavedMsg(null);
+            setSaveOpen(true);
+          }}
+        >
+          🔔 Save & alert me
+        </button>
+      </div>
 
       <div className="board-metrics">
         <span>
@@ -231,12 +282,21 @@ export default function SearchLoads() {
         <span>
           <span className="live-dot" aria-hidden /> live marketplace
         </span>
+        <label className="board-sort">
+          Sort
+          <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort loads">
+            <option value="newest">Newest first</option>
+            <option value="rate">Best rate</option>
+            <option value="perMile">Best $ / mile</option>
+            <option value="distance">Shortest haul</option>
+          </select>
+        </label>
       </div>
 
       {loading && rows.length === 0 ? (
         <Spinner label="Loading the board…" />
       ) : view === 'list' ? (
-        filtered.length === 0 ? (
+        sorted.length === 0 ? (
           <EmptyState
             title="No loads match right now"
             sub="Try a wider lane or lower the minimum rate. New loads appear the moment a partner posts."
@@ -244,7 +304,7 @@ export default function SearchLoads() {
           />
         ) : (
           <div className="load-grid">
-            {filtered.map((l) => (
+            {sorted.map((l) => (
               <LoadCard
                 key={l.id}
                 load={l}
@@ -257,9 +317,9 @@ export default function SearchLoads() {
           </div>
         )
       ) : view === 'route' ? (
-        <RouteView rows={filtered} onOpen={setSelected} />
+        <RouteView rows={sorted} onOpen={setSelected} />
       ) : (
-        <CompareView rows={filtered} compare={compare} onToggle={toggleCompare} onOpen={setSelected} />
+        <CompareView rows={sorted} compare={compare} onToggle={toggleCompare} onOpen={setSelected} />
       )}
 
       {selected && (
@@ -271,6 +331,14 @@ export default function SearchLoads() {
         busy={busy}
         onClose={() => setBooking(null)}
         onConfirm={(l) => void book(l)}
+      />
+
+      <SaveSearchModal
+        open={saveOpen}
+        onClose={() => setSaveOpen(false)}
+        filters={saveFilters()}
+        laneLabel={laneLabel}
+        onSaved={() => setSavedMsg('Alert saved — we’ll ping you when new loads match.')}
       />
     </div>
   );
@@ -356,9 +424,22 @@ export function LoadCard({
         ) : (
           <button className="btn-green" onClick={onBook}>Book load</button>
         )}
-        {load.pickupDate && <span className="muted small">Pickup {shortDate(load.pickupDate)}</span>}
+        {load.pickupDate && <PickupHint date={load.pickupDate} />}
       </div>
     </div>
+  );
+}
+
+function PickupHint({ date }: { date: string }) {
+  const days = daysUntil(date);
+  if (days === null) return <span className="muted small">Pickup {shortDate(date)}</span>;
+  const tone =
+    days < 0 ? 'pickup-overdue' : days === 0 ? 'pickup-today' : days <= 2 ? 'pickup-soon' : '';
+  return (
+    <span className={`pickup-hint ${tone}`} title={`Pickup ${shortDate(date)}`}>
+      Pickup {daysLabel(date)}
+      <span className="pickup-date muted">{shortDate(date)}</span>
+    </span>
   );
 }
 
@@ -494,6 +575,17 @@ function CompareView({
 function DetailDrawer({ load, onClose, onBook }: { load: BoardLoad; onClose: () => void; onBook: () => void }) {
   const rate = load.freightAmountBase ?? load.freightAmountTransaction;
   const verified = Boolean(load.postedByMcNumber || load.postedByUsdotNumber);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    lockScroll(true);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      lockScroll(false);
+    };
+  }, [onClose]);
   return (
     <div className="drawer-backdrop" onClick={onClose}>
       <aside className="drawer" onClick={(e) => e.stopPropagation()}>

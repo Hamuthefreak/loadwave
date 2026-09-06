@@ -1,9 +1,8 @@
 import { Component, Suspense, lazy, useEffect, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { getToken, setToken } from './api';
+import { getToken, signOut } from './api';
 import HomePage from './pages/marketing/HomePage';
 import ThemeFab from './components/ThemeFab';
-import DiagnosticsHarness from './components/DiagnosticsHarness';
 
 // Everything except the homepage is code-split so the marketing site loads fast;
 // the TMS app chunks only download once you sign in and open that section.
@@ -126,7 +125,7 @@ export default function App() {
         path="/app"
         element={
           <RequireAuth>
-            <AppShell onSignOut={() => setToken(null)} />
+            <AppShell onSignOut={() => void signOut()} />
           </RequireAuth>
         }
       >
@@ -148,7 +147,6 @@ export default function App() {
       </Routes>
       </ErrorBoundary>
       <ThemeFab />
-      <DiagnosticsHarness />
       </Suspense>
     </>
   );

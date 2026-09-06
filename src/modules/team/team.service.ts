@@ -55,6 +55,8 @@ export interface TeamService {
   /** Rotates the token of a pending invite so its link can be shared again. */
   resend(tenantId: string, inviteId: string): Promise<{ token: string }>;
   accept(input: AcceptInviteInput): Promise<FreshSession>;
+  /** Links (or unlinks) an existing member account to a driver profile. */
+  setDriverLink(tenantId: string, userId: string, driverId: string | null): Promise<TeamMemberRow>;
 }
 
 /**
@@ -124,6 +126,45 @@ export class PrismaTeamService implements TeamService {
     });
 
     return { members, invites: inviteRows };
+  }
+
+  async setDriverLink(tenantId: string, userId: string, driverId: string | null): Promise<TeamMemberRow> {
+    const user = await this.prisma.user.findFirst({ where: { id: userId, tenantId } });
+    if (!user) throw notFound('team member not found');
+
+    if (driverId) {
+      const driver = await this.prisma.driver.findFirst({ where: { id: driverId, tenantId } });
+      if (!driver) throw badRequest('the selected driver does not belong to this carrier');
+      if (!parseRolesCsv(user.roles).includes('DRIVER')) {
+        throw badRequest('only DRIVER accounts can be linked to a driver profile');
+      }
+      const elsewhere = await this.prisma.user.findFirst({
+        where: { tenantId, driverId, NOT: { id: userId } },
+        select: { id: true },
+      });
+      if (elsewhere) throw conflict('that driver profile is already linked to another login');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { driverId },
+    });
+
+    const driverName = updated.driverId
+      ? ((await this.prisma.driver.findFirst({
+          where: { id: updated.driverId, tenantId },
+          select: { name: true },
+        }))?.name ?? null)
+      : null;
+
+    return {
+      id: updated.id,
+      email: updated.email,
+      roles: parseRolesCsv(updated.roles),
+      driverId: updated.driverId,
+      driverName,
+      createdAt: updated.createdAt.toISOString(),
+    };
   }
 
   async createInvite(

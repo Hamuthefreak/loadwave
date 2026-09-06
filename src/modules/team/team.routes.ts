@@ -30,6 +30,14 @@ const acceptSchema = {
   },
 } as const;
 
+const linkDriverSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    driverId: { type: ['string', 'null'] },
+  },
+} as const;
+
 interface InviteBody {
   email: string;
   roles: UserRole[];
@@ -102,12 +110,33 @@ export function registerTeamRoutes(app: FastifyInstance, deps: TeamModuleDeps): 
     },
   );
 
+  app.patch<{ Params: { userId: string }; Body: { driverId?: string | null } }>(
+    '/api/team/users/:userId/driver',
+    {
+      schema: { body: linkDriverSchema },
+      preHandler: async (request, reply) => {
+        await app.requireRoles(['ADMIN'] as UserRole[])(request, reply);
+      },
+    },
+    async (request, reply) => {
+      const row = await deps.team.setDriverLink(
+        request.user.tenantId,
+        request.params.userId,
+        request.body?.driverId ?? null,
+      );
+      return reply.send(row);
+    },
+  );
+
   // Public: the invitee completes setup. A valid, unexpired invite token is all
   // the proof needed — it is only ever shared with the intended person.
   app.post<{ Body: AcceptBody }>(
     '/api/team/invites/accept',
     {
       schema: { body: acceptSchema },
+      // Public endpoint that mints a session from a bearer token: keep the
+      // guess surface small.
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
     },
     async (request: FastifyRequest<{ Body: AcceptBody }>, reply: FastifyReply) => {
       const session = await deps.team.accept(request.body);

@@ -38,7 +38,7 @@ const batchSchema = {
     tenantId: { type: 'string', minLength: 1 },
     ingestSource: { type: 'string', enum: ['WEBHOOK', 'REST_POLL', 'MANUAL'] },
     buildRouteSegments: { type: 'boolean' },
-    events: { type: 'array', minItems: 1, items: eventSchema },
+    events: { type: 'array', minItems: 1, maxItems: 5000, items: eventSchema },
   },
 } as const;
 

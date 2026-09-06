@@ -18,7 +18,9 @@ export function registerNotificationRoutes(app: FastifyInstance, deps: Notificat
     { preHandler: app.authenticate },
     async (request) => {
       const unreadOnly = request.query.unreadOnly === 'true';
-      const limit = Number(request.query.limit ?? 50);
+      const requested = Number(request.query.limit ?? 50);
+      // Cap the page size so a client cannot force a huge scan.
+      const limit = Math.min(Math.max(Number.isFinite(requested) ? Math.floor(requested) : 50, 1), 200);
       const [items, unread] = await Promise.all([
         deps.notifications.list(request.user.tenantId, {
           userId: request.user.sub,

@@ -47,6 +47,7 @@ export class PrismaEmailService implements EmailService {
   constructor(
     private readonly prisma: PrismaClient,
     env: { SMTP_URL?: string; MAIL_FROM?: string },
+    private readonly logger?: { warn(obj: unknown, msg?: string): void },
   ) {
     this.envSettings = env.SMTP_URL
       ? { enabled: true, from: env.MAIL_FROM ?? 'dispatch@loadwave.app', ...parseUrl(env.SMTP_URL) }
@@ -93,8 +94,10 @@ export class PrismaEmailService implements EmailService {
         subject,
         text,
       });
-    } catch {
-      // Best-effort: never break the request flow because mail failed.
+    } catch (err) {
+      // Best-effort: never break the request flow because mail failed, but
+      // surface the failure so broken SMTP does not fail silently forever.
+      this.logger?.warn({ err, tenantId, to }, 'email send failed');
     }
   }
 

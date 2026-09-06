@@ -158,7 +158,6 @@ export function MarketingFooter() {
       </div>
       <div className="ld-wrap ld-legal">
         <span>© {new Date().getFullYear()} Loadwave. All rights reserved.</span>
-        <Link to="/diagnostics" className="ld-legal-link">System diagnostics</Link>
       </div>
     </footer>
   );

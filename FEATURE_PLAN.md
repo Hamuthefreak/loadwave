@@ -216,6 +216,37 @@ verified MC/USDOT; add ★ avg).
   office gets tenant-wide rows when a driver starts or delivers. Emails target
   the recipient's address when SMTP is configured. Unit-tested in
   `tests/unit/dispatch-notifier.test.ts`.
+- **2026-09-05 — Shipped: driver↔login linking + seed fix.** Demo driver accounts
+  were seeded with `roles: 'DRIVER'` but no `User.driverId`, so My Trips
+  showed "no driver profile is linked to this account" and there was no way to
+  fix it (linking only happened at invite time). Added admin
+  `PATCH /api/team/users/:userId/driver` (`setDriverLink`: tenant + DRIVER-role
+  validation, one login per driver, unlink via null), a **Link/Login** action
+  with a link-picker modal on the Drivers page plus linked-email column,
+  `scripts/seed-demo.ts` now links the demo driver to Maria Chen (who carries
+  the seeded private trip), and My Trips renders a friendly explainer instead
+  of the raw 403 when a DRIVER login is unlinked. Existing demo tenants
+  backfilled. Unit-tested in `tests/unit/team-service.test.ts`.
+- **2026-09-05 — Shipped: 3.x detail-polish pass.** Clicking a notification
+  marks it read and jumps to what it's about (`link`), with a single-notification
+  read endpoint wired; the board cards now show pickup urgency ("Pickup
+  tomorrow"/"Today"/"N days ago" in amber/accent/red) and the board gained a
+  Sort control (Newest / Best rate / Best $/mile / Shortest haul, client-side
+  on the live feed); trip cards show deliver-by countdown chips for active
+  trips; modals autofocus their first field and lock page scroll (drawer too,
+  plus Escape-to-close on the drawer); every app page sets a proper
+  `document.title`; the dashboard revenue KPI reads "Sep 2026" instead of
+  "2026-09"; the ops fuel form shows a live $/L readout as you type; sign-in
+  gained Show/Hide password toggles. Verified live on :5173.
+- **2026-09-05 — Shipped: 3.1 saved-search alerts close the last dead end.**
+  `runAlerts()` sweeps every `SavedSearch.notify = true` search on a 5-minute
+  timer (first pass 20 s after boot) and fires personal `load_match`
+  notifications — with the owner's email when a user owns the search — for loads
+  newer than the per-search checkpoint, advancing `lastCheckAt` every sweep so
+  nothing double-alerts. Creates now record the signed-in `userId` (previously
+  null). The board's **🔔 Save & alert me** button opens a modal that saves the
+  current filters with alerts on, and lists existing saved searches with
+  Enable/Mute and Delete. Unit-tested in `tests/unit/saved-search-alerts.test.ts`.
 
 ## Suggested build order
 

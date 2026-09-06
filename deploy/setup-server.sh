@@ -78,6 +78,16 @@ sudo apt-get install -y nodejs
 echo "==> Installing PostgreSQL"
 sudo apt-get install -y postgresql postgresql-contrib
 
+# PostGIS powers IFTA route distance + jurisdiction splitting. The extension
+# name is versioned (postgresql-16-postgis-3 on 24.04, -14- on 22.04); try the
+# detected major version, then fall back to the unversioned metapackage.
+PG_MAJOR="$(ls /usr/lib/postgresql 2>/dev/null | sort -n | tail -1)"
+if [ -n "$PG_MAJOR" ]; then
+  sudo apt-get install -y "postgresql-$PG_MAJOR-postgis-3" || sudo apt-get install -y postgis
+else
+  sudo apt-get install -y postgis
+fi
+
 echo "==> Verifying Node / npm"
 if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
   echo "ERROR: node or npm still not on PATH after install." >&2
@@ -167,6 +177,9 @@ echo "==> Running database migrations"
 cd "$APP_DIR"
 npm run prisma:migrate:deploy
 
+echo "==> Enabling PostGIS (idempotent)"
+npm run db:postgis
+
 echo "==> Seeding geo places (radius search) + demo data"
 npm run db:seed-places
 # Demo tenant credentials are printed to stdout by the seeder — save them:
@@ -198,6 +211,18 @@ if command -v ufw >/dev/null 2>&1; then
   sudo ufw allow 22/tcp || true
   sudo ufw --force enable || true
 fi
+
+# =============================================================
+# 10. Nightly backups
+# =============================================================
+echo "==> Installing nightly DB backup cron (2:10 AM server time)"
+chmod +x "$APP_DIR/deploy/backup.sh"
+# Idempotent: drop any previous install line, then add the fresh one.
+( crontab -u "$UBUNTU_USER" -l 2>/dev/null | grep -v 'deploy/backup.sh' ; \
+  echo '10 2 * * * /usr/bin/env bash /opt/loadboard/deploy/backup.sh >> /var/log/loadboard-backup.log 2>&1' ) \
+  | crontab -u "$UBUNTU_USER" -
+# Set BACKUP_TARGET (e.g. user@host:/path) in /etc/environment or the cron line
+# to copy dumps off-box — see deploy/backup.sh.
 
 echo ""
 echo "=============================================================="

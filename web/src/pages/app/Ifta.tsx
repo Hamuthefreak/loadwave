@@ -165,6 +165,12 @@ export default function Ifta() {
             </button>
           </div>
         </form>
+        {litres.trim() && amount.trim() && Number(litres) > 0 && Number(amount) > 0 && (
+          <p className="muted small" style={{ marginTop: 10, marginBottom: 0 }}>
+            That's <strong>{money(Number(amount) / Number(litres))}/L</strong> —{' '}
+            {Number(amount) / Number(litres) > 2.2 ? 'on the pricier side this season.' : 'right around the market rate.'}
+          </p>
+        )}
         <p className="muted small" style={{ marginTop: 12 }}>
           Each purchase is attached to {quarter} and counted toward your quarterly IFTA filing
           for the jurisdiction where you bought it.

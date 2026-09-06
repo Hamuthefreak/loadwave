@@ -1,6 +1,6 @@
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { d, toDb, type Decimal } from '../../utils/decimal';
-import { badRequest, notFound } from '../../utils/errors';
+import { badRequest, conflict, notFound } from '../../utils/errors';
 import { quarterRange, type Quarter } from '../../utils/quarters';
 import type { LoadService } from './load.service';
 import { determineTax } from './tax.policy';
@@ -117,6 +117,13 @@ export class PrismaInvoiceService implements InvoiceService {
     if (!input.loadId) throw badRequest('loadId is required to invoice a load');
     const load = await this.loads.get(input.tenantId, input.loadId);
 
+    // Only a delivered load may be invoiced — never OPEN/ASSIGNED/IN_TRANSIT,
+    // and never twice (the unique (tenantId, loadId) constraint backs this up
+    // against races; P2002 below turns a violation into a clean conflict).
+    if (load.status !== 'DELIVERED') {
+      throw badRequest(`a ${load.status} load cannot be invoiced yet`);
+    }
+
     const tax = determineTax({
       originCountry: load.originCountry,
       originRegion: load.originRegion,
@@ -157,29 +164,37 @@ export class PrismaInvoiceService implements InvoiceService {
       ? new Date(input.dueDate)
       : new Date(issueDate.getTime() + 30 * 24 * 3_600_000);
 
-    const row = await this.prisma.invoice.create({
-      data: {
-        tenantId: input.tenantId,
-        customerId: input.customerId,
-        loadId: input.loadId,
-        issueDate,
-        dueDate,
-        currencyTransaction,
-        subtotalTransaction: toDb(subtotalTransaction),
-        subtotalBase: toDb(subtotalBase),
-        exchangeRateToBase: toDb(exchangeRateToBase),
-        gstRate: tax.zeroRated ? null : toDb(tax.gstRate),
-        hstRate: tax.zeroRated ? null : toDb(tax.hstRate),
-        qstRate: tax.zeroRated ? null : toDb(tax.qstRate),
-        gstAmountTransaction: tax.zeroRated ? null : toDb(gstAmountTransaction),
-        hstAmountTransaction: tax.zeroRated ? null : toDb(hstAmountTransaction),
-        qstAmountTransaction: tax.zeroRated ? null : toDb(qstAmountTransaction),
-        totalTransaction: toDb(totalTransaction),
-        totalBase: toDb(totalBase),
-        zeroRated: tax.zeroRated,
-        taxExemptReason: (tax.taxExemptReason as TaxExemptReason | null) ?? null,
-      },
-    });
+    let row;
+    try {
+      row = await this.prisma.invoice.create({
+        data: {
+          tenantId: input.tenantId,
+          customerId: input.customerId,
+          loadId: input.loadId,
+          issueDate,
+          dueDate,
+          currencyTransaction,
+          subtotalTransaction: toDb(subtotalTransaction),
+          subtotalBase: toDb(subtotalBase),
+          exchangeRateToBase: toDb(exchangeRateToBase),
+          gstRate: tax.zeroRated ? null : toDb(tax.gstRate),
+          hstRate: tax.zeroRated ? null : toDb(tax.hstRate),
+          qstRate: tax.zeroRated ? null : toDb(tax.qstRate),
+          gstAmountTransaction: tax.zeroRated ? null : toDb(gstAmountTransaction),
+          hstAmountTransaction: tax.zeroRated ? null : toDb(hstAmountTransaction),
+          qstAmountTransaction: tax.zeroRated ? null : toDb(qstAmountTransaction),
+          totalTransaction: toDb(totalTransaction),
+          totalBase: toDb(totalBase),
+          zeroRated: tax.zeroRated,
+          taxExemptReason: (tax.taxExemptReason as TaxExemptReason | null) ?? null,
+        },
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw conflict('this load has already been invoiced');
+      }
+      throw err;
+    }
 
     return this.map(row as InvoiceDbRow);
   }

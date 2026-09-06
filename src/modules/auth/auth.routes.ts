@@ -37,6 +37,10 @@ const refreshSchema = {
   },
 } as const;
 
+// Auth endpoints get a stricter per-route limit on top of the global one so a
+// single IP cannot brute-force passwords or spray refresh tokens.
+const authRateLimit = { max: 10, timeWindow: '1 minute' } as const;
+
 interface RegisterBody {
   tenantName: string;
   email: string;
@@ -66,6 +70,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthModuleDeps): 
     '/auth/register',
     {
       schema: { body: registerSchema },
+      config: { rateLimit: authRateLimit },
     },
     async (req: FastifyRequest<{ Body: RegisterBody }>, reply: FastifyReply) => {
       const session = await deps.auth.register(req.body);
@@ -81,6 +86,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthModuleDeps): 
     '/auth/login',
     {
       schema: { body: loginSchema },
+      config: { rateLimit: authRateLimit },
     },
     async (req: FastifyRequest<{ Body: LoginBody }>, reply: FastifyReply) => {
       const session = await deps.auth.login(req.body);
@@ -96,10 +102,23 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthModuleDeps): 
     '/auth/refresh',
     {
       schema: { body: refreshSchema },
+      config: { rateLimit: authRateLimit },
     },
     async (req: FastifyRequest<{ Body: RefreshBody }>, reply: FastifyReply) => {
       const session = await deps.auth.refresh(req.body.refreshToken);
       return reply.send({ user: session.user, tokens: session.tokens });
+    },
+  );
+
+  app.post<{ Body: RefreshBody }>(
+    '/auth/logout',
+    {
+      schema: { body: refreshSchema },
+      config: { rateLimit: authRateLimit },
+    },
+    async (req: FastifyRequest<{ Body: RefreshBody }>, reply: FastifyReply) => {
+      await deps.auth.logout(req.body.refreshToken);
+      return reply.send({ ok: true });
     },
   );
 }

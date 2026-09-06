@@ -319,4 +319,25 @@ your Oracle VM can — outbound 587/465 are fine there.
 - `scripts/import-loads.ts` — import external board loads (CLI)
 
 Everything above stays inside Oracle's Always Free limits. Good luck — ping me if any step
-errors out and I'll walk you through the exact fix.
+errors out and I'll walk you through the exact fix.---
+
+## Production go-live checklist (do all of these BEFORE inviting real customers)
+
+1. **HTTPS (mandatory).** Run `certbot --nginx -d <your-subdomain>` (prefix with the privileged
+   runner of your choice) and confirm the site redirects http → https. Never serve real accounts
+   over plain HTTP.
+2. **Health check.** `curl https://<your-subdomain>/api/health` should return `{"status":"ok",...}`.
+   Point an uptime monitor (or the free tier of UptimeRobot) at it.
+3. **Backups.** `deploy/setup-server.sh` now installs a nightly `pg_dump` cron (2:10 AM) into
+   `/opt/loadboard/backups` keeping 14 days. To also copy dumps off-box, set `BACKUP_TARGET`
+   (e.g. `user@other-host:/srv/backups`) in the cron line in `/etc/crontab` or the ubuntu crontab.
+4. **PostGIS.** Auto-enabled on setup and on every deploy (`npm run db:postgis`, idempotent) —
+   IFTA distance/jurisdiction math depends on it.
+5. **CORS.** Same-origin nginx hosting needs no CORS. If you ever split the API onto another
+   origin, set `CORS_ORIGIN=https://app.example.com` in `/opt/loadboard/.env` (comma-separated).
+6. **SMTP.** Fill `SMTP_URL` + `MAIL_FROM` in `/opt/loadboard/.env` (or the Settings → Notifications
+   page in-app) once you own the domain — email alerts/invites otherwise stay in-app only.
+7. **CI gate.** The deploy workflow now runs typecheck + lint + tests + web build before shipping;
+   a red build never reaches the VM.
+8. **Demo data.** The demo tenant + board loads are seeded for sales demos. Before public launch,
+   drop the demo rows (`scripts/seed-demo.ts` can be deleted) and rotate `demo-credentials.txt`.

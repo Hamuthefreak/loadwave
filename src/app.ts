@@ -89,6 +89,7 @@ import { PrismaImportService } from './modules/import/import.service';
 import { registerImportRoutes } from './modules/import/import.routes';
 
 import { registerDiagnosticsRoutes } from './modules/diagnostics/diagnostics.routes';
+import { registerHealthRoutes } from './modules/health/health.routes';
 
 import type { Quarter } from './utils/quarters';
 import type { BoardFilters } from './modules/board/board.policy';
@@ -148,7 +149,7 @@ function buildBaseServices(
   const trucks =
     overrides.trucks ??
     new TruckService(new PrismaTruckStore(prisma), geo);
-  const email = overrides.email ?? new PrismaEmailService(prisma, env);
+  const email = overrides.email ?? new PrismaEmailService(prisma, env, logger);
   const notifications =
     overrides.notifications ??
     new PrismaNotificationService(prisma, email, tenantEmail(prisma));
@@ -209,8 +210,36 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   const server = app as unknown as FastifyInstance;
   const base = buildBaseServices(env, logger, prisma, bus, opts.deps ?? {});
 
-  await app.register(cors, { origin: true });
-  await app.register(helmet, { contentSecurityPolicy: false });
+  // Same-origin deployments (nginx serves both SPA and API) need no CORS at
+  // all. Set CORS_ORIGIN to a comma-separated allowlist only when the API is
+  // served from a different origin than the app.
+  const corsOrigin: string[] | false = env.CORS_ORIGIN
+    ? env.CORS_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean)
+    : false;
+  await app.register(cors, { origin: corsOrigin });
+  await app.register(helmet, {
+    // The SPA is React + Vite: production bundles use external scripts/styles
+    // and no inline scripts, so a strict CSP is safe there. Dev mode needs
+    // inline injection + websockets, so the policy only applies in production.
+    contentSecurityPolicy:
+      env.NODE_ENV === 'production'
+        ? {
+            directives: {
+              defaultSrc: ["'self'"],
+              scriptSrc: ["'self'"],
+              styleSrc: ["'self'", "'unsafe-inline'"], // React inline style attributes
+              imgSrc: ["'self'", 'data:'],
+              connectSrc: ["'self'"],
+              fontSrc: ["'self'", 'data:'],
+              objectSrc: ["'none'"],
+              frameAncestors: ["'none'"],
+              baseUri: ["'self'"],
+              formAction: ["'self'"],
+              upgradeInsecureRequests: [],
+            },
+          }
+        : false,
+  });
   await app.register(rateLimit, { max: 200, timeWindow: '1 minute' });
   await (
     app.register as unknown as (
@@ -239,7 +268,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
   registerRoutes(server, deps, prisma, env);
   subscribeWorkers(server, deps);
-  startSchedule(deps);
+  startSchedule(deps, logger);
 
   server.setErrorHandler((error: AppError | Error, request: FastifyRequest, reply: FastifyReply) => {
     if (error instanceof AppError) {
@@ -286,15 +315,29 @@ function registerRoutes(app: FastifyInstance, deps: AppDeps, prisma: PrismaClien
   registerDocumentRoutes(app, { documents: deps.documents });
   registerImportRoutes(app, { importService: deps.importService });
   registerDiagnosticsRoutes(app, { prisma, env });
+  registerHealthRoutes(app, { prisma });
 }
 
-function startSchedule(deps: AppDeps): void {
+function startSchedule(deps: AppDeps, logger: Logger): void {
   // Backfill today's lane snapshot on boot, then every 6 hours.
-  void deps.market.snapshot().catch(() => {});
-  const timer = setInterval(() => {
-    void deps.market.snapshot().catch(() => {});
-  }, 6 * 60 * 60 * 1000);
+  const snapshot = (): void => {
+    void deps.market
+      .snapshot()
+      .catch((err: unknown) => logger.warn({ err }, 'market lane snapshot failed'));
+  };
+  snapshot();
+  const timer = setInterval(snapshot, 6 * 60 * 60 * 1000);
   timer.unref?.();
+
+  // Saved-search load alerts: first sweep shortly after boot, then every 5 min.
+  const sweep = (): void => {
+    void deps.searches
+      .runAlerts(deps.notifications)
+      .catch((err: unknown) => logger.warn({ err }, 'saved-search alert sweep failed'));
+  };
+  const alertTimer = setInterval(sweep, 5 * 60 * 1000);
+  alertTimer.unref?.();
+  setTimeout(sweep, 20_000);
 }
 
 function subscribeWorkers(app: FastifyInstance, deps: AppDeps): void {

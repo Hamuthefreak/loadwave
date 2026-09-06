@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api';
 import { Badge, Empty, Lane, Modal, PageHeader, Spinner } from '../../components/ui';
 import { FuelLogButton } from '../../components/FuelLogger';
-import { km, money, perMile, regionLabel, shortDate } from '../../utils/format';
+import { daysLabel, daysUntil, km, money, perMile, regionLabel, shortDate } from '../../utils/format';
 import { equipmentLabel } from './regions';
 
 interface Trip {
@@ -110,6 +110,9 @@ export default function Trips() {
   const active = (rows ?? []).filter((t) => ACTIVE_STATUSES.has(t.status));
   const done = (rows ?? []).filter((t) => DONE_STATUSES.has(t.status));
 
+  const noLinkedProfile =
+    error !== null && error.toLowerCase().includes('no driver profile is linked');
+
   const section = (title: string, trips: Trip[]) =>
     trips.length > 0 && (
       <section>
@@ -138,9 +141,17 @@ export default function Trips() {
       />
 
       {flash && <div className="alert alert-success" style={{ marginBottom: 16 }}>{flash}</div>}
-      {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+      {error && !noLinkedProfile && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
 
-      {loading ? (
+      {noLinkedProfile ? (
+        <Empty
+          title="No driver profile linked to this login"
+          sub="Your dispatcher hasn't connected this account to a driver record yet. Ask them to open Drivers → Link on your profile — or to invite you fresh with a driver selected — and sign back in."
+          action={
+            <button className="btn-ghost" onClick={() => void load()}>Check again</button>
+          }
+        />
+      ) : loading ? (
         <Spinner label="Loading your trips…" />
       ) : (rows ?? []).length === 0 ? (
         <Empty
@@ -194,6 +205,27 @@ export default function Trips() {
   );
 }
 
+function DeliveryHint({ date, done }: { date: string; done: boolean }) {
+  const days = daysUntil(date);
+  const label = daysLabel(date) ?? shortDate(date);
+  const tone =
+    days === null || done
+      ? ''
+      : days < 0
+        ? 'delivery-overdue'
+        : days === 0
+          ? 'delivery-today'
+          : days <= 2
+            ? 'delivery-soon'
+            : '';
+  return (
+    <span className={`delivery-hint ${tone}`} title={`Deliver by ${shortDate(date)}`}>
+      {shortDate(date)}
+      {!done && <span className="delivery-count">{label}</span>}
+    </span>
+  );
+}
+
 function TripCard({
   trip,
   busy,
@@ -242,7 +274,9 @@ function TripCard({
         </div>
         <div className="trip-fact">
           <dt>Deliver by</dt>
-          <dd>{trip.deliveryDate ? shortDate(trip.deliveryDate) : '—'}</dd>
+          <dd>
+            {trip.deliveryDate ? <DeliveryHint date={trip.deliveryDate} done={trip.status === 'DELIVERED' || trip.status === 'INVOICED'} /> : '—'}
+          </dd>
         </div>
         <div className="trip-fact">
           <dt>Load</dt>

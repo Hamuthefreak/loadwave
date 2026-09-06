@@ -539,6 +539,10 @@ model Invoice {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   load   Load?  @relation(fields: [loadId], references: [id], onDelete: SetNull)
 
+  // One invoice per load: prevents double-billing from duplicate submissions.
+  // Postgres allows multiple NULL loadId rows, so manual/unlinked invoices
+  // are not constrained (createForLoad always sets loadId).
+  @@unique([tenantId, loadId])
   @@index([tenantId, issueDate])
   @@index([tenantId, paidAt])
 }

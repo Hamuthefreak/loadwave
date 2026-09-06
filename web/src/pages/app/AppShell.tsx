@@ -153,6 +153,39 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
     }
   };
 
+  // Clicking a notification marks it read and jumps to what it's about.
+  const openNotif = async (n: NotifRow) => {
+    setNotifOpen(false);
+    if (!n.readAt) {
+      setNotifs((cur) => cur.map((x) => (x.id === n.id ? { ...x, readAt: new Date().toISOString() } : x)));
+      setUnread((u) => Math.max(0, u - 1));
+      void api(`/api/notifications/${n.id}/read`, { method: 'POST', body: {} }).catch(() => {
+        /* read state is best-effort */
+      });
+    }
+    if (n.link) navigate(n.link);
+  };
+
+  // Keep the browser tab label in sync with the page the user is on.
+  useEffect(() => {
+    const TITLES: Array<[string, string]> = [
+      ['/app/dashboard', 'Dashboard'],
+      ['/app/board', 'Search Loads'],
+      ['/app/trucks', 'Search Trucks'],
+      ['/app/trips', 'My Trips'],
+      ['/app/myloads', 'My Loads'],
+      ['/app/network', 'Private Network'],
+      ['/app/tools', 'Tools & Rates'],
+      ['/app/ifta', 'Fuel & IFTA'],
+      ['/app/fleet', 'Fleet'],
+      ['/app/drivers', 'Drivers'],
+      ['/app/billing', 'Billing & AR'],
+      ['/app/team', 'Team & Invites'],
+    ];
+    const match = TITLES.find(([p]) => location.pathname === p || location.pathname.startsWith(`${p}/`));
+    document.title = match ? `${match[1]} · Loadwave` : 'Loadwave';
+  }, [location.pathname]);
+
   const signOut = () => {
     setConfirmSignOut(false);
     onSignOut();
@@ -433,14 +466,19 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
         ) : (
           <div className="bell-panel">
             {notifs.map((n) => (
-              <div key={n.id} className={`bell-item ${n.readAt ? '' : 'unread'}`}>
-                <span className="bell-item-mark" />
-                <div>
-                  <div className="bell-item-title">{n.title}</div>
-                  {n.body && <div className="bell-item-body">{n.body}</div>}
+              <button
+                key={n.id}
+                type="button"
+                className={`bell-item ${n.readAt ? '' : 'unread'}`}
+                onClick={() => void openNotif(n)}
+              >
+                <span className="bell-item-mark" aria-hidden />
+                <span>
+                  <span className="bell-item-title">{n.title}</span>
+                  {n.body && <span className="bell-item-body">{n.body}</span>}
                   <time>{timeAgo(n.createdAt)}</time>
-                </div>
-              </div>
+                </span>
+              </button>
             ))}
           </div>
         )}
