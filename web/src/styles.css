@@ -4713,3 +4713,15 @@ a {
     display: none;
   }
 }
+
+/* IFTA jurisdiction nudge on the driver fuel card */
+.fuel-nudge {
+  margin: 10px 0 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--amber-soft);
+  border: 1px solid rgba(217, 161, 60, 0.35);
+  color: var(--amber);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}

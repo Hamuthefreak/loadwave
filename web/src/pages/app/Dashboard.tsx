@@ -7,6 +7,7 @@ import { Badge, Lane, PageHeader, Stat } from '../../components/ui';
 import DriverQuickAction from '../../components/DriverQuickAction';
 import DutyLogModal, { type HosDailyLogRow, type HosDayRow } from '../../components/DutyLogModal';
 import { FuelLogButton, FuelStopsList, type FuelLogRow } from '../../components/FuelLogger';
+import { sameJurisdictionStreak } from '../../utils/fuelPrefill';
 import { currencyOf, km, money, perMile, regionLabel, timeAgo } from '../../utils/format';
 
 interface Tenant {
@@ -553,7 +554,9 @@ function DriverDashboard() {
         {cycle && <HosHoursCard cycle={cycle} daily={daily} onOpenDay={setLogDay} />}
       </div>
 
-      {user?.driverId && (
+      {user?.driverId && (() => {
+        const streakJurisdiction = sameJurisdictionStreak(fuelRows, 3);
+        return (
         <div className="grid grid-2">
           <div className="card">
             <div className="hos-head">
@@ -563,6 +566,12 @@ function DriverDashboard() {
               </div>
               <FuelLogButton onLogged={() => load()} />
             </div>
+            {streakJurisdiction && (
+              <p className="fuel-nudge">
+                ⛽ Your last {Math.min(fuelRows.length, 3)} fills were all in {regionLabel(streakJurisdiction)} —
+                fueling in a lower-IFTA jurisdiction could cut your quarterly tax bill.
+              </p>
+            )}
             <FuelStopsList rows={fuelRows} />
           </div>
 
@@ -584,7 +593,8 @@ function DriverDashboard() {
             </div>
           </div>
         </div>
-      )}
+        )})()
+      }
 
       <div className="grid grid-2">
         <div className="card">

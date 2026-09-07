@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api, getTokenUser } from '../api';
 import { Modal } from './ui';
 import { money, regionLabel, timeAgo } from '../utils/format';
-import { mapLastStopToPrefill, type FuelStopRow } from '../../../src/utils/fuel-prefill';
+import { mapLastStopToPrefill, mostCommonStopPrefill, type FuelStopRow } from '../utils/fuelPrefill';
 
 export interface FuelLogRow {
   id: string;
@@ -173,22 +173,21 @@ export function FuelLogModal({
   const [error, setError] = useState<string | null>(null);
   const [lastStop, setLastStop] = useState<FuelStopRow | null>(null);
 
-  // Remember the last stop: reopen with the same jurisdiction / currency /
-  // unit so a repeat fill is two taps (volume + total). The raw record is
-  // kept for the "repeat last stop" chip on the numpad.
+  // Open where the driver usually fuels: the most frequent jurisdiction /
+  // unit combo over the recent stops (falls back to the last stop). The
+  // newest record is kept for the "repeat last stop" chip on the numpad.
   useEffect(() => {
     if (!open) return;
     const driverId = getTokenUser()?.driverId;
     if (!driverId) return;
-    void api<FuelLogRow[]>('/api/fuel/me?limit=1')
+    void api<FuelLogRow[]>('/api/fuel/me?limit=10')
       .then((rows) => {
-        const last = rows?.[0];
-        if (!last) return;
+        const last = rows?.[0] ?? null;
         setLastStop(last);
-        const pre = mapLastStopToPrefill(last);
+        const pre = mostCommonStopPrefill(rows ?? []);
         if (!pre) return;
-        setJurisdiction((j) => (j === 'QC' ? pre.jurisdiction : j));
-        setCurrency((c) => (c === 'CAD' ? pre.currency : c));
+        setJurisdiction(pre.jurisdiction);
+        setCurrency(pre.currency);
         setUnit(pre.unit);
       })
       .catch(() => undefined);
