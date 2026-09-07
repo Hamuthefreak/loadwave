@@ -177,6 +177,7 @@ export default function Ifta() {
               currency="CAD"
               volumeLabel="Litres"
               amountLabel="Amount"
+              lastStop={fuel[0] ?? null}
             />
             <button type="submit" className="btn-green ifta-pad-submit" disabled={saving}>
               {saving ? 'Saving…' : 'Log fuel'}

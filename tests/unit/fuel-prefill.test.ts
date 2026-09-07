@@ -1,0 +1,93 @@
+import { LITRES_PER_GAL, mapLastStopToPrefill, type FuelStopRow } from '../../src/utils/fuel-prefill';
+
+describe('mapLastStopToPrefill', () => {
+  it('returns null for an empty history', () => {
+    expect(mapLastStopToPrefill(null)).toBeNull();
+    expect(mapLastStopToPrefill(undefined)).toBeNull();
+  });
+
+  it('restores jurisdiction, currency and unit for a litres stop', () => {
+    const last: FuelStopRow = {
+      volumeLitres: '200',
+      originalVolume: '200',
+      originalVolumeUnit: 'L',
+      transactionCurrency: 'USD',
+      jurisdictionCode: 'ON',
+    };
+    const pre = mapLastStopToPrefill(last);
+    expect(pre).toEqual({
+      jurisdiction: 'ON',
+      currency: 'USD',
+      unit: 'L',
+      volume: '',
+      amount: '',
+    });
+  });
+
+  it('restores gallons on a normal open but leaves volume blank (each fill differs)', () => {
+    const last: FuelStopRow = {
+      volumeLitres: '75.7082', // 20 US gallons
+      originalVolume: '20',
+      originalVolumeUnit: 'GAL',
+      transactionCurrency: 'CAD',
+      jurisdictionCode: 'QC',
+    };
+    const pre = mapLastStopToPrefill(last);
+    expect(pre?.unit).toBe('GAL');
+    expect(pre?.volume).toBe('');
+  });
+
+  it('coerces unknown currencies to CAD', () => {
+    const last: FuelStopRow = {
+      volumeLitres: '100',
+      originalVolume: '100',
+      originalVolumeUnit: 'L',
+      transactionCurrency: 'EUR',
+      jurisdictionCode: 'QC',
+    };
+    expect(mapLastStopToPrefill(last)?.currency).toBe('CAD');
+  });
+
+  it('copies volume and amount for the repeat-last-stop chip', () => {
+    const last: FuelStopRow = {
+      volumeLitres: '250.5',
+      originalVolume: '250.5',
+      originalVolumeUnit: 'L',
+      transactionCurrency: 'CAD',
+      jurisdictionCode: 'QC',
+      amountTransaction: '330.75',
+    };
+    const pre = mapLastStopToPrefill(last, true);
+    expect(pre?.volume).toBe('250.5');
+    expect(pre?.amount).toBe('330.8'); // round1
+  });
+
+  it('repeat chip converts a gallons stop to gallons and keeps the total', () => {
+    const gal = 40;
+    const last: FuelStopRow = {
+      volumeLitres: String(gal * LITRES_PER_GAL),
+      originalVolume: String(gal),
+      originalVolumeUnit: 'GAL',
+      transactionCurrency: 'USD',
+      jurisdictionCode: 'NY',
+      amountTransaction: '180.25',
+    };
+    const pre = mapLastStopToPrefill(last, true);
+    expect(pre?.unit).toBe('GAL');
+    expect(Number(pre?.volume)).toBeCloseTo(gal, 1);
+    expect(pre?.amount).toBe('180.3');
+  });
+
+  it('omits amount when the record has no total (normal prefill path)', () => {
+    const last: FuelStopRow = {
+      volumeLitres: '300',
+      originalVolume: '300',
+      originalVolumeUnit: 'L',
+      transactionCurrency: 'CAD',
+      jurisdictionCode: 'ON',
+      amountTransaction: null,
+    };
+    const pre = mapLastStopToPrefill(last, true);
+    expect(pre?.amount).toBe('');
+  });
+});

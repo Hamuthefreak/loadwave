@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api, getTokenUser } from '../api';
 import { Modal } from './ui';
 import { money, regionLabel, timeAgo } from '../utils/format';
+import { mapLastStopToPrefill, type FuelStopRow } from '../../../src/utils/fuel-prefill';
 
 export interface FuelLogRow {
   id: string;
@@ -35,6 +36,7 @@ export function FuelNumpad({
   currency,
   volumeLabel = 'Volume',
   amountLabel = 'Total paid',
+  lastStop,
 }: {
   volume: string;
   amount: string;
@@ -44,6 +46,8 @@ export function FuelNumpad({
   currency: string;
   volumeLabel?: string;
   amountLabel?: string;
+  /** Last fuel stop — renders a one-tap "repeat" chip that copies it. */
+  lastStop?: FuelStopRow | null;
 }) {
   const [active, setActive] = useState<'volume' | 'amount'>('volume');
 
@@ -110,6 +114,20 @@ export function FuelNumpad({
       )}
 
       <div className="fuel-pad-chips">
+        {lastStop && (
+          <button
+            type="button"
+            className="chip chip-repeat"
+            onClick={() => {
+              const p = mapLastStopToPrefill(lastStop, true);
+              if (!p) return;
+              onVolume(p.volume);
+              onAmount(p.amount);
+            }}
+          >
+            ↻ repeat last stop
+          </button>
+        )}
         {(unit === 'L' ? [100, 200, 300] : [25, 50, 75]).map((v) => (
           <button key={v} type="button" className="chip" onClick={() => quickVolume(v)}>
             {v} {unit === 'L' ? 'L' : 'gal'}
@@ -153,9 +171,11 @@ export function FuelLogModal({
   const [when, setWhen] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastStop, setLastStop] = useState<FuelStopRow | null>(null);
 
   // Remember the last stop: reopen with the same jurisdiction / currency /
-  // unit so a repeat fill is two taps (volume + total).
+  // unit so a repeat fill is two taps (volume + total). The raw record is
+  // kept for the "repeat last stop" chip on the numpad.
   useEffect(() => {
     if (!open) return;
     const driverId = getTokenUser()?.driverId;
@@ -164,14 +184,12 @@ export function FuelLogModal({
       .then((rows) => {
         const last = rows?.[0];
         if (!last) return;
-        setJurisdiction((j) => (j === 'QC' ? last.jurisdictionCode : j));
-        setCurrency((c) => (c === 'CAD' ? (last.transactionCurrency as 'CAD' | 'USD') || 'CAD' : c));
-        if (last.originalVolumeUnit === 'GAL') {
-          setUnit('GAL');
-          setVolume(String(Math.round((Number(last.volumeLitres) / 3.78541) * 10) / 10));
-        } else {
-          setUnit('L');
-        }
+        setLastStop(last);
+        const pre = mapLastStopToPrefill(last);
+        if (!pre) return;
+        setJurisdiction((j) => (j === 'QC' ? pre.jurisdiction : j));
+        setCurrency((c) => (c === 'CAD' ? pre.currency : c));
+        setUnit(pre.unit);
       })
       .catch(() => undefined);
   }, [open]);
@@ -308,6 +326,7 @@ export function FuelLogModal({
           onAmount={setAmount}
           unit={unit}
           currency={currency}
+          lastStop={lastStop}
         />
       </form>
     </Modal>
