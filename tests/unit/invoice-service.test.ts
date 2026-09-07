@@ -52,7 +52,11 @@ function buildService(options: { loadStatus?: string; duplicate?: boolean } = {}
       paidAmountBase: null,
     };
   });
-  const prisma = { invoice: { create } } as unknown as Pick<PrismaClient, 'invoice'>;
+  const prisma = {
+    invoice: { create },
+    // Detention is summed into the subtotal — none in these fixtures.
+    detentionEntry: { findMany: jest.fn(async () => []) },
+  } as unknown as Pick<PrismaClient, 'invoice' | 'detentionEntry'>;
   const loads = {
     get: jest.fn(async () => ({ ...baseLoad, status: options.loadStatus ?? 'DELIVERED' })),
   } as unknown as LoadService;

@@ -4981,3 +4981,121 @@ a {
 .hos-break strong {
   color: var(--amber);
 }
+
+/* Rate-my-lane: benchmark flag next to a board load's $/mile. */
+.lane-flag {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  margin-top: 3px;
+  white-space: nowrap;
+}
+
+.lane-flag-good { color: var(--green); }
+.lane-flag-bad { color: var(--amber); }
+
+/* Driver detention timer on a trip card. */
+.detention-box {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--amber-soft);
+  border: 1px solid rgba(217, 161, 60, 0.35);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.detention-clock {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--amber);
+  letter-spacing: 0.03em;
+}
+
+.detention-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--amber);
+}
+
+.detention-sum {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* Driver scorecard strip on the ops Drivers page. */
+.scorecard-strip {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+
+.scorecard-metric {
+  min-width: 72px;
+}
+
+.scorecard-metric .sc-num {
+  font-weight: 800;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.scorecard-metric .sc-num.sc-good { color: var(--green); }
+.scorecard-metric .sc-num.sc-warn { color: var(--amber); }
+
+.scorecard-metric .sc-cap {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+}
+
+/* Recurring-days picker in the post-load form. */
+.recur-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.recur-day {
+  width: 38px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 0.72rem;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.recur-day.on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.recur-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* Scorecard rows pair with the driver row above them — no visual seam. */
+tr.scorecard-tr > td {
+  border-top: none;
+  padding-top: 0;
+}

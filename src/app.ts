@@ -62,6 +62,9 @@ import { registerIftaRoutes } from './modules/ifta/ifta.routes';
 import { PrismaLoadBoardStore } from './modules/board/board.store';
 import { LoadBoardService } from './modules/board/board.service';
 import { registerBoardRoutes } from './modules/board/board.routes';
+import { registerDetentionRoutes } from './modules/detention/detention.routes';
+import { PrismaDetentionService } from './modules/detention/detention.service';
+import { runRecurrenceSweep } from './modules/recurring/recurring.service';
 
 import { PrismaTruckStore } from './modules/trucks/truck.store';
 import { TruckService } from './modules/trucks/truck.service';
@@ -123,6 +126,7 @@ export interface AppDeps {
   documents: PrismaLoadDocumentService;
   importService: PrismaImportService;
   push: PushService;
+  detention: PrismaDetentionService;
 }
 
 export interface BuildAppOptions {
@@ -205,6 +209,7 @@ function buildBaseServices(
     email,
     importService,
     push,
+    detention: overrides.detention ?? new PrismaDetentionService(prisma),
   };
   void logger;
   return unlocked;
@@ -342,7 +347,8 @@ function registerRoutes(app: FastifyInstance, deps: AppDeps, prisma: PrismaClien
   registerSearchRoutes(app, { searches: deps.searches });
   registerNotificationRoutes(app, { notifications: deps.notifications, email: deps.email });
   registerPushRoutes(app, { push: deps.push });
-  registerDispatchRoutes(app, { loads: deps.loads });
+  registerDispatchRoutes(app, { loads: deps.loads, detention: deps.detention });
+  registerDetentionRoutes(app, { detention: deps.detention });
   registerDocumentRoutes(app, { documents: deps.documents });
   registerImportRoutes(app, { importService: deps.importService });
   registerDiagnosticsRoutes(app, { prisma, env });
@@ -369,6 +375,16 @@ function startSchedule(deps: AppDeps, logger: Logger): void {
   const alertTimer = setInterval(sweep, 5 * 60 * 1000);
   alertTimer.unref?.();
   setTimeout(sweep, 20_000);
+
+  // Recurring loads: clone any due weekly load, then hourly afterwards.
+  const recurrence = (): void => {
+    void runRecurrenceSweep(deps.prisma, logger).catch((err: unknown) =>
+      logger.warn({ err }, 'recurring load sweep failed'),
+    );
+  };
+  const recTimer = setInterval(recurrence, 60 * 60 * 1000);
+  recTimer.unref?.();
+  setTimeout(recurrence, 30_000);
 }
 
 function subscribeWorkers(app: FastifyInstance, deps: AppDeps): void {

@@ -36,6 +36,18 @@ export function registerDriverRoutes(app: FastifyInstance, deps: DriverModuleDep
     },
   );
 
+  app.get(
+    '/api/drivers/scorecards',
+    {
+      preHandler: async (request, reply) => {
+        await app.requireRoles(['ADMIN', 'DISPATCHER'] as UserRole[])(request, reply);
+      },
+    },
+    async (request, reply) => {
+      return reply.send(await deps.drivers.scorecards(request.user.tenantId));
+    },
+  );
+
   app.get<{ Params: { driverId: string } }>(
     '/api/drivers/:driverId',
     { preHandler: app.authenticate },

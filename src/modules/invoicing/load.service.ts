@@ -4,6 +4,7 @@ import { badRequest, notFound } from '../../utils/errors';
 import { EVENTS, LoadDispatched, LoadImported, LoadStatusChanged } from '../../events/domain-events';
 import type { EventBus } from '../../events/event-bus';
 import { assertTransition, canAdvance, type StatusActor } from '../dispatch/dispatch.policy';
+import { nextRecurrenceDate, parseRecurringDays } from '../../utils/recurring';
 
 export interface LoadStopRow {
   id: string;
@@ -69,6 +70,9 @@ export interface LoadRow {
   marketplaceStatus: string;
   bookedByTenantId: string | null;
   bookedAt: string | null;
+  deliveredAt: string | null;
+  recurringDays: string | null;
+  nextRecurrenceAt: string | null;
   assigneeDriverId: string | null;
   assigneeAssetId: string | null;
   assignedAt: string | null;
@@ -106,6 +110,8 @@ export interface LoadCreateInput {
   freightCurrency?: string;
   freightAmountTransaction?: Decimal | string | number | null;
   exchangeRateToBase?: Decimal | string | number | null;
+  /** ISO weekdays ("1,4" = Mon/Thu) — load auto-clones weekly on those days. */
+  recurringDays?: string | null;
   isInternational?: boolean;
   isContinuousInboundOutbound?: boolean;
   interliningPartner?: string | null;
@@ -169,6 +175,9 @@ interface LoadDbRow {
   marketplaceStatus: string;
   bookedByTenantId: string | null;
   bookedAt: Date | null;
+  deliveredAt: Date | null;
+  recurringDays: string | null;
+  nextRecurrenceAt: Date | null;
   assigneeDriverId: string | null;
   assigneeAssetId: string | null;
   assignedAt: Date | null;
@@ -232,6 +241,9 @@ export class PrismaLoadService implements LoadService {
     marketplaceStatus: true,
     bookedByTenantId: true,
     bookedAt: true,
+    deliveredAt: true,
+    recurringDays: true,
+    nextRecurrenceAt: true,
     assigneeDriverId: true,
     assigneeAssetId: true,
     assignedAt: true,
@@ -279,6 +291,9 @@ export class PrismaLoadService implements LoadService {
       marketplaceStatus: row.marketplaceStatus,
       bookedByTenantId: row.bookedByTenantId,
       bookedAt: row.bookedAt ? row.bookedAt.toISOString() : null,
+      deliveredAt: row.deliveredAt ? row.deliveredAt.toISOString() : null,
+      recurringDays: row.recurringDays,
+      nextRecurrenceAt: row.nextRecurrenceAt ? row.nextRecurrenceAt.toISOString() : null,
       assigneeDriverId: row.assigneeDriverId,
       assigneeAssetId: row.assigneeAssetId,
       assignedAt: row.assignedAt ? row.assignedAt.toISOString() : null,
@@ -343,6 +358,11 @@ export class PrismaLoadService implements LoadService {
           ? toDb(freightAmountTransaction.times(exchangeRateToBase))
           : null,
         exchangeRateToBase: toDb(exchangeRateToBase),
+        recurringDays: input.recurringDays ?? null,
+        nextRecurrenceAt:
+          input.recurringDays && parseRecurringDays(input.recurringDays).length > 0
+            ? nextRecurrenceDate(parseRecurringDays(input.recurringDays), new Date())
+            : null,
         isInternational,
         isContinuousInboundOutbound: input.isContinuousInboundOutbound ?? false,
         interliningPartner: input.interliningPartner ?? null,
@@ -491,7 +511,11 @@ export class PrismaLoadService implements LoadService {
 
     const updated = await this.prisma.load.update({
       where: { id: loadId },
-      data: { status },
+      data: {
+        status,
+        // First time it lands on DELIVERED — the on-time scoreboard reads this.
+        deliveredAt: status === 'DELIVERED' && row.status !== 'DELIVERED' ? new Date() : row.deliveredAt,
+      },
       select: this.select,
     });
 

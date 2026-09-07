@@ -25,7 +25,27 @@ export class LoadBoardService implements ILoadBoardService {
   async listPublic(tenantId: string, filters: BoardFilters): Promise<BoardLoadRow[]> {
     const rows = await this.store.findPublic(tenantId, filters);
     const radius = await this.buildRadius(filters);
-    return rows.filter((r) => matchesFilters(r, filters, radius ?? undefined));
+    const filtered = rows.filter((r) => matchesFilters(r, filters, radius ?? undefined));
+    return this.withLaneAverages(filtered);
+  }
+
+  /** Stamp each row with the marketplace lane benchmark (rate-my-lane). */
+  private async withLaneAverages(rows: BoardLoadRow[]): Promise<BoardLoadRow[]> {
+    if (rows.length === 0) return rows;
+    try {
+      const averages = await this.store.laneRateAverages();
+      if (averages.length === 0) return rows;
+      const byLane = new Map(averages.map((a) => [`${a.originRegion}|${a.destinationRegion}`, a]));
+      for (const row of rows) {
+        const lane = byLane.get(`${row.originRegion}|${row.destinationRegion}`);
+        if (!lane) continue;
+        row.laneAvgPerMile = lane.avgPerMile;
+        row.laneSamples = lane.samples;
+      }
+    } catch {
+      // Benchmarks are a nice-to-have — never let them break the board.
+    }
+    return rows;
   }
 
   async listOwn(tenantId: string): Promise<BoardLoadRow[]> {

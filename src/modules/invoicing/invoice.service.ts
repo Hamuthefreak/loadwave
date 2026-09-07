@@ -138,11 +138,28 @@ export class PrismaInvoiceService implements InvoiceService {
       ? d(input.exchangeRateToBase)
       : d(load.exchangeRateToBase);
     const currencyTransaction = input.currencyTransaction ?? load.freightCurrency ?? 'CAD';
+
+    // Waiting time is billable: closed detention entries on this load add to
+    // the subtotal unless the caller supplied an explicit amount (they may
+    // deliberately invoice freight only).
+    let detentionAmountSum = 0;
+    if (!input.subtotalTransaction) {
+      const entries = await this.prisma.detentionEntry.findMany({
+        where: { loadId: input.loadId },
+        select: { startedAt: true, endedAt: true, ratePerHour: true },
+      });
+      const now = new Date();
+      for (const e of entries) {
+        const minutes = Math.max(0, Math.round(((e.endedAt ?? now).getTime() - e.startedAt.getTime()) / 60_000));
+        if (e.ratePerHour == null) continue;
+        detentionAmountSum += (minutes / 60) * Number(e.ratePerHour);
+      }
+      detentionAmountSum = Math.round(detentionAmountSum * 100) / 100;
+    }
+
     const subtotalTransaction = input.subtotalTransaction
       ? d(input.subtotalTransaction)
-      : load.freightAmountTransaction
-        ? d(load.freightAmountTransaction)
-        : d(0);
+      : (load.freightAmountTransaction ? d(load.freightAmountTransaction) : d(0)).plus(detentionAmountSum);
 
     const gstAmountTransaction = subtotalTransaction.times(tax.gstRate);
     const hstAmountTransaction = subtotalTransaction.times(tax.hstRate);

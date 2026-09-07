@@ -41,6 +41,16 @@ export interface BoardLoadRow {
   bookedByTenantId: string | null;
   bookedAt: string | null;
   createdAt: string;
+  /** Lane benchmark: marketplace-wide avg $/mile for this O→D lane. */
+  laneAvgPerMile?: number | null;
+  laneSamples?: number;
+}
+
+export interface LaneRateAverage {
+  originRegion: string;
+  destinationRegion: string;
+  avgPerMile: number;
+  samples: number;
 }
 
 export interface LoadBoardStore {
@@ -51,6 +61,8 @@ export interface LoadBoardStore {
   claim(loadId: string, tenantId: string, now: Date): Promise<boolean>;
   /** Owner marks a PRIVATE load as PUBLIC (no-op if already PUBLIC). */
   makePublic(loadId: string, tenantId: string): Promise<boolean>;
+  /** Marketplace-wide avg $/mile per lane over recent history (rate-my-lane). */
+  laneRateAverages(): Promise<LaneRateAverage[]>;
 }
 
 interface StoreRow {
@@ -179,6 +191,45 @@ export class PrismaLoadBoardStore implements LoadBoardStore {
     bookedAt: true,
     createdAt: true,
   } as const;
+
+  async laneRateAverages(): Promise<LaneRateAverage[]> {
+    const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const rows = await this.prisma.load.findMany({
+      where: {
+        marketplaceStatus: { in: ['PUBLIC', 'BOOKED'] },
+        createdAt: { gte: since },
+      },
+      select: {
+        originRegion: true,
+        destinationRegion: true,
+        freightAmountBase: true,
+        freightAmountTransaction: true,
+        distanceKmEstimate: true,
+      },
+    });
+    // Aggregate in JS: per-lane mean of $/mile (groupBy can't average a ratio).
+    const lanes = new Map<string, { rates: number[] }>();
+    for (const r of rows) {
+      const amount = Number(r.freightAmountBase ?? r.freightAmountTransaction ?? 0);
+      const km = Number(r.distanceKmEstimate ?? 0);
+      if (amount <= 0 || km <= 0) continue;
+      const key = `${r.originRegion}|${r.destinationRegion}`;
+      const cur = lanes.get(key) ?? { rates: [] };
+      cur.rates.push(amount / (km * 0.621371)); // $/mile
+      lanes.set(key, cur);
+    }
+    return [...lanes.entries()]
+      .filter(([, v]) => v.rates.length >= 2) // one sample is not a benchmark
+      .map(([key, v]) => {
+        const [originRegion, destinationRegion] = key.split('|');
+        return {
+          originRegion,
+          destinationRegion,
+          avgPerMile: v.rates.reduce((a, b) => a + b, 0) / v.rates.length,
+          samples: v.rates.length,
+        };
+      });
+  }
 
   async findPublic(tenantId: string, _filters: BoardFilters): Promise<BoardLoadRow[]> {
     const rows = await this.prisma.load.findMany({

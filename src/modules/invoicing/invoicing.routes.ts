@@ -26,6 +26,7 @@ const loadSchema = {
     freightCurrency: { type: 'string', enum: ['CAD', 'USD'] },
     freightAmountTransaction: { type: ['string', 'number'] },
     exchangeRateToBase: { type: ['string', 'number'] },
+    recurringDays: { type: 'string', pattern: '^[1-7]([1-7]|,)*$' },
     isInternational: { type: 'boolean' },
     isContinuousInboundOutbound: { type: 'boolean' },
     interliningPartner: { type: 'string' },

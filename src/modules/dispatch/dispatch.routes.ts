@@ -1,8 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import type { LoadService } from '../invoicing/load.service';
+import type { PrismaDetentionService } from '../detention/detention.service';
 
 export interface DispatchModuleDeps {
   loads: LoadService;
+  detention: PrismaDetentionService;
 }
 
 const assignSchema = {
@@ -35,7 +37,14 @@ export function registerDispatchRoutes(app: FastifyInstance, deps: DispatchModul
           .send({ error: 'FORBIDDEN', message: 'no driver profile is linked to this account' });
       }
       const rows = await deps.loads.listAssignedToDriver(request.user.tenantId, request.user.driverId);
-      return reply.send(rows);
+      // Detention clock per trip: the running timer + closed waiting time.
+      const detention = await deps.detention.liveForLoads(rows.map((r) => r.id));
+      return reply.send(
+        rows.map((r) => ({
+          ...r,
+          detention: detention.get(r.id) ?? { openEntryId: null, openSeconds: 0, totalMinutes: 0 },
+        })),
+      );
     },
   );
 

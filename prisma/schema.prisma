@@ -212,6 +212,7 @@ model Driver {
   assignedLoads Load[]            @relation("AssignedDriver")
   teamInvites   TeamInvite[]
   loadDocuments LoadDocument[]
+  detentions    DetentionEntry[]  @relation("DetentionDriver")
 
   @@unique([tenantId, externalEldId])
   @@index([tenantId])
@@ -438,6 +439,7 @@ model Load {
   isContinuousInboundOutbound Boolean @default(false)
   interliningPartner          String?
   status                      String  @default("OPEN") // OPEN | ASSIGNED | IN_TRANSIT | DELIVERED | INVOICED
+  deliveredAt                 DateTime?
 
   // Dispatch / assignment.
   assigneeDriverId String?
@@ -452,6 +454,11 @@ model Load {
   bookedAt          DateTime?
   createdAt         DateTime  @default(now())
 
+  // Recurring loads: ISO weekdays the load should repeat on ("1,4" = Mon/Thu).
+  // The recurrence worker clones the load on each scheduled day.
+  recurringDays     String?
+  nextRecurrenceAt  DateTime?
+
   tenant         Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   bookedByTenant Tenant?    @relation("LoadBooking", fields: [bookedByTenantId], references: [id])
   assigneeDriver Driver?    @relation("AssignedDriver", fields: [assigneeDriverId], references: [id], onDelete: SetNull)
@@ -460,6 +467,7 @@ model Load {
   documents      LoadDocument[]
   stops          LoadStop[]
   ratings        CarrierRating[]
+  detentions     DetentionEntry[]
 
   @@unique([tenantId, externalLoadboardId])
   @@index([tenantId, status])
@@ -592,6 +600,27 @@ model Invoice {
   @@unique([tenantId, loadId])
   @@index([tenantId, issueDate])
   @@index([tenantId, paidAt])
+}
+
+// Waiting time logged by a driver against a load (detention). One open entry
+// per load at a time; the rate is snapshotted from the load when the clock
+// starts so later load edits don't retroactively change billed time.
+model DetentionEntry {
+  id          String    @id @default(uuid())
+  tenantId    String
+  loadId      String
+  driverId    String?
+  startedAt   DateTime
+  endedAt     DateTime?
+  ratePerHour Decimal?  @db.Decimal(10, 2)
+  note        String?
+  createdAt   DateTime  @default(now())
+
+  load   Load    @relation(fields: [loadId], references: [id], onDelete: Cascade)
+  driver Driver? @relation("DetentionDriver", fields: [driverId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, loadId])
+  @@index([loadId, endedAt])
 }
 
 // ---------------------------------------------------------------------------

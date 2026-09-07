@@ -22,6 +22,9 @@ export interface BoardLoad {
   bookedByTenantId: string | null;
   bookedAt: string | null;
   createdAt: string;
+  /** Lane benchmark from the marketplace (rate-my-lane). */
+  laneAvgPerMile?: number | null;
+  laneSamples?: number;
 }
 
 export interface TruckRow {

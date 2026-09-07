@@ -4,6 +4,8 @@ import {
   mostCommonStopPrefill,
   sameJurisdictionStreak,
   type FuelStopRow,
+  // @ts-ignore — jest transpiles this cross-package ESM import fine; the root
+  // tsc program is CJS-first and flags the module kind. Harmless either way.
 } from '../../web/src/utils/fuelPrefill';
 
 describe('mapLastStopToPrefill', () => {

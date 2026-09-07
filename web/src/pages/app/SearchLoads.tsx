@@ -372,6 +372,17 @@ export function LoadCard({
   const taken = load.marketplaceStatus === 'BOOKED';
   const verified = Boolean(load.postedByMcNumber || load.postedByUsdotNumber);
   const perMileVal = perMile(rate, load.distanceKmEstimate);
+  // Rate-my-lane: how this load's $/mile compares to the marketplace average
+  // for the same lane over the last 90 days.
+  const numRate = Number(rate ?? 0);
+  const numKm = Number(load.distanceKmEstimate ?? 0);
+  const myPerMile = numRate > 0 && numKm > 0 ? numRate / numKm / 0.621371 : null;
+  const laneAvg = load.laneAvgPerMile ?? null;
+  const laneDelta = myPerMile != null && laneAvg != null ? myPerMile - laneAvg : null;
+  const laneDeltaLabel =
+    laneDelta == null
+      ? null
+      : `${laneDelta >= 0 ? '+' : '\u2212'}$${Math.abs(laneDelta).toFixed(2)}/mi ${laneDelta >= 0 ? 'above' : 'below'} lane avg`;
 
   return (
     <div className={compareMode ? 'load-card compare-on' : 'load-card'}>
@@ -406,6 +417,9 @@ export function LoadCard({
         <div className="load-rate">
           <div className="amount">{money(rate, load.freightCurrency)}</div>
           <div className="ppm">{perMileVal ? `${perMileVal}/mi` : '—'}</div>
+          {laneDeltaLabel && laneDelta != null && (
+            <div className={`lane-flag ${laneDelta >= 0 ? 'lane-flag-good' : 'lane-flag-bad'}`}>{laneDeltaLabel}</div>
+          )}
         </div>
       </div>
       <div className="carrier-row">
@@ -541,6 +555,18 @@ function CompareView({
               </div>
               <div className="load-rate">
                 <div className="amount">{money(l.freightAmountBase ?? l.freightAmountTransaction, l.freightCurrency)}</div>
+                {(() => {
+                  const r = Number(l.freightAmountBase ?? l.freightAmountTransaction ?? 0);
+                  const k = Number(l.distanceKmEstimate ?? 0);
+                  const mine = r > 0 && k > 0 ? r / k / 0.621371 : null;
+                  const d = mine != null && l.laneAvgPerMile != null ? mine - l.laneAvgPerMile : null;
+                  if (d == null) return null;
+                  return (
+                    <div className={`lane-flag ${d >= 0 ? 'lane-flag-good' : 'lane-flag-bad'}`}>
+                      {d >= 0 ? '+' : '\u2212'}${Math.abs(d).toFixed(2)}/mi
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>

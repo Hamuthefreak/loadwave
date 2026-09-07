@@ -66,6 +66,8 @@ function MyLoadsTab() {
   const [currency, setCurrency] = useState<'CAD' | 'USD'>('CAD');
   const [equipmentType, setEquipmentType] = useState('DRY_VAN');
   const [postNow, setPostNow] = useState(true);
+  // Recurring: ISO weekdays (1=Mon … 7=Sun) the load should auto-clone on.
+  const [recurDays, setRecurDays] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -109,6 +111,7 @@ function MyLoadsTab() {
     };
     if (distance.trim()) body.distanceKmEstimate = Number(distance);
     if (rate.trim()) body.freightAmountTransaction = Number(rate);
+    if (recurDays.length > 0) body.recurringDays = [...recurDays].sort().join(',');
     try {
       const created = await api<{ id: string }>('/api/loads', { method: 'POST', body });
       if (postNow) {
@@ -119,6 +122,7 @@ function MyLoadsTab() {
       }
       setDistance('');
       setRate('');
+      setRecurDays([]);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create load');
@@ -195,6 +199,30 @@ function MyLoadsTab() {
                 <option value="USD">USD</option>
               </select>
             </label>
+          </div>
+          <div className="recur-row">
+            <span className="recur-title">Repeats weekly on:</span>
+            {(['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((label, i) => {
+              const day = i + 1;
+              const on = recurDays.includes(day);
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  className={`recur-day ${on ? 'on' : ''}`}
+                  aria-pressed={on}
+                  aria-label={['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][i]}
+                  onClick={() => setRecurDays((cur) => (on ? cur.filter((x) => x !== day) : [...cur, day]))}
+                >
+                  {label}
+                </button>
+              );
+            }))}
+            {recurDays.length > 0 && (
+              <span className="muted small">
+                Auto-posts a fresh copy every {[...recurDays].sort().map((d) => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][d - 1]).join(' & ')}
+              </span>
+            )}
           </div>
           <div className="form-actions">
             <button type="submit" className="btn-green" disabled={saving}>

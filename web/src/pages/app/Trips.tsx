@@ -7,6 +7,11 @@ import { equipmentLabel } from './regions';
 
 interface Trip {
   id: string;
+  detention?: {
+    openEntryId: string | null;
+    openSeconds: number;
+    totalMinutes: number;
+  };
   originCountry: string;
   originRegion: string;
   originLocality: string | null;
@@ -119,6 +124,28 @@ export default function Trips() {
   const noLinkedProfile =
     error !== null && error.toLowerCase().includes('no driver profile is linked');
 
+  // Detention clock: start/stop waiting time against a trip, then refresh so
+  // the card shows the running (or closed) total.
+  const [detentionBusy, setDetentionBusy] = useState(false);
+  const toggleDetention = async (trip: Trip) => {
+    if (detentionBusy) return;
+    setDetentionBusy(true);
+    try {
+      if (trip.detention?.openEntryId) {
+        await api(`/api/detention/${trip.detention.openEntryId}/stop`, { method: 'POST', body: {} });
+        setFlash('Waiting time stopped — it\u2019s saved to the load for invoicing.');
+      } else {
+        await api(`/api/loads/${trip.id}/detention/start`, { method: 'POST', body: {} });
+        setFlash('Detention clock running — stop it when you\u2019re rolling again.');
+      }
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Detention update failed');
+    } finally {
+      setDetentionBusy(false);
+    }
+  };
+
   // One-tap trip status share: native share sheet on phones (SMS/WhatsApp/…),
   // clipboard copy everywhere else so there's always a path that works.
   const shareTrip = async (trip: Trip) => {
@@ -154,6 +181,7 @@ export default function Trips() {
               onDeliver={() => setDeliver(t)}
               onLogFuel={() => setFlash('Fuel stop logged — it’s saved to your fleet fuel records & IFTA.')}
               onShare={(trip) => void shareTrip(trip)}
+              onDetentionToggle={(trip) => void toggleDetention(trip)}
             />
           ))}
         </div>
@@ -282,6 +310,59 @@ function DeliveryHint({ date, done }: { date: string; done: boolean }) {
   );
 }
 
+/** Waiting-time clock: one tap starts detention, one tap stops it. */
+function DetentionBox({
+  trip,
+  busy,
+  onToggle,
+}: {
+  trip: Trip;
+  busy: boolean;
+  onToggle: (trip: Trip) => void;
+}) {
+  const d = trip.detention;
+  const [elapsed, setElapsed] = useState(d?.openSeconds ?? 0);
+  const running = Boolean(d?.openEntryId);
+
+  useEffect(() => {
+    setElapsed(d?.openSeconds ?? 0);
+  }, [d?.openEntryId, d?.openSeconds]);
+
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [running]);
+
+  const clock = `${String(Math.floor(elapsed / 3600)).padStart(2, '0')}:${String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0')}:${String(elapsed % 60).padStart(2, '0')}`;
+
+  return (
+    <div>
+      {running ? (
+        <div className="detention-box">
+          <span className="detention-label">Detention</span>
+          <span className="detention-clock" role="timer">⏱ {clock}</span>
+          <button className="btn-ghost btn-sm" onClick={() => onToggle(trip)} disabled={busy}>
+            {busy ? 'Stopping…' : 'Stop waiting time'}
+          </button>
+        </div>
+      ) : (
+        <div className="detention-box" style={{ background: 'var(--panel-2)', borderColor: 'var(--border)' }}>
+          <span className="detention-label" style={{ color: 'var(--muted)' }}>Waiting at a dock?</span>
+          <button className="btn-ghost btn-sm" onClick={() => onToggle(trip)} disabled={busy}>
+            {busy ? 'Starting…' : 'Start detention clock'}
+          </button>
+        </div>
+      )}
+      {d && d.totalMinutes > 0 && (
+        <p className="detention-sum">
+          {d.totalMinutes} min of waiting time logged — flows into the invoice automatically.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function TripCard({
   trip,
   busy,
@@ -289,6 +370,7 @@ function TripCard({
   onDeliver,
   onLogFuel,
   onShare,
+  onDetentionToggle,
 }: {
   trip: Trip;
   busy: boolean;
@@ -296,6 +378,7 @@ function TripCard({
   onDeliver: () => void;
   onLogFuel: () => void;
   onShare: (trip: Trip) => void;
+  onDetentionToggle: (trip: Trip) => void;
 }) {
   const rate = trip.freightAmountBase ?? trip.freightAmountTransaction;
   const pm = perMile(rate, trip.distanceKmEstimate);
@@ -355,6 +438,10 @@ function TripCard({
           <dd>{km(trip.distanceKmEstimate)}</dd>
         </div>
       </dl>
+
+      {(trip.status === 'ASSIGNED' || trip.status === 'IN_TRANSIT') && (
+        <DetentionBox trip={trip} busy={busy} onToggle={onDetentionToggle} />
+      )}
 
       {(trip.status === 'ASSIGNED' || trip.status === 'IN_TRANSIT') && (
         <div className="trip-actions">

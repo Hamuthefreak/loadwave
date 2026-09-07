@@ -1,0 +1,25 @@
+{
+  "name": "Loadwave — Live Load Board & TMS",
+  "short_name": "Loadwave",
+  "description": "Live loads, one-tap booking, fuel, IFTA and invoicing — the whole trucking business in one app.",
+  "start_url": "/app/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#111417",
+  "theme_color": "#111417",
+  "icons": [
+    {
+      "src": "/assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

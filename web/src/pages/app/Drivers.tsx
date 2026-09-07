@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { api, getTokenUser } from '../../api';
 import { Badge, Empty, PageHeader } from '../../components/ui';
 import DispatchModal, { type DispatchDriver, type DispatchLoad } from '../../components/DispatchModal';
 import { LinkDriverModal } from '../../components/LinkDriverModal';
-import { regionLabel } from '../../utils/format';
+import { regionLabel, shortDate } from '../../utils/format';
 
 interface TeamMember {
   id: string;
@@ -44,10 +44,22 @@ function hoursShort(hours: number | null | undefined): string {
   return mins === 0 ? `${whole}h` : `${whole}h ${mins}m`;
 }
 
+interface Scorecard {
+  driverId: string;
+  deliveredCount: number;
+  onTimeCount: number;
+  onTimePct: number | null;
+  litresLogged: number;
+  fuelSpendBase: number;
+  detentionMinutes: number;
+  lastDeliveredAt: string | null;
+}
+
 export default function Drivers() {
   const [rows, setRows] = useState<Driver[]>([]);
   const [onTrip, setOnTrip] = useState<Record<string, string>>({});
   const [hos, setHos] = useState<Record<string, HosOverviewRow>>({});
+  const [scores, setScores] = useState<Record<string, Scorecard>>({});
   const [linkedByDriver, setLinkedByDriver] = useState<Record<string, string>>({});
   const [dispatchFor, setDispatchFor] = useState<Driver | null>(null);
   const [linkFor, setLinkFor] = useState<Driver | null>(null);
@@ -67,16 +79,18 @@ export default function Drivers() {
     setLoading(true);
     setError(null);
     try {
-      const [ds, ov, ls, tm] = await Promise.all([
+      const [ds, ov, ls, tm, sc] = await Promise.all([
         api<Driver[]>('/api/drivers'),
         api<HosOverviewRow[]>('/api/hos/overview').catch(() => [] as HosOverviewRow[]),
         api<DispatchLoad[]>('/api/loads').catch(() => [] as DispatchLoad[]),
         isAdmin
           ? api<{ members: TeamMember[] }>('/api/team').catch(() => null)
           : Promise.resolve(null),
+        api<Scorecard[]>('/api/drivers/scorecards').catch(() => [] as Scorecard[]),
       ]);
       setRows(ds);
       setHos(Object.fromEntries(ov.map((r) => [r.driverId, r])));
+      setScores(Object.fromEntries(sc.map((r) => [r.driverId, r])));
       const byDriver: Record<string, string> = {};
       for (const m of tm?.members ?? []) {
         if (m.driverId && m.roles.includes('DRIVER')) byDriver[m.driverId] = m.email;
@@ -188,8 +202,11 @@ export default function Drivers() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((d) => (
-                <tr key={d.id}>
+              {rows.map((d) => {
+                const sc = scores[d.id];
+                return (
+                <Fragment key={d.id}>
+                <tr>
                   <td>
                     <strong>{d.name}</strong>
                     {linkedByDriver[d.id] ? (
@@ -239,7 +256,41 @@ export default function Drivers() {
                     </span>
                   </td>
                 </tr>
-              ))}
+                {sc && (
+                  <tr className="scorecard-tr">
+                    <td colSpan={8}>
+                      <div className="scorecard-strip">
+                        <span className="scorecard-metric">
+                          <div className="sc-num">{sc.deliveredCount}</div>
+                          <div className="sc-cap">Trips delivered</div>
+                        </span>
+                        <span className="scorecard-metric">
+                          <div
+                            className={`sc-num ${sc.onTimePct == null ? '' : sc.onTimePct >= 90 ? 'sc-good' : sc.onTimePct < 70 ? 'sc-warn' : ''}`}
+                          >
+                            {sc.onTimePct == null ? '—' : `${sc.onTimePct}%`}
+                          </div>
+                          <div className="sc-cap">On time</div>
+                        </span>
+                        <span className="scorecard-metric">
+                          <div className="sc-num">{Math.round(sc.litresLogged).toLocaleString('en-CA')} L</div>
+                          <div className="sc-cap">Fuel logged</div>
+                        </span>
+                        <span className="scorecard-metric">
+                          <div className="sc-num">{sc.detentionMinutes > 0 ? `${Math.floor(sc.detentionMinutes / 60)}h ${sc.detentionMinutes % 60}m` : '—'}</div>
+                          <div className="sc-cap">Detention</div>
+                        </span>
+                        <span className="scorecard-metric">
+                          <div className="sc-num">{sc.lastDeliveredAt ? shortDate(sc.lastDeliveredAt) : '—'}</div>
+                          <div className="sc-cap">Last delivery</div>
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
