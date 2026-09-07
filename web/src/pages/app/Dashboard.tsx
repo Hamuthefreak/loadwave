@@ -692,6 +692,22 @@ function HosHoursCard({
 }) {
   const limit7 = cycle.limit7 ?? 70;
   const over = cycle.violations.length > 0;
+  // FMCSA: a 30-minute break is required after 8 cumulative hours of DRIVING
+  // time. Nudge drivers as the window approaches — it's the #1 roadside
+  // violation. Falls back to total on-duty once the 13h duty limit nears
+  // (the violation alert above then takes over).
+  const todayRow = daily?.days.length ? daily.days[daily.days.length - 1] : null;
+  const onDutyToday = todayRow?.onDutyMinutes ?? 0;
+  const drivingMins = Math.round(
+    (todayRow?.segments ?? [])
+      .filter((s) => s.dutyStatus === 'DRIVING')
+      .reduce((sum, s) => {
+        const start = new Date(s.startTime).getTime();
+        const end = s.endTime ? new Date(s.endTime).getTime() : Date.now();
+        return sum + Math.max(0, (end - start) / 60000);
+      }, 0),
+  );
+  const breakDue = drivingMins >= 480 && onDutyToday < 780;
   return (
     <div className="card hos-card">
       <div className="hos-head">
@@ -719,6 +735,14 @@ function HosHoursCard({
               <li key={w}>{w}</li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {breakDue && (
+        <div className="fuel-nudge hos-break">
+          ⏱ You've driven <strong>{Math.floor(drivingMins / 60)}h {drivingMins % 60}m</strong> today —{' '}
+          a 30-minute break is due after 8h of driving. Plan your stop before the log turns
+          into a violation.
         </div>
       )}
 

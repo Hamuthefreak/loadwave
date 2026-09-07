@@ -1580,7 +1580,8 @@
   padding: 12px 13px;
   outline: none;
   font: inherit;
-  font-size: 0.92rem;
+  /* 16px floor: iOS zooms the page when focusing anything smaller */
+  font-size: 1rem;
 }
 
 .ld-auth-card input:focus,
@@ -1706,6 +1707,8 @@ section[id] {
 
 .ld-burger span {
   height: 2px;
+  width: 20px; /* explicit: the bars collapse to 0 in some flex contexts */
+  align-self: center;
   border-radius: 2px;
   background: #fff;
   transition: transform 0.15s ease, opacity 0.15s ease;
@@ -3162,7 +3165,8 @@ html[data-theme='light'] .ld-nav-cta > .ld-pill-orange,
   background: var(--field);
   padding: 14px;
   font: inherit;
-  font-size: 0.92rem;
+  /* 16px floor: iOS zooms the page when focusing anything smaller */
+  font-size: 1rem;
   color: var(--ink);
   outline: none;
 }
@@ -3261,6 +3265,29 @@ html[data-theme='light'] .ld-nav-cta > .ld-pill-orange,
 
   .ld-auth-card {
     padding: 32px 24px;
+  }
+
+  /* iOS auto-zooms the page when focusing any input smaller than 16px —
+     fatal on the sign-up form where every field would bounce the screen. */
+  .ld-auth-solo input,
+  .ld-auth-solo select {
+    font-size: 16px;
+  }
+
+  /* Roomier Show/Hide toggle + remember-me checkbox for thumbs. */
+  .pw-toggle {
+    padding: 9px 10px;
+  }
+
+  .remember-row {
+    gap: 10px;
+    padding: 10px 4px;
+    justify-content: flex-start;
+  }
+
+  .remember-row input {
+    width: 20px;
+    height: 20px;
   }
 
   .ld-hero {

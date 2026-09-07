@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api, canManageRoles, getTokenUser, roleLabels } from '../../api';
 import { Modal } from '../../components/ui';
@@ -86,6 +86,9 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
   const [quickOpen, setQuickOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [fuelOpen, setFuelOpen] = useState(false);
+  const [refreshCount, setRefreshCount] = useState(0);
+  const [pullY, setPullY] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   const duty = useDuty();
   const [dutyBusy, setDutyBusy] = useState(false);
   const [confirmDuty, setConfirmDuty] = useState<'ACTIVE' | 'OFF_DUTY' | null>(null);
@@ -286,6 +289,64 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
     navigate(to);
   };
 
+  // Mobile pull-to-refresh: a downward drag starting at the very top of the
+  // page remounts the current route (key={refreshCount}) so every card and
+  // table on it refetches. Disabled while a sheet/modal is open, inside
+  // horizontally-scrolling tables, and on desktop.
+  const ptrState = useRef({ startY: 0, engaged: false, done: false }).current;
+  const pullYRef = useRef(0);
+  pullYRef.current = pullY;
+  useEffect(() => {
+    const canPull = () =>
+      window.matchMedia('(max-width: 860px)').matches &&
+      !document.querySelector('.nav-sheet-root, .modal-backdrop') &&
+      (document.scrollingElement?.scrollTop ?? 0) <= 0;
+
+    const inScroller = (t: EventTarget | null) =>
+      !!(t instanceof Element && t.closest('.table-scroll, .nav-sheet-scroll, input, textarea, select'));
+
+    const onStart = (e: TouchEvent) => {
+      ptrState.done = false;
+      if (!canPull() || e.touches.length !== 1 || inScroller(e.target)) return;
+      ptrState.startY = e.touches[0].clientY;
+      ptrState.engaged = true;
+    };
+
+    const onMove = (e: TouchEvent) => {
+      if (!ptrState.engaged || ptrState.done) return;
+      const dy = e.touches[0].clientY - ptrState.startY;
+      if ((document.scrollingElement?.scrollTop ?? 0) > 0 || dy <= 0) {
+        if (pullYRef.current > 0) setPullY(0);
+        return;
+      }
+      e.preventDefault();
+      setPullY(Math.min(90, dy * 0.55));
+    };
+
+    const onEnd = () => {
+      if (!ptrState.engaged || ptrState.done) return;
+      ptrState.done = true;
+      ptrState.engaged = false;
+      if (pullYRef.current >= 52) {
+        setRefreshing(true);
+        setRefreshCount((c) => c + 1);
+        window.setTimeout(() => setRefreshing(false), 900);
+      }
+      setPullY(0);
+    };
+
+    window.addEventListener('touchstart', onStart, { passive: true });
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('touchend', onEnd, { passive: true });
+    window.addEventListener('touchcancel', onEnd, { passive: true });
+    return () => {
+      window.removeEventListener('touchstart', onStart);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onEnd);
+      window.removeEventListener('touchcancel', onEnd);
+    };
+  }, [ptrState]);
+
   const blockedPath = RESTRICTED_PATHS.some((p) => {
     if (location.pathname !== p && !location.pathname.startsWith(`${p}/`)) return false;
     const item = GROUPS.flatMap((g) => g.items).find((i) => i.to === p);
@@ -404,9 +465,14 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
             {unread > 0 && <span className="bell-count">{unread > 9 ? '9+' : unread}</span>}
           </button>
         </header>
-        <main className="content">
+        <main className="content" key={refreshCount}>
           {blockedPath ? <Navigate to="/app/dashboard" replace /> : <Outlet />}
         </main>
+        {/* Mobile pull-to-refresh: drag down at the top of any page to remount
+            the route and refetch everything on it. */}
+        <div className="ptr-indicator" data-state={refreshing ? 'busy' : pullY > 18 ? 'armed' : 'idle'} style={pullY > 0 ? { transform: `translateY(${Math.min(30, pullY * 0.4)}px)` } : undefined} aria-hidden="true">
+          <span className="ptr-spin" />
+        </div>
         <nav className="mobile-bottom-nav" aria-label="Primary">
           {primary[0] && (
             <NavLink
@@ -596,14 +662,11 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
         )}
       </Modal>
 
-      {/* Mobile-only sheets: quick actions + the full menu behind "More". */}
-      {(quickOpen || moreOpen) && (
-        <div className="nav-sheet-root" role="dialog" aria-modal="true">
-          <div className="nav-sheet-backdrop" onClick={closeSheets} />
-          {quickOpen && (
-            <div className="nav-sheet">
-              <span className="nav-sheet-handle" aria-hidden />
-              <h2 className="nav-sheet-title">Quick actions</h2>
+      {/* Mobile-only sheets: quick actions + the full menu behind "More".
+          Both are swipe-down dismissible — drag the handle, or the sheet
+          itself when its scroll sits at the top. */}
+      <NavSheet open={quickOpen} onClose={() => setQuickOpen(false)}>
+            <h2 className="nav-sheet-title">Quick actions</h2>
               <div className="nav-sheet-grid">
                 {user?.driverId && !canManage && (
                   <>
@@ -661,12 +724,9 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
                   </button>
                 )}
               </div>
-            </div>
-          )}
-          {moreOpen && (
-            <div className="nav-sheet nav-sheet-tall">
-              <span className="nav-sheet-handle" aria-hidden />
-              <div className="nav-sheet-head">
+      </NavSheet>
+      <NavSheet open={moreOpen} onClose={() => setMoreOpen(false)} tall>
+            <div className="nav-sheet-head">
                 <h2 className="nav-sheet-title">{tenant?.name ?? 'Menu'}</h2>
                 <span className="side-company-badges nav-sheet-badges">
                   {roleBadges.map((r) => (
@@ -726,10 +786,7 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
                   )}
                 </div>
               </div>
-            </div>
-          )}
-        </div>
-      )}
+      </NavSheet>
 
       <FuelLogModal
         open={fuelOpen}
@@ -811,6 +868,157 @@ function shortLabel(label: string): string {
     'My Trips': 'Trips',
   };
   return map[label] ?? label;
+}
+
+/**
+ * Mobile bottom sheet with native-app swipe-to-dismiss: drag the handle (or
+ * the sheet itself when its scroll sits at the top) and flick it away, or tap
+ * the backdrop. Uses non-passive touch listeners so the drag can claim the
+ * gesture before the browser starts scrolling the page underneath.
+ */
+function NavSheet({
+  open,
+  onClose,
+  tall,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  tall?: boolean;
+  children: ReactNode;
+}) {
+  const [dragY, setDragY] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const sheetRef = useRef<HTMLDivElement | null>(null);
+  const dragYRef = useRef(0);
+  const maxDyRef = useRef(0);
+  const gesture = useRef({
+    startY: 0,
+    lastY: 0,
+    lastT: 0,
+    vel: 0,
+    engaged: false,
+    done: false,
+  }).current;
+
+  dragYRef.current = dragY;
+
+  useEffect(() => {
+    if (open) {
+      setDragY(0);
+      setDragging(false);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    const el = sheetRef.current;
+    if (!el || !open) return;
+
+    const scrollEl = () => el.querySelector<HTMLElement>('.nav-sheet-scroll');
+    const threshold = () => Math.max(90, window.innerHeight * 0.14);
+
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      const target = e.target as HTMLElement;
+      const onGrip = !!target.closest('.nav-sheet-handle, .nav-sheet-title, .nav-sheet-head');
+      const sc = scrollEl();
+      const atTop = !sc || sc.scrollTop <= 0;
+      gesture.startY = e.touches[0].clientY;
+      gesture.lastY = gesture.startY;
+      gesture.lastT = performance.now();
+      gesture.vel = 0;
+      gesture.done = false;
+      maxDyRef.current = 0;
+      gesture.engaged = onGrip || atTop;
+    };
+
+    const onMove = (e: TouchEvent) => {
+      if (!gesture.engaged || gesture.done) return;
+      const y = e.touches[0].clientY;
+      const dy = y - gesture.startY;
+      const now = performance.now();
+      const dt = Math.max(1, now - gesture.lastT);
+      gesture.vel = (y - gesture.lastY) / dt;
+      gesture.lastY = y;
+      gesture.lastT = now;
+      maxDyRef.current = Math.max(maxDyRef.current, dy);
+
+      const sc = scrollEl();
+      if (sc && sc.scrollTop > 0) {
+        // The user scrolled the content instead — hand the gesture back.
+        gesture.done = true;
+        setDragging(false);
+        setDragY(0);
+        return;
+      }
+      if (dy <= 0) return; // moving up: let the browser scroll naturally
+      e.preventDefault(); // we own this gesture — no page scroll while dragging
+      setDragging(true);
+      setDragY(dy * 0.92); // slight resistance, like a physical sheet
+    };
+
+    const onEnd = () => {
+      if (!gesture.engaged || gesture.done) return;
+      gesture.engaged = false;
+      setDragging(false);
+      const y = dragYRef.current;
+      if (y > threshold() || (gesture.vel > 0.55 && y > 36)) {
+        gesture.done = true;
+        onClose();
+      }
+      setDragY(0);
+    };
+
+    // A drag that moves further than a tap must not end up tapping a tile
+    // underneath the finger on release.
+    const swallowClick = (ev: MouseEvent) => {
+      ev.stopPropagation();
+      ev.preventDefault();
+    };
+    const maybeSwallow = () => {
+      if (maxDyRef.current > 12) {
+        el.addEventListener('click', swallowClick, { capture: true, once: true });
+        window.setTimeout(() => el.removeEventListener('click', swallowClick, true), 400);
+      }
+    };
+
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchmove', onMove, { passive: false });
+    el.addEventListener('touchend', onEnd, { passive: true });
+    el.addEventListener('touchcancel', onEnd, { passive: true });
+    el.addEventListener('touchend', maybeSwallow, { passive: true });
+    return () => {
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove', onMove);
+      el.removeEventListener('touchend', onEnd);
+      el.removeEventListener('touchcancel', onEnd);
+      el.removeEventListener('touchend', maybeSwallow);
+    };
+  }, [open, onClose, gesture]);
+
+  if (!open) return null;
+
+  const dim = dragY > 0 ? Math.max(0, 1 - dragY / 320) : 1;
+  return (
+    <div className="nav-sheet-root" role="dialog" aria-modal="true">
+      <div
+        className="nav-sheet-backdrop"
+        style={{ opacity: dim, transition: dragging ? 'none' : undefined }}
+        onClick={onClose}
+      />
+      <div
+        ref={sheetRef}
+        className={tall ? 'nav-sheet nav-sheet-tall' : 'nav-sheet'}
+        style={{
+          transform: dragY > 0 ? `translateY(${dragY}px)` : 'translateY(0)',
+          transition: dragging ? 'none' : 'transform 0.2s cubic-bezier(0.2, 0.8, 0.3, 1)',
+        }}
+      >
+        <span className="nav-sheet-handle" aria-hidden />
+        {children}
+      </div>
+    </div>
+  );
 }
 
 function BellIcon() {

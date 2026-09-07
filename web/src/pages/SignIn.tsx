@@ -288,11 +288,11 @@ export default function SignIn() {
                 <div className="form-grid">
                   <label>
                     MC number <span className="small">(optional)</span>
-                    <input value={mcNumber} onChange={(e) => setMcNumber(e.target.value)} placeholder="e.g. 123456" />
+                    <input value={mcNumber} onChange={(e) => setMcNumber(e.target.value)} placeholder="e.g. 123456" inputMode="numeric" autoComplete="off" />
                   </label>
                   <label>
                     USDOT <span className="small">(optional)</span>
-                    <input value={usdotNumber} onChange={(e) => setUsdotNumber(e.target.value)} placeholder="e.g. 9876543" />
+                    <input value={usdotNumber} onChange={(e) => setUsdotNumber(e.target.value)} placeholder="e.g. 9876543" inputMode="numeric" autoComplete="off" />
                   </label>
                 </div>
                 <p className="ld-muted small" style={{ margin: 0 }}>

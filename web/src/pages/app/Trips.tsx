@@ -119,6 +119,27 @@ export default function Trips() {
   const noLinkedProfile =
     error !== null && error.toLowerCase().includes('no driver profile is linked');
 
+  // One-tap trip status share: native share sheet on phones (SMS/WhatsApp/…),
+  // clipboard copy everywhere else so there's always a path that works.
+  const shareTrip = async (trip: Trip) => {
+    const lane = `${locality(trip.originCountry, trip.originRegion, trip.originLocality)} → ${locality(trip.destinationCountry, trip.destinationRegion, trip.destinationLocality)}`;
+    const by = trip.deliveryDate ? ` Deliver by ${shortDate(trip.deliveryDate)}.` : '';
+    const text =
+      trip.status === 'IN_TRANSIT'
+        ? `On the road: ${lane}.${by} — ${trip.commodity ?? 'General freight'}, ${km(trip.distanceKmEstimate)}. Sent from Loadwave.`
+        : `Load booked: ${lane}.${by} — rolling soon. Sent from Loadwave.`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'My trip status', text });
+      } else {
+        await navigator.clipboard.writeText(text);
+        setFlash('Status copied — paste it into a text or email.');
+      }
+    } catch {
+      /* user closed the share sheet — nothing to do */
+    }
+  };
+
   const section = (title: string, trips: Trip[]) =>
     trips.length > 0 && (
       <section>
@@ -132,6 +153,7 @@ export default function Trips() {
               onStart={() => setStart(t)}
               onDeliver={() => setDeliver(t)}
               onLogFuel={() => setFlash('Fuel stop logged — it’s saved to your fleet fuel records & IFTA.')}
+              onShare={(trip) => void shareTrip(trip)}
             />
           ))}
         </div>
@@ -266,12 +288,14 @@ function TripCard({
   onStart,
   onDeliver,
   onLogFuel,
+  onShare,
 }: {
   trip: Trip;
   busy: boolean;
   onStart: () => void;
   onDeliver: () => void;
   onLogFuel: () => void;
+  onShare: (trip: Trip) => void;
 }) {
   const rate = trip.freightAmountBase ?? trip.freightAmountTransaction;
   const pm = perMile(rate, trip.distanceKmEstimate);
@@ -335,6 +359,9 @@ function TripCard({
       {(trip.status === 'ASSIGNED' || trip.status === 'IN_TRANSIT') && (
         <div className="trip-actions">
           <FuelLogButton label="Log fuel" onLogged={onLogFuel} />
+          <button className="btn-ghost" onClick={() => onShare(trip)} aria-label="Share trip status">
+            Share status
+          </button>
           {trip.status === 'ASSIGNED' && (
             <button className="btn-green" onClick={onStart} disabled={busy}>
               {busy ? 'Starting…' : 'Start trip'}

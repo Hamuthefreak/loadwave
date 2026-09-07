@@ -1034,6 +1034,73 @@ tfoot td {
   display: none;
 }
 
+/* Mobile pull-to-refresh indicator — a small chip that drops from under the
+   top bar while you drag, spins while the page refetches. */
+.ptr-indicator {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .ptr-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: 4px;
+    left: 50%;
+    margin-left: -16px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    z-index: 45;
+    opacity: 0;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    pointer-events: none;
+  }
+
+  .ptr-indicator[data-state='idle'] {
+    opacity: 0;
+  }
+
+  .ptr-indicator[data-state='armed'] {
+    opacity: 1;
+  }
+
+  .ptr-indicator[data-state='busy'] {
+    opacity: 1;
+    transform: translateY(12px) !important;
+  }
+
+  .ptr-spin {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid var(--panel-3);
+    border-top-color: var(--accent);
+  }
+
+  .ptr-indicator[data-state='armed'] .ptr-spin {
+    transform: rotate(180deg);
+  }
+
+  .ptr-indicator[data-state='busy'] .ptr-spin {
+    animation: ptr-rotate 0.7s linear infinite;
+  }
+
+  @keyframes ptr-rotate {
+    to { transform: rotate(360deg); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ptr-indicator[data-state='busy'] .ptr-spin {
+      animation-duration: 2.4s;
+    }
+  }
+}
+
 @media (max-width: 860px) {
   .auth-shell {
     grid-template-columns: 1fr;
@@ -2492,6 +2559,11 @@ textarea:focus {
     background: var(--panel-3);
     margin: 2px auto 12px;
     flex-shrink: 0;
+    /* The handle is a drag grip — never scroll, always swipe. */
+    touch-action: none;
+    cursor: grab;
+    padding: 10px 0;
+    background-clip: content-box;
   }
 
   .nav-sheet-title {
@@ -4873,4 +4945,14 @@ a {
   color: var(--amber);
   font-size: 0.8rem;
   line-height: 1.45;
+}
+
+/* HOS 30-minute break nudge — reuses the amber nudge look inside the
+   hours card, where the eye already is when checking duty time. */
+.hos-break {
+  margin: 12px 0 2px;
+}
+
+.hos-break strong {
+  color: var(--amber);
 }
