@@ -45,6 +45,8 @@ export default function Team() {
   const [drivers, setDrivers] = useState<DriverMini[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [requireTwoFactor, setRequireTwoFactor] = useState(false);
+  const [securityBusy, setSecurityBusy] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [createdToken, setCreatedToken] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null); // inviteId for the row, or 'modal'
@@ -52,12 +54,14 @@ export default function Team() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [team, driverRows] = await Promise.all([
+      const [team, driverRows, security] = await Promise.all([
         api<TeamData>('/api/team'),
         api<DriverMini[]>('/api/drivers').catch(() => []),
+        api<{ requireTwoFactor: boolean }>('/api/team/security'),
       ]);
       setData(team);
       setDrivers(driverRows);
+      setRequireTwoFactor(security.requireTwoFactor);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load team');
     } finally {
@@ -112,6 +116,24 @@ export default function Team() {
 
   const pending = (data?.invites ?? []).filter((i) => i.status === 'PENDING');
 
+  const toggleTwoFactorPolicy = async (next: boolean) => {
+    setError(null);
+    setSecurityBusy(true);
+    const previous = requireTwoFactor;
+    try {
+      const res = await api<{ requireTwoFactor: boolean }>('/api/team/security', {
+        method: 'POST',
+        body: { requireTwoFactor: next },
+      });
+      setRequireTwoFactor(res.requireTwoFactor);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not update the security policy');
+      setRequireTwoFactor(previous);
+    } finally {
+      setSecurityBusy(false);
+    }
+  };
+
   return (
     <div>
       <PageHeader
@@ -126,6 +148,28 @@ export default function Team() {
         <Spinner label="Loading team…" />
       ) : (
         <>
+          <section className="panel settings-card" style={{ marginBottom: 18 }}>
+            <div className="settings-check-row">
+              <div>
+                <strong>Require two-factor authentication for office accounts</strong>
+                <p className="muted small" style={{ margin: '4px 0 0', maxWidth: 520 }}>
+                  Admins and dispatchers must set up an authenticator app before they can sign in.
+                  Driver accounts are not affected. Members without 2FA are asked to set it up at
+                  their next sign-in.
+                </p>
+              </div>
+              <label className="remember-row" style={{ margin: 0 }}>
+                <input
+                  type="checkbox"
+                  checked={requireTwoFactor}
+                  disabled={securityBusy}
+                  onChange={(e) => void toggleTwoFactorPolicy(e.target.checked)}
+                />
+                <span>{requireTwoFactor ? 'On — 2FA required' : 'Off — password only'}</span>
+              </label>
+            </div>
+          </section>
+
           <h2>Members ({data.members.length})</h2>
           {data.members.length === 0 ? (
             <p className="muted small">No members yet.</p>

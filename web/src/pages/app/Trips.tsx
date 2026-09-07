@@ -56,6 +56,7 @@ export default function Trips() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [start, setStart] = useState<Trip | null>(null);
   const [deliver, setDeliver] = useState<Trip | null>(null);
   const [deliverBusy, setDeliverBusy] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
@@ -90,7 +91,12 @@ export default function Trips() {
     }
   };
 
-  const startTrip = (trip: Trip) => void advance(trip, 'IN_TRANSIT', 'Trip started — drive safe!');
+  // Starting is a real commitment (dispatch gets notified), so it asks first.
+  const confirmStart = () => {
+    if (!start) return;
+    setStart(null);
+    void advance(start, 'IN_TRANSIT', 'Trip started — drive safe!');
+  };
   const confirmDeliver = async () => {
     if (!deliver || deliverBusy) return;
     setDeliverBusy(true);
@@ -123,7 +129,7 @@ export default function Trips() {
               key={t.id}
               trip={t}
               busy={busyId === t.id}
-              onStart={() => startTrip(t)}
+              onStart={() => setStart(t)}
               onDeliver={() => setDeliver(t)}
               onLogFuel={() => setFlash('Fuel stop logged — it’s saved to your fleet fuel records & IFTA.')}
             />
@@ -173,6 +179,34 @@ export default function Trips() {
           )}
         </div>
       )}
+
+      <Modal
+        open={start !== null}
+        onClose={() => setStart(null)}
+        title="Start this trip?"
+        footer={
+          <>
+            <button className="btn-ghost" onClick={() => setStart(null)}>Not yet</button>
+            <button className="btn-green" onClick={confirmStart} disabled={busyId === start?.id}>
+              {busyId === start?.id ? 'Starting…' : 'Start trip'}
+            </button>
+          </>
+        }
+      >
+        {start && (
+          <div>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Rolling out on <strong>{locality(start.originCountry, start.originRegion, start.originLocality)}</strong>{' '}
+              → <strong>{locality(start.destinationCountry, start.destinationRegion, start.destinationLocality)}</strong> tells
+              dispatch you're on the way with the load.
+            </p>
+            <p className="muted small" style={{ marginBottom: 0 }}>
+              {money(start.freightAmountBase ?? start.freightAmountTransaction, start.freightCurrency)}
+              {start.distanceKmEstimate ? ` · ${km(start.distanceKmEstimate)}` : ''}
+            </p>
+          </div>
+        )}
+      </Modal>
 
       <Modal
         open={deliver !== null}

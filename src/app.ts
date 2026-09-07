@@ -78,6 +78,7 @@ import { registerSearchRoutes } from './modules/search/saved-search.routes';
 
 import { PrismaNotificationService } from './modules/notification/notification.service';
 import { onLoadDispatched, onLoadStatusChanged } from './modules/notification/dispatch-notifier';
+import { onSessionIssued } from './modules/notification/auth-notifier';
 import { PrismaLoadDocumentService } from './modules/documents/document.service';
 import { registerDocumentRoutes } from './modules/documents/document.routes';
 import { PrismaEmailService, tenantEmail } from './modules/notification/email.service';
@@ -258,7 +259,17 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     new AuthService(
       new PrismaAuthRepository(prisma),
       new FastifyTokenService(app.jwt, { secret: env.JWT_ACCESS_SECRET, expiresIn: env.JWT_ACCESS_TTL }),
-      { accessTtlSeconds: env.JWT_ACCESS_TTL, refreshTtlSeconds: env.JWT_REFRESH_TTL },
+      {
+        accessTtlSeconds: env.JWT_ACCESS_TTL,
+        refreshTtlSeconds: env.JWT_REFRESH_TTL,
+        rememberedRefreshTtlSeconds: env.JWT_REMEMBER_TTL,
+        appUrl: env.APP_URL,
+        isProd: env.NODE_ENV === 'production',
+        // Alerts (bell + email once SMTP is live) when a session comes from a
+        // device this account has never signed in from before.
+        onSessionIssued: (info) => onSessionIssued({ notifications: base.notifications, logger }, info),
+      },
+      base.email,
     );
   const team =
     opts.deps?.team ??
@@ -292,7 +303,12 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 }
 
 function registerRoutes(app: FastifyInstance, deps: AppDeps, prisma: PrismaClient, env: AppEnv): void {
-  registerAuthRoutes(app, { auth: deps.auth });
+  registerAuthRoutes(app, {
+    auth: deps.auth,
+    email: deps.email,
+    appUrl: env.APP_URL,
+    isProd: env.NODE_ENV === 'production',
+  });
   registerTeamRoutes(app, { team: deps.team });
   registerTenantRoutes(app, { tenants: deps.tenants });
   registerDriverRoutes(app, { drivers: deps.drivers });

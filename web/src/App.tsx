@@ -13,6 +13,8 @@ const PrivacyPage = lazy(() => import('./pages/marketing/LegalPage').then(m => (
 const TermsPage = lazy(() => import('./pages/marketing/LegalPage').then(m => ({ default: m.TermsPage })));
 const ContactPage = lazy(() => import('./pages/marketing/ContactPage'));
 const SignIn = lazy(() => import('./pages/SignIn'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const Diagnostics = lazy(() => import('./pages/Diagnostics'));
 const AppShell = lazy(() => import('./pages/app/AppShell'));
 const Dashboard = lazy(() => import('./pages/app/Dashboard'));
@@ -27,6 +29,7 @@ const Fleet = lazy(() => import('./pages/app/Fleet'));
 const Drivers = lazy(() => import('./pages/app/Drivers'));
 const Team = lazy(() => import('./pages/app/Team'));
 const Billing = lazy(() => import('./pages/app/Billing'));
+const Settings = lazy(() => import('./pages/app/Settings'));
 
 function RouteFallback() {
   return <div className="route-fallback" aria-label="Loading" />;
@@ -120,6 +123,8 @@ export default function App() {
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/contact" element={<ContactPage />} />
       <Route path="/signin" element={<SignIn />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/diagnostics" element={<Diagnostics />} />
       <Route
         path="/app"
@@ -142,6 +147,7 @@ export default function App() {
         <Route path="drivers" element={<Drivers />} />
         <Route path="billing" element={<Billing />} />
         <Route path="team" element={<Team />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

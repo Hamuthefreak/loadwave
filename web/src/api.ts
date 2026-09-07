@@ -16,28 +16,52 @@ export class ApiError extends Error {
 
 const TOKEN_KEY = 'loadwave.accessToken';
 const REFRESH_KEY = 'loadwave.refreshToken';
+const REMEMBER_KEY = 'loadwave.remember';
+
+// "Remember me" sessions persist in localStorage (survive browser restarts);
+// everything else lives in sessionStorage and dies with the tab. The flag
+// lives in localStorage so refreshes keep the right policy.
+export function getRememberMe(): boolean {
+  return localStorage.getItem(REMEMBER_KEY) === '1';
+}
+
+function pickStorage(): Storage {
+  return getRememberMe() ? localStorage : sessionStorage;
+}
 
 export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+  return localStorage.getItem(TOKEN_KEY) ?? sessionStorage.getItem(TOKEN_KEY);
 }
 
-function getRefreshToken(): string | null {
-  return localStorage.getItem(REFRESH_KEY);
+export function getRefreshToken(): string | null {
+  return localStorage.getItem(REFRESH_KEY) ?? sessionStorage.getItem(REFRESH_KEY);
 }
 
-export function setTokens(accessToken: string, refreshToken?: string): void {
-  localStorage.setItem(TOKEN_KEY, accessToken);
-  if (refreshToken) localStorage.setItem(REFRESH_KEY, refreshToken);
+export function setTokens(accessToken: string, refreshToken?: string, remember = true): void {
+  // Move any existing tokens to the chosen storage so only one copy exists.
+  for (const storage of [localStorage, sessionStorage]) {
+    storage.removeItem(TOKEN_KEY);
+    storage.removeItem(REFRESH_KEY);
+  }
+  localStorage.setItem(REMEMBER_KEY, remember ? '1' : '0');
+  pickStorage().setItem(TOKEN_KEY, accessToken);
+  if (refreshToken) pickStorage().setItem(REFRESH_KEY, refreshToken);
 }
 
 export function setToken(token: string | null): void {
-  if (token) localStorage.setItem(TOKEN_KEY, token);
-  else localStorage.removeItem(TOKEN_KEY);
+  if (token) pickStorage().setItem(TOKEN_KEY, token);
+  else {
+    localStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(TOKEN_KEY);
+  }
 }
 
 function clearTokens(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_KEY);
+  sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(REFRESH_KEY);
+  localStorage.removeItem(REMEMBER_KEY);
 }
 
 /**
@@ -135,7 +159,7 @@ async function tryRefresh(): Promise<boolean> {
       if (!res.ok) return false;
       const tokens = (data as { tokens?: { accessToken?: string; refreshToken?: string } } | null)?.tokens;
       if (!tokens?.accessToken) return false;
-      setTokens(tokens.accessToken, tokens.refreshToken);
+      setTokens(tokens.accessToken, tokens.refreshToken, getRememberMe());
       return true;
     } catch {
       return false;
@@ -181,10 +205,21 @@ export async function api<T>(
 
   if (!res.ok) {
     const message =
-      (data as { message?: string } | null)?.message ?? `Request failed (${res.status})`;
+      (data as { message?: string } | null)?.message ?? fallbackMessage(res.status);
     throw new ApiError(message, res.status, data);
   }
   return data as T;
+}
+
+// Friendly defaults for the rare case the server sends no error text at all —
+// every page surfaces these, so keep them human, not "Request failed (401)".
+function fallbackMessage(status: number): string {
+  if (status === 401) return 'Your session has expired — please sign in again.';
+  if (status === 403) return "You don't have permission to do that.";
+  if (status === 404) return 'That wasn’t found — it may have been removed.';
+  if (status === 409) return 'That already exists — check for duplicates and try again.';
+  if (status === 429) return 'Too many attempts — wait a moment, then try again.';
+  return `Something went wrong on our end (${status}). Please try again.`;
 }
 
 function safeJson(text: string): unknown {

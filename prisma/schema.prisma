@@ -27,6 +27,8 @@ model Tenant {
   // Marketplace rating aggregates, maintained by the ratings module.
   ratingCount      Int      @default(0)
   ratingAvg        Decimal? @db.Decimal(3, 2)
+  // When on, ADMIN/DISPATCHER accounts cannot sign in until they enable 2FA.
+  requireTwoFactor Boolean  @default(false)
   createdAt        DateTime @default(now())
 
   users          User[]
@@ -68,8 +70,19 @@ model User {
   driverId     String?
   createdAt    DateTime @default(now())
 
+  // Two-factor authentication (TOTP). The secret is stored plainly (it is a
+  // shared secret, not a password) but recovery codes are stored hashed and
+  // are shown to the user exactly once at enable time.
+  twoFactorSecret        String?
+  twoFactorEnabled       Boolean  @default(false)
+  twoFactorRecoveryCodes String?
+  // Hashed browser fingerprints of devices this account has signed in from;
+  // a sign-in from an unknown fingerprint fires a "new device" alert.
+  knownDevices String[] @default([])
+
   tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   refreshTokens RefreshToken[]
+  passwordResets PasswordResetToken[]
   notifications Notification[]
 
   @@index([tenantId])
@@ -81,6 +94,24 @@ model RefreshToken {
   tokenHash String    @unique
   expiresAt DateTime
   revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  // Browser/device label captured at sign-in so the Sessions page can show
+  // "Chrome on Windows · signed in 2 days ago" per active session.
+  userAgent String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// One-time password reset tokens: raw token handed to the user once (in the
+// reset email), stored here only as a hash. Single-use, short-lived.
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
   createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

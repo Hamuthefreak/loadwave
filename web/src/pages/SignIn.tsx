@@ -1,14 +1,20 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import QRCode from 'qrcode';
 import { api, setTokens } from '../api';
 
 interface AuthResponse {
   user: { email: string; roles: string[] };
   tenant: { id: string; name: string; baseCurrency: string; baseJurisdiction: string };
   tokens: { accessToken: string; refreshToken: string };
+  recoveryCodes?: string[];
 }
 
+type LoginResponse = AuthResponse | { requiresTwoFactor: true; twoFactorToken: string; setupRequired?: boolean };
+
 type Mode = 'signin' | 'signup' | 'invite';
+// creds → code (normal 2FA), or creds → setup → codes (tenant-mandated 2FA).
+type Step = 'creds' | 'code' | 'setup' | 'codes';
 
 export default function SignIn() {
   const [params] = useSearchParams();
@@ -37,6 +43,15 @@ export default function SignIn() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPw, setShowPw] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+  const [step, setStep] = useState<Step>('creds');
+  const [twoFactorToken, setTwoFactorToken] = useState<string | null>(null);
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+  const codeInputRef = useRef<HTMLInputElement>(null);
+  const [forcedSetup, setForcedSetup] = useState<{ secret: string; otpauthUrl: string } | null>(null);
+  const [forcedQr, setForcedQr] = useState<string | null>(null);
+  const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
+  const [verified, setVerified] = useState<AuthResponse | null>(null);
 
   const pwProps = { show: showPw, onToggle: () => setShowPw((s) => !s) };
 
@@ -54,8 +69,59 @@ export default function SignIn() {
   );
 
   const finish = (res: AuthResponse) => {
-    setTokens(res.tokens.accessToken, res.tokens.refreshToken);
+    setTokens(res.tokens.accessToken, res.tokens.refreshToken, rememberMe);
     navigate(state?.from ?? '/app/dashboard', { replace: true });
+  };
+
+  // Second half of a 2FA sign-in: the password already checked out, this
+  // submits the authenticator (or recovery) code against the challenge token.
+  // Tenant-mandated 2FA: fetch a fresh secret + QR for the sign-in screen.
+  const startForcedSetup = async (token: string) => {
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await api<{ secret: string; otpauthUrl: string }>('/auth/2fa/setup-pending', {
+        method: 'POST',
+        body: { token },
+      });
+      setForcedSetup(res);
+      setForcedQr(
+        await QRCode.toDataURL(res.otpauthUrl, { width: 200, margin: 1, color: { dark: '#111827', light: '#ffffff' } }),
+      );
+      setTwoFactorToken(token);
+      setStep('setup');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not start two-factor setup');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const submitCode = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!twoFactorToken) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await api<AuthResponse>('/auth/2fa/verify-login', {
+        method: 'POST',
+        body: { token: twoFactorToken, code: twoFactorCode },
+      });
+      if (res.recoveryCodes) {
+        // The sign-in itself enabled 2FA — recovery codes are shown once.
+        setRecoveryCodes(res.recoveryCodes);
+        setVerified(res);
+        setStep('codes');
+        return;
+      }
+      finish(res);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong');
+      setTwoFactorCode('');
+      codeInputRef.current?.focus();
+    } finally {
+      setLoading(false);
+    }
   };
 
   const submit = async (e: FormEvent) => {
@@ -70,7 +136,19 @@ export default function SignIn() {
         });
         finish(res);
       } else if (mode === 'signin') {
-        const res = await api<AuthResponse>('/auth/login', { method: 'POST', body: { email, password } });
+        const res = await api<LoginResponse>('/auth/login', {
+          method: 'POST',
+          body: { email, password, rememberMe },
+        });
+        if ('requiresTwoFactor' in res) {
+          if (res.setupRequired) {
+            await startForcedSetup(res.twoFactorToken);
+          } else {
+            setTwoFactorToken(res.twoFactorToken);
+            setStep('code');
+          }
+          return;
+        }
         finish(res);
       } else {
         const res = await api<AuthResponse>('/auth/register', {
@@ -165,6 +243,13 @@ export default function SignIn() {
                     {toggleBtn(showPw, pwProps.onToggle)}
                   </span>
                 </label>
+                {mode === 'signin' && (
+                  <p className="small" style={{ margin: '-6px 0 0', textAlign: 'right' }}>
+                    <Link to="/forgot-password" style={{ color: 'var(--body)' }}>
+                      Forgot password?
+                    </Link>
+                  </p>
+                )}
               </>
             ) : (
               <>
@@ -230,6 +315,127 @@ export default function SignIn() {
                     : 'Create my account'}
             </button>
           </form>
+
+          {mode === 'signin' && step === 'creds' && (
+            <label className="remember-row">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+              />
+              <span>Remember me on this device</span>
+            </label>
+          )}
+
+          {mode === 'signin' && step === 'code' && (
+            <form onSubmit={submitCode} className="twofactor-screen">
+              <div className="twofactor-icon" aria-hidden="true">🔐</div>
+              <h3>Two-step verification</h3>
+              <p className="ld-muted small">
+                Enter the 6-digit code from your authenticator app{email ? ` for ${email}` : ''}.
+                No app handy? Paste a <strong>recovery code</strong> instead.
+              </p>
+              <input
+                ref={codeInputRef}
+                autoFocus
+                className="twofactor-input"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="••••••"
+                maxLength={12}
+                value={twoFactorCode}
+                onChange={(e) => setTwoFactorCode(e.target.value.replace(/\s/g, ''))}
+              />
+              <button type="submit" disabled={loading || twoFactorCode.length < 6} className="btn-block">
+                {loading ? 'Verifying…' : 'Verify & sign in'}
+              </button>
+              <button
+                type="button"
+                className="link-btn small"
+                onClick={() => {
+                  setStep('creds');
+                  setTwoFactorToken(null);
+                  setTwoFactorCode('');
+                  setError(null);
+                }}
+              >
+                ← Use a different password
+              </button>
+            </form>
+          )}
+
+          {mode === 'signin' && step === 'setup' && forcedSetup && (
+            <div className="twofactor-screen">
+              <div className="twofactor-icon" aria-hidden="true">🛡️</div>
+              <h3>Your carrier requires two-factor authentication</h3>
+              <p className="ld-muted small">
+                Office accounts sign in with an extra code. Set it up now — it takes 30 seconds
+                and you're signed in right after.
+              </p>
+              <ol className="twofactor-steps">
+                <li>Open your authenticator app and scan the QR code below.</li>
+                <li>Can't scan? Type this secret instead: <code className="twofactor-secret">{forcedSetup.secret}</code></li>
+                <li>Enter the 6-digit code it shows to confirm.</li>
+              </ol>
+              <div className="twofactor-qr" style={{ marginBottom: 12 }}>
+                {forcedQr && <img src={forcedQr} alt="QR code to add Loadwave to your authenticator app" width={200} height={200} />}
+              </div>
+              <form onSubmit={submitCode} className="twofactor-verify" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                <input
+                  ref={codeInputRef}
+                  autoFocus
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="6-digit code"
+                  maxLength={6}
+                  value={twoFactorCode}
+                  onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, ''))}
+                />
+                <button type="submit" disabled={loading || twoFactorCode.length !== 6} className="btn-block">
+                  {loading ? 'Verifying…' : 'Enable & sign in'}
+                </button>
+              </form>
+              <button
+                type="button"
+                className="link-btn small"
+                style={{ marginTop: 8 }}
+                onClick={() => {
+                  setStep('creds');
+                  setTwoFactorToken(null);
+                  setTwoFactorCode('');
+                  setForcedSetup(null);
+                  setForcedQr(null);
+                  setError(null);
+                }}
+              >
+                ← Back to sign in
+              </button>
+            </div>
+          )}
+
+          {mode === 'signin' && step === 'codes' && recoveryCodes && (
+            <div className="twofactor-screen">
+              <div className="twofactor-icon" aria-hidden="true">🔑</div>
+              <h3>Your recovery codes</h3>
+              <div className="alert alert-warn" style={{ textAlign: 'left' }}>
+                <strong>Save these now — they're shown only once.</strong> Each code signs you in a
+                single time if you ever lose your phone.
+              </div>
+              <div className="recovery-grid">
+                {recoveryCodes.map((c) => (
+                  <code key={c} className="recovery-code">{c.slice(0, 4)}-{c.slice(4)}</code>
+                ))}
+              </div>
+              <button
+                className="btn-block"
+                onClick={() => {
+                  if (verified) finish(verified);
+                }}
+              >
+                I've saved my codes — continue
+              </button>
+            </div>
+          )}
 
           {mode === 'signin' && (
             <p className="ld-muted small" style={{ margin: 0 }}>

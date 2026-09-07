@@ -21,7 +21,7 @@ const JURISDICTIONS = [
   'NY', 'NJ', 'PA', 'MA', 'CT', 'VT', 'NH', 'ME', 'IL', 'MI', 'OH', 'IN', 'TX', 'GA', 'FL', 'TN', 'VA', 'NC', 'WA', 'OR', 'CO',
 ];
 
-function FuelLogModal({
+export function FuelLogModal({
   open,
   onClose,
   onLogged,

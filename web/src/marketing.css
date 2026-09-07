@@ -3089,3 +3089,183 @@ html[data-theme='light'] .ld-nav-cta > .ld-pill-orange,
 .ld-menu .ld-pill-orange {
   color: #ffffff !important;
 }
+
+/* ---------- Auth: forgot / reset password (single-column card) ---------- */
+
+.ld-auth-solo {
+  width: min(440px, 100%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  padding: 40px 36px;
+}
+
+.ld-auth-solo .ld-auth-title {
+  font-family: 'Archivo', 'Inter', sans-serif;
+  font-weight: 800;
+  font-size: 1.35rem;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 0;
+}
+
+.ld-auth-solo .ld-auth-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ld-auth-solo .ld-auth-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--body);
+}
+
+.ld-auth-solo input {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--field);
+  padding: 14px;
+  font: inherit;
+  font-size: 0.92rem;
+  color: var(--ink);
+  outline: none;
+}
+
+.ld-auth-solo input:focus {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px var(--orange-soft);
+}
+
+.ld-auth-solo .pw-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--field);
+  padding: 0 14px;
+}
+
+.ld-auth-solo .pw-wrap input {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  width: 100%;
+  padding: 14px 0;
+}
+
+.ld-auth-solo .pw-wrap:focus-within {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px var(--orange-soft);
+}
+
+.ld-auth-solo .pw-toggle {
+  border: none;
+  background: transparent;
+  color: var(--body);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.ld-auth-solo .btn-block {
+  width: 100%;
+}
+
+.ld-auth-solo .alert {
+  margin: 0;
+}
+
+/* ===================================================================
+   Mobile & small-screen polish (marketing site)
+   =================================================================== */
+
+.ld-table-scroll {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.ld-theme-fab {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ld-auth-wrap {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+@media (max-width: 560px) {
+  /* Bigger thumb target, clear of the home indicator */
+  .ld-theme-fab {
+    width: 44px;
+    height: 44px;
+    right: 14px;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+  }
+
+  /* Primary CTAs go full width on phones */
+  .ld-hero-cta .ld-pill,
+  .ld-final-actions .ld-pill {
+    flex: 1 1 auto;
+    justify-content: center;
+    min-width: 0;
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .ld-final-actions {
+    width: 100%;
+  }
+
+  .ld-auth-wrap {
+    padding: 20px 16px;
+  }
+
+  .ld-auth-card {
+    padding: 32px 24px;
+  }
+
+  .ld-hero {
+    padding-top: 130px;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Sign-in and solo auth pages fill the screen */
+  .ld-auth-wrap {
+    padding: 0;
+  }
+
+  .ld-auth-shell {
+    width: 100%;
+    border: none;
+    border-radius: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  .ld-auth-card {
+    padding: 28px 22px;
+    justify-content: flex-start;
+  }
+
+  .ld-auth-solo {
+    width: 100%;
+    min-height: 100vh;
+    min-height: 100dvh;
+    border: none;
+    border-radius: 0;
+    justify-content: flex-start;
+  }
+
+  .ld-hero h1 {
+    font-size: 1.75rem;
+  }
+}

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, canManageRoles, getTokenUser } from '../../api';
+import { useDuty } from '../../duty-store';
 import { Badge, Lane, PageHeader, Stat } from '../../components/ui';
+import DriverQuickAction from '../../components/DriverQuickAction';
 import { FuelLogButton, FuelStopsList, type FuelLogRow } from '../../components/FuelLogger';
 import { currencyOf, km, money, perMile, regionLabel, timeAgo } from '../../utils/format';
 
@@ -387,6 +389,9 @@ function DriverDashboard() {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const user = useMemo(() => getTokenUser(), []);
+  // Live duty status from the shared store — flips the instant the quick-action
+  // button (or the bottom-nav toggle) is tapped, instead of waiting for refresh.
+  const duty = useDuty();
 
   const load = useCallback(async () => {
     setError(null);
@@ -420,6 +425,14 @@ function DriverDashboard() {
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  // The quick-action dock can log fuel from anywhere on the dashboard — when
+  // it does, refresh so the fuel card is never stale.
+  useEffect(() => {
+    const onFuel = () => void load();
+    window.addEventListener('loadwave:fuel-logged', onFuel);
+    return () => window.removeEventListener('loadwave:fuel-logged', onFuel);
   }, [load]);
 
   if (error) {
@@ -461,7 +474,7 @@ function DriverDashboard() {
         <Stat
           label={driver ? 'Your duty status' : 'Carrier'}
           value={driver ? cycleLabel(driver.cycleType) : tenant.name}
-          sub={driver ? (driver.status === 'ACTIVE' ? 'On duty / available' : driver.status) : 'Hauling under this carrier'}
+          sub={driver ? ((duty ?? driver.status) === 'ACTIVE' ? 'On duty / available' : (duty ?? driver.status)) : 'Hauling under this carrier'}
           tone="cyan"
         />
       </div>
@@ -565,6 +578,8 @@ function DriverDashboard() {
           </p>
         </div>
       </div>
+
+      <DriverQuickAction />
     </div>
   );
 }

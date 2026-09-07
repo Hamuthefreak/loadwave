@@ -248,6 +248,37 @@ verified MC/USDOT; add ★ avg).
   current filters with alerts on, and lists existing saved searches with
   Enable/Mute and Delete. Unit-tested in `tests/unit/saved-search-alerts.test.ts`.
 
+- **2026-09-05 — Shipped: friendly auth + forgot-password.** Login now tells
+  users apart — "No account found with this email" vs "That password isn't
+  right" — and emails are normalized (case/whitespace) everywhere. New
+  `PasswordResetToken` (single-use, hashed, 1 h expiry; migration
+  `20260905180000_password_reset`): `POST /auth/forgot-password` (never
+  confirms account existence, rate-limited, emails via SMTP once configured —
+  dev builds return the link on-screen) and `POST /auth/reset-password`
+  (revokes every live session + consumes the token). UI: Forgot password? link
+  on sign-in, `/forgot-password` and `/reset-password` pages with
+  show/hide-password and match validation. The API client now falls back to
+  human messages (session expired, forbidden, not found, rate-limited) instead
+  of "Request failed (401)". Unit-tested in `tests/unit/auth-service.test.ts`.
+
+- **2026-09-05 — Shipped: remember me, 2FA, change-password & session management.**
+  Sign-in gained a **Remember me on this device** checkbox: remembered sessions
+  persist in localStorage and carry a 30-day refresh token (`JWT_REMEMBER_TTL`);
+  unchecked sessions live in sessionStorage and keep the 7-day default — and
+  rotation preserves the policy. **TOTP two-factor auth** built from scratch
+  (`totp.service.ts`, RFC 6238 vectors tested): `POST /auth/2fa/setup|enable|disable`
+  plus a 2FA challenge in the login flow (password → short-lived 5-min token →
+  code → session; a code sent with the password completes in one round trip).
+  Recovery codes are stored hashed, shown exactly once, consumed on use.
+  **Settings & security** page (`/app/settings`, all roles): change password
+  (revokes every other device, keeps the current session), 2FA setup with a
+  scannable QR + manual secret + recovery-code grid, disable-with-code, and an
+  **Active sessions** list (device labels captured from the User-Agent, "This
+  device" marker, one-click revoke). Logout/refresh/login/2FA/change-password
+  routes are all rate-limited. Migration `20260905200000_security_2fa`.
+  Unit-tested in `tests/unit/totp.service.test.ts` and
+  `tests/unit/auth-security.test.ts`.
+
 ## Suggested build order
 
 1. **1.1 My Trips + 1.2 duty switch** (core driver loop; unblocks everything)
@@ -260,3 +291,38 @@ verified MC/USDOT; add ★ avg).
 Tests to extend alongside: unit tests exist for `hos-policy` and dispatch
 transitions; add driver-scoped route tests (a driver may only see/advance their
 own loads) and a notification-on-assign test.
+
+## ✅ Done — account security suite (Sept 2026)
+
+- **Forgot / reset password** — `PasswordResetToken` (hashed, single-use, 1h TTL), rate-limited endpoints, session kill on reset, `/forgot-password` + `/reset-password` pages; dev prints the link until SMTP lands (`APP_URL` env).
+- **Remember me** — checkbox on sign-in; 30-day refresh TTL in `localStorage` vs 7-day `sessionStorage`; rotation preserves the policy.
+- **TOTP 2FA** — RFC 6238 (RFC-vector tested), QR setup, hashed one-time recovery codes, disable-with-code.
+- **Sessions page** — device labels from UA, current-device marker, one-click revoke; change-password keeps this device, kills the rest.
+- **Ops 2FA enforcement** — Team → "Require two-factor for office accounts": ADMIN/DISPATCHER sign-in is blocked with an inline setup flow (QR → code → recovery codes → signed in); drivers unaffected; Settings shows a "Required" badge.
+- **New-device sign-in alert** — device fingerprint tracking (capped at 20); unknown device → bell row + email (when SMTP is on) with "change your password and revoke the session" guidance.
+- **Friendly auth errors** — distinct messages for unknown email vs wrong password, email normalization, human-readable API fallbacks.
+
+**Status:** 23 suites / 137 unit tests, all live-verified end-to-end (API + browser).
+
+## ✅ Done — mobile & small-screen pass (Sept 2026)
+
+- **Phone-width audit** — every route measured for horizontal overflow at 360px and 768px (iframed harness): all app pages clean, zero page-level overflow.
+- **Bottom nav** — 10+ destinations now scroll sideways instead of squashing/overflowing; duty toggle kept for drivers; safe-area padding retained.
+- **Modals → bottom sheets** on phones — full width, rounded top, 92dvh cap with internal scroll, thumb-friendly footer buttons (full-width split), safe-area aware; modals now sit above the theme FAB and never exceed the screen at any size.
+- **Tables** — pinned first column (sticky) on mobile so the lane/driver stays visible while the row scrolls; buttery touch scrolling + slim scrollbar on all `.table-scroll` panes.
+- **Sign-in / forgot / reset** — full-bleed on phones (no card gutters), stacked fields; 2FA code entry already numeric-keypad (`inputMode`).
+- **Touch feel** — tap-highlight removed, `touch-action: manipulation`, `100dvh` shells (iOS URL-bar safe), `viewport-fit=cover`.
+- **Details** — compare sheet floats above the bottom nav; billing quarter picker full width; trip actions stack; 2FA verify row stacks; fuel/doc rows stack; driver trips/fuel lists reflow; theme FAB hidden inside the app (redundant + it was covering modal buttons) and enlarged with safe-area offset on marketing; marketing rate-strip ticker + CTA pills full-width on phones.
+- **Found & fixed along the way** — the floating theme button rendered over the app's bottom nav and modal footers (z-index + `:has` suppression); the "Save & alert" footer button text was clipped under it.
+
+**Status:** web typecheck + build clean; verified live at 360px + 768px (ops and driver sessions) via a temporary iframe harness (removed after).
+
+## ✅ Done — driver one-tap quick action (mobile)
+
+- **Floating quick-action button on the driver dashboard** — a fixed pill above the bottom nav (≤860px), always on screen without scrolling: off duty → **Go on duty**; on duty with an assigned load → **Start trip** with the lane (`Québec → Ontario`) right on the button; on duty with nothing assigned → **Find loads** (jumps to the board). Hidden while a load is already in transit or the driver is suspended.
+- **One-tap real actions, not navigation** — the button calls the same APIs as the sidebar: `PATCH /api/drivers/me/status` and `PATCH /api/loads/:id/status` (fires the dispatcher notification). After starting a trip it flashes "Trip started — drive safe" and recontextualizes; failures show a red "try again" state.
+- **Shared duty store** (`duty-store.ts`) — the sidebar, bottom-nav toggle, FAB and the dashboard's duty stat all read one `useSyncExternalStore` source of truth, so the stat card updates the instant the FAB is tapped (was stale before).
+- **Details** — lane label ellipsizes on narrow screens; `aria-live` announces the state change; no `color-mix()` (older ELD-tablet WebViews); 44px+ touch target; z-index 50 (above the nav, below modals); trips refetch on focus + every 45s so a fresh dispatch assignment surfaces.
+- **Found along the way** — the dashboard's duty stat used its own stale fetch; now store-driven.
+
+**Status:** web typecheck + build clean; verified live at phone width (638px preview): Go on duty → ACTIVE, Start trip → IN_TRANSIT + "Maria Chen started the QC → ON trip" notification, FAB recontextualized after each tap, bottom-nav toggle in sync.

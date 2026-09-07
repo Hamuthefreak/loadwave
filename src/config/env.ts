@@ -9,6 +9,8 @@ export interface AppEnv {
   JWT_ACCESS_TTL: number;
   JWT_REFRESH_SECRET: string;
   JWT_REFRESH_TTL: number;
+  /** TTL (seconds) for "remember me" sessions. Default 30 days. */
+  JWT_REMEMBER_TTL: number;
   JWT_ISSUER: string;
   JWT_AUDIENCE: string;
   ELD_WEBHOOK_SECRET: string;
@@ -21,6 +23,8 @@ export interface AppEnv {
   DIAGNOSTICS_KEY_FILE: string;
   /** Comma-separated allowed origins; empty = same-origin only (no CORS). */
   CORS_ORIGIN: string;
+  /** Public app base URL used in emailed links (password reset, invites). */
+  APP_URL: string;
 }
 
 const schema = {
@@ -35,6 +39,7 @@ const schema = {
     JWT_ACCESS_TTL: { type: 'integer', default: 900 },
     JWT_REFRESH_SECRET: { type: 'string', minLength: 16 },
     JWT_REFRESH_TTL: { type: 'integer', default: 604800 },
+    JWT_REMEMBER_TTL: { type: 'integer', default: 2592000 },
     JWT_ISSUER: { type: 'string', default: 'loadwave' },
     JWT_AUDIENCE: { type: 'string', default: 'loadwave-clients' },
     ELD_WEBHOOK_SECRET: { type: 'string', default: '' },
@@ -44,6 +49,7 @@ const schema = {
     DIAGNOSTICS_ADMIN_KEY: { type: 'string', default: '' },
     DIAGNOSTICS_KEY_FILE: { type: 'string', default: '' },
     CORS_ORIGIN: { type: 'string', default: '' },
+    APP_URL: { type: 'string', default: 'http://localhost:5173' },
     LNG: { type: 'string', enum: ['en', 'fr'], default: 'en' },
     LNG_COUNTRY: { type: 'string', default: 'CA' },
   },

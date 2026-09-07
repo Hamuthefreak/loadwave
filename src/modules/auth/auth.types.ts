@@ -10,6 +10,18 @@ export interface JwtUser {
   type: 'access';
 }
 
+/** Payload of the short-lived challenge token handed out when an account has
+ *  2FA enabled (or must enable it): proves the password was right, expires in
+ *  5 minutes, and carries the remember-me choice made on the sign-in form.
+ *  setupRequired marks the tenant-policy flow where the account has no 2FA yet
+ *  and must enable it before the session is issued. */
+export interface TwoFactorChallenge {
+  sub: string;
+  type: 'twofactor';
+  remember: boolean;
+  setupRequired?: boolean;
+}
+
 export interface PublicUser {
   id: string;
   tenantId: string;

@@ -110,6 +110,41 @@ export function registerTeamRoutes(app: FastifyInstance, deps: TeamModuleDeps): 
     },
   );
 
+  app.get(
+    '/api/team/security',
+    {
+      preHandler: async (request, reply) => {
+        await app.requireRoles(['ADMIN'] as UserRole[])(request, reply);
+      },
+    },
+    async (request, reply) => {
+      return reply.send(await deps.team.security(request.user.tenantId));
+    },
+  );
+
+  app.post<{ Body: { requireTwoFactor?: boolean } }>(
+    '/api/team/security',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['requireTwoFactor'],
+          additionalProperties: false,
+          properties: { requireTwoFactor: { type: 'boolean' } },
+        },
+      },
+      preHandler: async (request, reply) => {
+        await app.requireRoles(['ADMIN'] as UserRole[])(request, reply);
+      },
+    },
+    async (request: FastifyRequest<{ Body: { requireTwoFactor?: boolean } }>, reply: FastifyReply) => {
+      const updated = await deps.team.setSecurity(request.user.tenantId, {
+        requireTwoFactor: request.body?.requireTwoFactor === true,
+      });
+      return reply.send(updated);
+    },
+  );
+
   app.patch<{ Params: { userId: string }; Body: { driverId?: string | null } }>(
     '/api/team/users/:userId/driver',
     {

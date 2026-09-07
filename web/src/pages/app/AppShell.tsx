@@ -3,6 +3,7 @@ import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-route
 import { api, canManageRoles, getTokenUser, roleLabels } from '../../api';
 import { Modal } from '../../components/ui';
 import ThemeToggle from '../../components/ThemeToggle';
+import { setDuty, useDuty } from '../../duty-store';
 import { timeAgo } from '../../utils/format';
 
 interface Tenant {
@@ -60,7 +61,10 @@ const GROUPS: Array<{ label: string; items: Array<{ to: string; label: string; m
   },
   {
     label: 'Account',
-    items: [{ to: '/app/team', label: 'Team & invites', mark: <IconTeam />, adminOnly: true }],
+    items: [
+      { to: '/app/settings', label: 'Settings & security', mark: <IconLock /> },
+      { to: '/app/team', label: 'Team & invites', mark: <IconTeam />, adminOnly: true },
+    ],
   },
 ];
 
@@ -77,7 +81,7 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
   const [notifOpen, setNotifOpen] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [showOnboard, setShowOnboard] = useState(false);
-  const [duty, setDuty] = useState<'ACTIVE' | 'OFF_DUTY' | 'SUSPENDED' | null>(null);
+  const duty = useDuty();
   const [dutyBusy, setDutyBusy] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -181,6 +185,7 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
       ['/app/drivers', 'Drivers'],
       ['/app/billing', 'Billing & AR'],
       ['/app/team', 'Team & Invites'],
+      ['/app/settings', 'Settings & Security'],
     ];
     const match = TITLES.find(([p]) => location.pathname === p || location.pathname.startsWith(`${p}/`));
     document.title = match ? `${match[1]} · Loadwave` : 'Loadwave';
@@ -529,6 +534,9 @@ function IconId() {
 
 function IconTeam() {
   return <Icon d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2.5 20c.8-3.2 3.1-5 5.5-5s4.7 1.8 5.5 5M17.5 7a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM15 20c.6-2.2 2.1-3.5 4-3.5s3.4 1.3 4 3.5" />;
+}
+function IconLock() {
+  return <Icon d="M6 11V8a6 6 0 0 1 12 0v3M4 11h16v10H4zM12 15v2" />;
 }
 function IconMoney() {
   return <Icon d="M2 6h20v12H2zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM6 9h.01M18 9h.01M6 15h.01M18 15h.01" />;

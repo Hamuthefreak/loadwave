@@ -48,6 +48,11 @@ function parseRolesCsv(csv: string): UserRole[] {
     .filter((r): r is UserRole => (ROLES as readonly string[]).includes(r));
 }
 
+export interface TenantSecurity {
+  /** When true, ADMIN/DISPATCHER accounts must enable 2FA before signing in. */
+  requireTwoFactor: boolean;
+}
+
 export interface TeamService {
   list(tenantId: string): Promise<{ members: TeamMemberRow[]; invites: TeamInviteRow[] }>;
   createInvite(tenantId: string, invitedById: string, input: CreateInviteInput): Promise<{ invite: TeamInviteRow; token: string }>;
@@ -57,6 +62,8 @@ export interface TeamService {
   accept(input: AcceptInviteInput): Promise<FreshSession>;
   /** Links (or unlinks) an existing member account to a driver profile. */
   setDriverLink(tenantId: string, userId: string, driverId: string | null): Promise<TeamMemberRow>;
+  security(tenantId: string): Promise<TenantSecurity>;
+  setSecurity(tenantId: string, patch: TenantSecurity): Promise<TenantSecurity>;
 }
 
 /**
@@ -126,6 +133,22 @@ export class PrismaTeamService implements TeamService {
     });
 
     return { members, invites: inviteRows };
+  }
+
+  async security(tenantId: string): Promise<TenantSecurity> {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { requireTwoFactor: true },
+    });
+    return { requireTwoFactor: tenant?.requireTwoFactor ?? false };
+  }
+
+  async setSecurity(tenantId: string, patch: TenantSecurity): Promise<TenantSecurity> {
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { requireTwoFactor: patch.requireTwoFactor },
+    });
+    return { requireTwoFactor: patch.requireTwoFactor };
   }
 
   async setDriverLink(tenantId: string, userId: string, driverId: string | null): Promise<TeamMemberRow> {

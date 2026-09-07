@@ -201,7 +201,7 @@ h3 { font-weight: 650; }
 .content {
   max-width: 1180px;
   margin: 0 auto;
-  padding: 28px 24px 64px;
+  padding: 32px 28px 72px;
 }
 
 .page-head {
@@ -209,7 +209,7 @@ h3 { font-weight: 650; }
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
   flex-wrap: wrap;
 }
 
@@ -237,7 +237,7 @@ h1 {
 
 h2 {
   font-size: 1.05rem;
-  margin: 26px 0 12px;
+  margin: 30px 0 14px;
   letter-spacing: -0.005em;
 }
 
@@ -255,21 +255,21 @@ p {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 20px;
+  padding: 22px;
 }
 
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 14px;
-  margin: 14px 0;
+  gap: 16px;
+  margin: 16px 0;
 }
 
 .stat {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 16px 18px;
+  padding: 18px 20px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -502,7 +502,7 @@ table {
 th,
 td {
   text-align: left;
-  padding: 11px 14px;
+  padding: 12px 15px;
   border-bottom: 1px solid var(--border);
   font-size: 0.88rem;
   white-space: nowrap;
@@ -1001,7 +1001,7 @@ tfoot td {
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: var(--radius);
-  padding: 14px 16px;
+  padding: 16px 18px;
   transition: all 0.12s ease;
 }
 
@@ -1059,7 +1059,7 @@ tfoot td {
   }
 
   .content {
-    padding: 20px 14px 92px;
+    padding: 22px 16px 96px;
   }
 
   .page-head h1 {
@@ -1085,19 +1085,19 @@ tfoot td {
     backdrop-filter: blur(10px);
     border-top: 1px solid var(--border);
     justify-content: space-around;
-    padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+    padding: 8px 4px calc(8px + env(safe-area-inset-bottom));
   }
 
   .mobile-bottom-nav button {
     background: none;
     color: var(--muted);
-    font-size: 0.68rem;
+    font-size: 0.7rem;
     font-weight: 700;
-    padding: 4px 10px;
-    border-radius: 8px;
+    padding: 6px 12px;
+    border-radius: 10px;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
     align-items: center;
   }
 
@@ -2416,13 +2416,13 @@ textarea:focus {
   .mobile-bottom-nav a {
     color: var(--muted);
     text-decoration: none;
-    font-size: 0.62rem;
+    font-size: 0.68rem;
     font-weight: 700;
-    padding: 4px 8px;
-    border-radius: 8px;
+    padding: 6px 12px;
+    border-radius: 10px;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
     align-items: center;
     text-align: center;
   }
@@ -3187,18 +3187,19 @@ html[data-theme='light'] .lane-arrow {
 
 .mobile-duty {
   color: var(--muted);
-  font-size: 0.62rem;
+  font-size: 0.68rem;
   font-weight: 700;
   font-family: inherit;
   border: none;
   background: none;
-  padding: 4px 8px;
-  border-radius: 8px;
+  padding: 6px 12px;
+  border-radius: 10px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   align-items: center;
   cursor: pointer;
+  transition: color 0.15s ease;
 }
 
 .mobile-duty:disabled {
@@ -3207,18 +3208,31 @@ html[data-theme='light'] .lane-arrow {
 }
 
 .mobile-duty .duty-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   display: block;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.6;
+  transition: all 0.2s ease;
 }
 
+/* On duty: a glowing dot instead of a loud background pill — matches the
+   other nav items while staying clearly readable. */
 .mobile-duty.on {
   color: var(--green);
-  background: var(--green-soft);
 }
 
 .mobile-duty.on .duty-dot {
   background: var(--green);
+  opacity: 1;
+  box-shadow: 0 0 0 3px var(--green-soft);
+  animation: duty-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes duty-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px var(--green-soft); }
+  50% { box-shadow: 0 0 0 5px var(--green-soft); }
 }
 
 /* ---------- My Trips (driver) ---------- */
@@ -3583,3 +3597,616 @@ html[data-theme='light'] .lane-arrow {
   border-radius: 6px;
 }
 .pw-toggle:hover { color: var(--accent); }
+
+/* ---------- Settings & security ---------- */
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.settings-card { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+.settings-card h3 { margin: 0; display: flex; align-items: center; gap: 8px; }
+.settings-card form { display: flex; flex-direction: column; gap: 12px; }
+.settings-check-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 12px; border-radius: 10px; background: var(--panel-2);
+}
+.btn-danger-outline {
+  border: 1px solid rgba(212, 103, 95, 0.45); background: transparent; color: var(--red);
+  padding: 7px 14px; border-radius: 9px; font-weight: 600; cursor: pointer;
+}
+.btn-danger-outline:hover { background: rgba(212, 103, 95, 0.12); }
+.badge-muted { background: var(--panel-3); color: var(--muted); border: 1px solid var(--border); }
+.link-btn {
+  background: none; border: none; color: var(--accent); cursor: pointer; padding: 0;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.link-btn:hover { opacity: 0.85; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+
+/* Sessions */
+.session-list { display: flex; flex-direction: column; gap: 8px; }
+.session-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 14px; border-radius: 10px; background: var(--panel-2);
+  border: 1px solid var(--border);
+}
+.session-row-dead { opacity: 0.55; }
+.session-main { display: flex; flex-direction: column; gap: 4px; }
+.session-device { font-weight: 600; }
+.session-meta { color: var(--muted); }
+
+/* Two-factor setup */
+.twofactor-steps { padding-left: 18px; margin: 0 0 14px; display: flex; flex-direction: column; gap: 8px; }
+.twofactor-steps li::marker { color: var(--accent); font-weight: 700; }
+.twofactor-secret {
+  font-family: var(--mono, ui-monospace, monospace); background: var(--panel-2);
+  padding: 2px 6px; border-radius: 6px; user-select: all;
+}
+.twofactor-qr {
+  display: flex; justify-content: center; padding: 14px; margin-bottom: 14px;
+  background: #fff; border-radius: 12px; width: fit-content; margin-inline: auto;
+}
+.twofactor-qr img { display: block; border-radius: 4px; }
+.twofactor-verify { display: flex; gap: 10px; align-items: center; }
+.twofactor-verify input, .twofactor-screen input {
+  font-size: 1.05rem; letter-spacing: 0.35em; text-align: center; font-family: var(--mono, ui-monospace, monospace);
+}
+.twofactor-codes { display: flex; flex-direction: column; gap: 14px; }
+.alert-warn {
+  background: var(--amber-soft); color: var(--amber); border: 1px solid rgba(217, 161, 60, 0.35);
+  border-radius: 10px; padding: 10px 12px; font-size: 0.9rem;
+}
+.recovery-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px;
+}
+.recovery-code {
+  font-family: var(--mono, ui-monospace, monospace); font-size: 0.95rem; letter-spacing: 0.06em;
+  background: var(--panel-2); border: 1px solid var(--border); padding: 10px 12px;
+  border-radius: 8px; text-align: center; user-select: all;
+}
+.twofactor-codes-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.twofactor-icon { font-size: 1.8rem; text-align: center; margin-bottom: 4px; }
+.twofactor-screen h3 { text-align: center; margin: 0 0 6px; }
+.twofactor-screen { display: flex; flex-direction: column; gap: 12px; padding: 8px 0 0; }
+
+/* Sign-in: remember me */
+.remember-row {
+  display: flex; align-items: center; gap: 8px; justify-content: center;
+  font-size: 0.9rem; color: var(--muted); margin: 10px 0 0;
+}
+.remember-row input { width: 15px; height: 15px; accent-color: var(--accent); }
+
+/* ===================================================================
+   Mobile & small-screen polish
+   =================================================================== */
+
+/* The floating theme button belongs to the marketing site — inside the app
+   shell it would sit on top of the bottom nav and the modal sheets, and the
+   shell already has theme toggles of its own. */
+body:has(.app-shell) .ld-theme-fab {
+  display: none;
+}
+
+/* Modals must sit above the floating theme button on marketing pages too */
+.modal-backdrop {
+  z-index: 140;
+}
+
+/* Keep footer buttons from clipping their labels on narrow sheets */
+.modal-foot > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Kill the grey tap flash and double-tap zoom delay on touch devices */
+a,
+button,
+[role='button'],
+select,
+.chip,
+.side-link {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a {
+  touch-action: manipulation;
+}
+
+/* True viewport height on iOS (dvh) with a vh fallback for older browsers */
+.app-shell,
+.auth-wrap,
+.diag-page,
+.route-fallback,
+.app-crash {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Modals: never taller than the screen — the body scrolls on its own */
+.modal {
+  max-height: min(92vh, 92dvh);
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-body {
+  overflow-y: auto;
+}
+
+.modal-foot {
+  flex-wrap: wrap;
+}
+
+.form-actions {
+  flex-wrap: wrap;
+}
+
+/* Lane text must never blow a card wider than the viewport */
+.lane {
+  min-width: 0;
+}
+
+.lane-city {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Board: the tools row under the search form was unstyled */
+.board-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 8px;
+  flex-wrap: wrap;
+}
+
+/* Table panes: buttery touch scrolling + a visible, slim scrollbar */
+.table-scroll {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.table-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.table-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.table-scroll::-webkit-scrollbar-thumb {
+  background: var(--panel-3);
+  border-radius: 999px;
+}
+
+@media (max-width: 860px) {
+  .shell-mobilebar .logout {
+    padding: 7px 10px;
+  }
+
+  .content {
+    padding: 22px 16px 96px;
+  }
+}
+
+@media (max-width: 720px) {
+  /* Bottom nav: too many destinations for one row — scroll sideways
+     instead of squashing or overflowing off-screen. */
+  .mobile-bottom-nav {
+    justify-content: flex-start;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 2px;
+  }
+
+  .mobile-bottom-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-bottom-nav a,
+  .mobile-bottom-nav button {
+    flex-shrink: 0;
+  }
+
+  .mobile-bottom-nav a {
+    padding: 4px 10px;
+  }
+
+  /* The compare sheet floats above the fixed bottom nav */
+  .compare-sheet {
+    left: 10px;
+    right: 10px;
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    border-radius: 12px;
+  }
+
+  /* Tables: pin the first column so the row's identity stays visible
+     while the rest of the row scrolls sideways. */
+  .table-scroll th:first-child,
+  .table-scroll td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+  }
+
+  .table-scroll thead th:first-child {
+    background: var(--panel-2);
+  }
+
+  .table-scroll tbody td:first-child {
+    background: var(--panel);
+  }
+
+  .table-scroll tfoot td:first-child {
+    background: var(--panel-2);
+  }
+
+  .table-scroll tbody tr:hover td:first-child {
+    background: var(--panel-3);
+  }
+
+  .table-scroll th:first-child::after,
+  .table-scroll td:first-child::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -1px;
+    bottom: 0;
+    width: 1px;
+    background: var(--border);
+  }
+
+  th,
+  td {
+    padding: 10px 12px;
+  }
+
+  .card,
+  .board-search {
+    padding: 14px;
+  }
+
+  .page-actions {
+    width: 100%;
+  }
+
+  .trip-actions button {
+    flex: 1;
+  }
+
+  .billing-quarter {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .billing-quarter select {
+    flex: 1;
+    max-width: none;
+  }
+
+  .route-map {
+    min-height: 180px;
+  }
+}
+
+@media (max-width: 560px) {
+  .auth-wrap {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Modals become bottom sheets — thumb-friendly, edge to edge */
+  .modal-backdrop {
+    padding: 0;
+    align-items: end;
+  }
+
+  .modal {
+    width: 100%;
+    max-height: 92dvh;
+    border-radius: 16px 16px 0 0;
+    border-bottom: none;
+  }
+
+  .modal-head {
+    padding: 14px 16px;
+  }
+
+  .modal-body {
+    padding: 16px;
+  }
+
+  .modal-foot {
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .modal-foot > * {
+    flex: 1;
+    justify-content: center;
+  }
+
+  /* Sign-in fills the screen — no card gutters, no hero */
+  .auth-wrap {
+    padding: 0;
+  }
+
+  .auth-shell {
+    width: 100%;
+    border: none;
+    border-radius: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  .auth-card {
+    padding: 28px 22px;
+    justify-content: flex-start;
+  }
+
+  /* Toggle groups stretch edge to edge */
+  .view-toggle {
+    width: 100%;
+  }
+
+  .view-toggle button {
+    flex: 1;
+    padding: 9px 6px;
+    font-size: 0.74rem;
+  }
+
+  .tabs {
+    width: 100%;
+  }
+
+  .page-tabs {
+    max-width: none;
+  }
+
+  .trip-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .trip-card .trip-head-side {
+    align-items: flex-start;
+  }
+
+  .twofactor-verify {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .session-row {
+    flex-wrap: wrap;
+  }
+
+  .session-row .btn-danger-outline {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .settings-check-row {
+    flex-wrap: wrap;
+  }
+
+  .diag-form {
+    flex-direction: column;
+  }
+
+  .diag-page {
+    padding: 24px 16px 60px;
+  }
+
+  .board-tools {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .board-tools .btn-ghost {
+    justify-content: center;
+  }
+
+  .fuel-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .fuel-item .mono-num {
+    margin-left: 0;
+  }
+
+  .fuel-item time {
+    min-width: 0;
+    text-align: left;
+  }
+
+  .doc-item {
+    flex-wrap: wrap;
+  }
+
+  .lane-big {
+    font-size: 1rem;
+  }
+
+  .stat-value {
+    font-size: 1.35rem;
+  }
+
+  .bell-item {
+    padding: 11px 12px;
+  }
+
+  .now-loading {
+    padding: 14px 16px;
+  }
+
+  .shell-mobilebar {
+    padding: 8px 12px;
+    gap: 6px;
+  }
+
+  .shell-mobilebar .logout {
+    padding: 7px 8px;
+    font-size: 0.8rem;
+  }
+
+  .content {
+    padding: 16px 12px 96px;
+  }
+}
+
+@media (max-width: 380px) {
+  /* iPhone SE / small Android: keep cards legible, never clipped */
+  .lane {
+    font-size: 0.9rem;
+  }
+
+  .load-rate .amount {
+    font-size: 1.15rem;
+  }
+
+  .mobile-bottom-nav a {
+    font-size: 0.58rem;
+    padding: 4px 6px;
+  }
+
+  .mobile-bottom-nav button {
+    font-size: 0.6rem;
+    padding: 4px 6px;
+  }
+
+  .grid {
+    gap: 10px;
+  }
+
+  .stat {
+    padding: 13px 14px;
+  }
+}
+
+/* ---------- Driver one-tap quick action (mobile FAB) ---------- */
+
+.driver-fab {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .driver-fab {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: fixed;
+    right: 14px;
+    bottom: calc(84px + env(safe-area-inset-bottom));
+    z-index: 50;
+    border: none;
+    border-radius: 999px;
+    padding: 13px 20px;
+    background: var(--green);
+    color: #0d1510;
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+    touch-action: manipulation;
+    max-width: calc(100vw - 28px);
+  }
+
+  .driver-fab:disabled {
+    opacity: 0.75;
+    cursor: default;
+  }
+
+  .driver-fab-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.28);
+    flex-shrink: 0;
+  }
+
+  .driver-fab-label {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    line-height: 1.15;
+    text-align: left;
+    min-width: 0;
+  }
+
+  .driver-fab-sub {
+    font-size: 0.72rem;
+    font-weight: 700;
+    opacity: 0.8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 46vw;
+  }
+
+  .driver-fab.driver-fab-err {
+    background: var(--red);
+    color: #fff;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  }
+}
+
+/* Shortcut dock — secondary one-tap actions stacked above the FAB. */
+
+.driver-dock {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .driver-dock {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    position: fixed;
+    right: 14px;
+    bottom: calc(148px + env(safe-area-inset-bottom));
+    z-index: 49;
+  }
+
+  .driver-dock-btn {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 11px 14px;
+    border-radius: 999px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+    cursor: pointer;
+    touch-action: manipulation;
+    min-width: 116px;
+  }
+
+  .driver-dock-btn svg {
+    color: var(--green);
+    flex-shrink: 0;
+  }
+
+  .driver-dock-btn:active {
+    background: var(--panel-2);
+  }
+}
