@@ -29,6 +29,15 @@ export default function SignIn() {
     if (inviteToken && mode !== 'invite') setMode('invite');
   }, [inviteToken, mode]);
 
+  // Keep the tab in sync with the URL: the marketing nav links between
+  // /signin and /signin?mode=signup, and when you're already on this page
+  // the route change must flip the form — not silently do nothing.
+  useEffect(() => {
+    if (inviteToken) return;
+    const want: Mode = params.get('mode') === 'signup' ? 'signup' : 'signin';
+    setMode((cur) => (cur === 'invite' ? cur : want));
+  }, [params, inviteToken]);
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -54,6 +63,20 @@ export default function SignIn() {
   const [verified, setVerified] = useState<AuthResponse | null>(null);
 
   const pwProps = { show: showPw, onToggle: () => setShowPw((s) => !s) };
+
+  // Friendly, branded validation instead of the browser's raw bubble text
+  // (someone typing "1" as their email gets a sentence they can act on).
+  const vmsg = (message: string) => ({
+    onInvalid: (e: React.InvalidEvent<HTMLInputElement>) => {
+      e.currentTarget.setCustomValidity(message);
+    },
+    onInput: (e: React.ChangeEvent<HTMLInputElement>) => {
+      e.currentTarget.setCustomValidity('');
+    },
+  });
+
+  const emailCheck = vmsg('Enter a valid email address — like you@carrier.ca');
+  const passwordCheck = vmsg('Your password needs at least 8 characters.');
 
   const toggleBtn = (visible: boolean, toggle: () => void) => (
     <button
@@ -234,7 +257,7 @@ export default function SignIn() {
               <>
                 <label>
                   Email
-                  <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ops@carrier.ca" autoComplete="email" />
+                  <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ops@carrier.ca" autoComplete="email" {...emailCheck} />
                 </label>
                 <label>
                   Password
@@ -259,13 +282,19 @@ export default function SignIn() {
                 </label>
                 <label>
                   Email
-                  <input type="email" required value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="you@carrier.ca" autoComplete="email" />
+                  <input type="email" required value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="you@carrier.ca" autoComplete="email" {...emailCheck} />
                 </label>
                 <label>
                   Password
-                  <span className="small">At least 8 characters.</span>
+                  <span className="small">
+                    {newPassword.length === 0
+                      ? 'At least 8 characters.'
+                      : newPassword.length < 8
+                        ? `${8 - newPassword.length} more character${8 - newPassword.length === 1 ? '' : 's'} to go…`
+                        : '✓ Good to go.'}
+                  </span>
                   <span className="pw-wrap">
-                    <input type={showPw ? 'text' : 'password'} required minLength={8} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="••••••••" autoComplete="new-password" />
+                    <input type={showPw ? 'text' : 'password'} required minLength={8} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="••••••••" autoComplete="new-password" {...passwordCheck} />
                     {toggleBtn(showPw, pwProps.onToggle)}
                   </span>
                 </label>

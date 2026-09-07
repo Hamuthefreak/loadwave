@@ -1040,6 +1040,31 @@ tfoot td {
   display: none;
 }
 
+/* Swipe-between-tabs: content fades in from the swipe direction. Opacity
+   only — a transform here would hijack the fixed FAB's positioning. */
+.content.slide-left {
+  animation: content-from-right 0.22s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.content.slide-right {
+  animation: content-from-left 0.22s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+@keyframes content-from-right {
+  from { opacity: 0.25; }
+}
+
+@keyframes content-from-left {
+  from { opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content.slide-left,
+  .content.slide-right {
+    animation: none;
+  }
+}
+
 @media (max-width: 860px) {
   .ptr-indicator {
     display: flex;

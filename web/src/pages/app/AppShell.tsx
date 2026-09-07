@@ -89,6 +89,7 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
   const [refreshCount, setRefreshCount] = useState(0);
   const [pullY, setPullY] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [slide, setSlide] = useState<'left' | 'right' | null>(null);
   const duty = useDuty();
   const [dutyBusy, setDutyBusy] = useState(false);
   const [confirmDuty, setConfirmDuty] = useState<'ACTIVE' | 'OFF_DUTY' | null>(null);
@@ -293,7 +294,7 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
   // page remounts the current route (key={refreshCount}) so every card and
   // table on it refetches. Disabled while a sheet/modal is open, inside
   // horizontally-scrolling tables, and on desktop.
-  const ptrState = useRef({ startY: 0, engaged: false, done: false }).current;
+  const ptrState = useRef({ startY: 0, startX: 0, engaged: false, done: false }).current;
   const pullYRef = useRef(0);
   pullYRef.current = pullY;
   useEffect(() => {
@@ -309,12 +310,20 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
       ptrState.done = false;
       if (!canPull() || e.touches.length !== 1 || inScroller(e.target)) return;
       ptrState.startY = e.touches[0].clientY;
+      ptrState.startX = e.touches[0].clientX;
       ptrState.engaged = true;
     };
 
     const onMove = (e: TouchEvent) => {
       if (!ptrState.engaged || ptrState.done) return;
       const dy = e.touches[0].clientY - ptrState.startY;
+      const dx = e.touches[0].clientX - ptrState.startX;
+      // Horizontal drags belong to the tab-swipe gesture, not the pull.
+      if (Math.abs(dx) > Math.abs(dy)) {
+        ptrState.done = true;
+        if (pullYRef.current > 0) setPullY(0);
+        return;
+      }
       if ((document.scrollingElement?.scrollTop ?? 0) > 0 || dy <= 0) {
         if (pullYRef.current > 0) setPullY(0);
         return;
@@ -346,6 +355,68 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
       window.removeEventListener('touchcancel', onEnd);
     };
   }, [ptrState]);
+
+  // Native-app swipe between the primary tabs (Home ⇄ Board ⇄ Trips / Loads).
+  // A predominantly-horizontal drag that isn't on an interactive element flips
+  // to the neighbour tab; content fades in from the swipe direction.
+  const swipe = useRef({ x: 0, y: 0, decided: false, horiz: false, active: false }).current;
+  const primaryRef = useRef(primary);
+  primaryRef.current = primary;
+  const primaryKey = primary.map((p) => p.to).join(',');
+  useEffect(() => {
+    const allowed = (t: EventTarget | null) =>
+      t instanceof Element &&
+      !t.closest('input, textarea, select, button, a, label, .table-scroll, .nav-sheet-scroll, .nav-sheet-root, .modal-backdrop, .pw-toggle');
+
+    const onStart = (e: TouchEvent) => {
+      swipe.active = false;
+      if (e.touches.length !== 1) return;
+      if (!window.matchMedia('(max-width: 860px)').matches) return;
+      if (document.querySelector('.nav-sheet-root, .modal-backdrop')) return;
+      if (!allowed(e.target)) return;
+      swipe.x = e.touches[0].clientX;
+      swipe.y = e.touches[0].clientY;
+      swipe.decided = false;
+      swipe.horiz = false;
+      swipe.active = true;
+    };
+
+    const onMove = (e: TouchEvent) => {
+      if (!swipe.active || swipe.decided) return;
+      const dx = e.touches[0].clientX - swipe.x;
+      const dy = e.touches[0].clientY - swipe.y;
+      if (Math.abs(dx) < 14 && Math.abs(dy) < 14) return;
+      swipe.decided = true;
+      // Mostly-vertical gestures belong to scrolling / pull-to-refresh.
+      swipe.horiz = Math.abs(dx) > Math.abs(dy) * 1.25;
+    };
+
+    const onEnd = (e: TouchEvent) => {
+      if (!swipe.active) return;
+      swipe.active = false;
+      if (!swipe.decided || !swipe.horiz) return;
+      const dx = e.changedTouches[0].clientX - swipe.x;
+      if (Math.abs(dx) < 70) return;
+      const tabs = primaryRef.current;
+      const idx = tabs.findIndex((p) => location.pathname === p.to);
+      if (idx < 0) return;
+      const next = dx < 0 ? tabs[idx + 1] : tabs[idx - 1];
+      if (!next) return; // already at the edge — no wraparound
+      setSlide(dx < 0 ? 'left' : 'right');
+      navigate(next.to);
+      window.setTimeout(() => setSlide(null), 320);
+    };
+
+    window.addEventListener('touchstart', onStart, { passive: true });
+    window.addEventListener('touchmove', onMove, { passive: true });
+    window.addEventListener('touchend', onEnd, { passive: true });
+    return () => {
+      window.removeEventListener('touchstart', onStart);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onEnd);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [primaryKey, location.pathname, navigate, swipe]);
 
   const blockedPath = RESTRICTED_PATHS.some((p) => {
     if (location.pathname !== p && !location.pathname.startsWith(`${p}/`)) return false;
@@ -465,7 +536,7 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
             {unread > 0 && <span className="bell-count">{unread > 9 ? '9+' : unread}</span>}
           </button>
         </header>
-        <main className="content" key={refreshCount}>
+        <main className={`content${slide ? ` slide-${slide}` : ''}`} key={refreshCount}>
           {blockedPath ? <Navigate to="/app/dashboard" replace /> : <Outlet />}
         </main>
         {/* Mobile pull-to-refresh: drag down at the top of any page to remount
