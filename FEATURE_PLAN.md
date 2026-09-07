@@ -353,3 +353,19 @@ own loads) and a notification-on-assign test.
 **Status:** 25 suites / 151 tests pass, typecheck + lint + web build clean,
 live-verified in the preview (paired grids, daily strip, duty→log→cycle
 chain, assign→bell pipeline). Pushed to main.
+
+## ✅ Done — ELD-style duty log detail view
+
+- Tapping any day on the dashboard's duty strip opens a **Duty log** modal
+  with the classic ELD 24-hour grid: time axis (12am→11pm), four status
+  tracks (Driving / On duty, not driving / Sleeper berth / Off duty) with
+  colored blocks positioned by the hour in the driver's home timezone.
+- Below the grid, the full timed segment list — status, local start–end,
+  duration, "in progress" for the open segment — plus an on/off-duty total
+  footer ("Times in Toronto time").
+- Day cells became proper buttons (hover ring, focus outline, aria-labels);
+  Modal gained a `wide` size. Seeded a realistic demo day (6 blocks:
+  driving/on-duty/off-duty) so sales demos show a proper logbook.
+
+**Status:** web typecheck + build clean; verified live in the preview (grid
+positions, list times, totals, close). Uncommitted on main.

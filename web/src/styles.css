@@ -4331,3 +4331,165 @@ a {
   font-weight: 600;
   white-space: nowrap;
 }
+
+/* ---------- ELD-style daily duty log (modal) ---------- */
+
+.modal-wide {
+  width: min(680px, 100%);
+}
+
+.eld-log {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 2px;
+}
+
+.eld-axis {
+  display: grid;
+  grid-template-columns: 138px 1fr;
+  gap: 10px;
+}
+
+.eld-axis-tick {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--faint);
+  padding: 0 3px;
+}
+
+.eld-row {
+  display: grid;
+  grid-template-columns: 138px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.eld-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.eld-label i {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.eld-track {
+  position: relative;
+  height: 22px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.eld-block {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  border-radius: 3px;
+  opacity: 0.88;
+}
+
+.eld-list {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.eld-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.82rem;
+}
+
+.eld-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.eld-list-status {
+  font-weight: 700;
+  width: 158px;
+  flex-shrink: 0;
+}
+
+.eld-list-time {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+.eld-list-dur {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.eld-total {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  width: 100%;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.eld-total strong {
+  color: var(--text);
+}
+
+/* Day cells in the strip are tappable buttons now. */
+.hos-day {
+  font-family: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.hos-day:hover .hos-day-bar {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.hos-day:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 560px) {
+  .eld-row,
+  .eld-axis {
+    grid-template-columns: 96px 1fr;
+  }
+  .eld-list-status {
+    width: 120px;
+  }
+}

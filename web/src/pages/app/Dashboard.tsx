@@ -5,6 +5,7 @@ import { useDuty } from '../../duty-store';
 import { alertStatus as pushAlertStatus, enableLoadAlerts } from '../../push';
 import { Badge, Lane, PageHeader, Stat } from '../../components/ui';
 import DriverQuickAction from '../../components/DriverQuickAction';
+import DutyLogModal, { type HosDailyLogRow, type HosDayRow } from '../../components/DutyLogModal';
 import { FuelLogButton, FuelStopsList, type FuelLogRow } from '../../components/FuelLogger';
 import { currencyOf, km, money, perMile, regionLabel, timeAgo } from '../../utils/format';
 
@@ -377,25 +378,6 @@ interface TruckMini {
   status: string;
 }
 
-interface HosDaySegment {
-  dutyStatus: string;
-  startTime: string;
-  endTime: string | null;
-}
-
-interface HosDayRow {
-  date: string;
-  onDutyMinutes: number;
-  offDutyMinutes: number;
-  segments: HosDaySegment[];
-}
-
-interface HosDailyLogRow {
-  driverId: string;
-  timezone: string;
-  days: HosDayRow[];
-}
-
 // Driver-facing dashboard: shows the live board and the driver's own status,
 // and leaves out the ops tooling (revenue, fuel, IFTA, fleet, drivers) that a
 // DRIVER account can't access anyway.
@@ -407,6 +389,7 @@ function DriverDashboard() {
   const [cycle, setCycle] = useState<HosCycle | null>(null);
   const [fuelRows, setFuelRows] = useState<FuelLogRow[]>([]);
   const [daily, setDaily] = useState<HosDailyLogRow | null>(null);
+  const [logDay, setLogDay] = useState<HosDayRow | null>(null);
   const [alertsBusy, setAlertsBusy] = useState(false);
   const [alertsOn, setAlertsOn] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -567,7 +550,7 @@ function DriverDashboard() {
           )}
         </div>
 
-        {cycle && <HosHoursCard cycle={cycle} daily={daily} />}
+        {cycle && <HosHoursCard cycle={cycle} daily={daily} onOpenDay={setLogDay} />}
       </div>
 
       {user?.driverId && (
@@ -641,6 +624,8 @@ function DriverDashboard() {
       </div>
 
       <DriverQuickAction />
+
+      <DutyLogModal day={logDay} timezone={daily?.timezone ?? ''} onClose={() => setLogDay(null)} />
     </div>
   );
 }
@@ -686,7 +671,15 @@ function HosBar({ used, limit, label }: { used: number; limit: number; label: st
   );
 }
 
-function HosHoursCard({ cycle, daily }: { cycle: HosCycle; daily: HosDailyLogRow | null }) {
+function HosHoursCard({
+  cycle,
+  daily,
+  onOpenDay,
+}: {
+  cycle: HosCycle;
+  daily: HosDailyLogRow | null;
+  onOpenDay: (day: HosDayRow) => void;
+}) {
   const limit7 = cycle.limit7 ?? 70;
   const over = cycle.violations.length > 0;
   return (
@@ -719,7 +712,7 @@ function HosHoursCard({ cycle, daily }: { cycle: HosCycle; daily: HosDailyLogRow
         </div>
       )}
 
-      {daily && daily.days.length > 0 && <HosDailyStrip days={daily.days} />}
+      {daily && daily.days.length > 0 && <HosDailyStrip days={daily.days} onOpenDay={onOpenDay} />}
 
       <p className="muted small" style={{ marginBottom: 0 }}>
         {cycle.has24hOffIn14
@@ -736,7 +729,8 @@ function weekdayShort(date: string): string {
 
 // Seven-day duty strip: each day is a green on-duty bar over the off-duty
 // track, with the on-duty hours underneath. The first cell is today.
-function HosDailyStrip({ days }: { days: HosDayRow[] }) {
+// Tapping a day opens the ELD-style detail view.
+function HosDailyStrip({ days, onOpenDay }: { days: HosDayRow[]; onOpenDay: (day: HosDayRow) => void }) {
   return (
     <div className="hos-daily">
       <div className="hos-daily-head">
@@ -754,13 +748,20 @@ function HosDailyStrip({ days }: { days: HosDayRow[] }) {
               }).join(' · ')
             : 'No duty recorded';
           return (
-            <div className={`hos-day${i === 0 ? ' today' : ''}`} key={d.date} title={`${d.date}: ${detail}`}>
+            <button
+              type="button"
+              className={`hos-day${i === 0 ? ' today' : ''}`}
+              key={d.date}
+              title={`${d.date}: ${detail} — tap for the full log`}
+              aria-label={`${d.date} duty log: ${detail}. Tap for the full day.`}
+              onClick={() => onOpenDay(d)}
+            >
               <span className="hos-day-name">{i === 0 ? 'Today' : weekdayShort(d.date)}</span>
               <span className="hos-day-bar" aria-hidden>
                 <span className="hos-day-on" style={{ width: `${onPct}%` }} />
               </span>
               <span className="hos-day-hours">{d.onDutyMinutes > 0 ? fmtHours(d.onDutyMinutes / 60) : '—'}</span>
-            </div>
+            </button>
           );
         })}
       </div>

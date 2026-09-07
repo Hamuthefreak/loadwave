@@ -118,12 +118,14 @@ export function Modal({
   title,
   children,
   footer,
+  size,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
   footer?: ReactNode;
+  size?: 'default' | 'wide';
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -147,7 +149,7 @@ export function Modal({
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" ref={ref} onClick={(e) => e.stopPropagation()}>
+      <div className={size === 'wide' ? 'modal modal-wide' : 'modal'} ref={ref} onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h3>{title}</h3>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
