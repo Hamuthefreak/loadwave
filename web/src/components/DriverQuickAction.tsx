@@ -51,6 +51,7 @@ export default function DriverQuickAction() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [confirm, setConfirm] = useState<'start' | 'deliver' | null>(null);
+  const [confirmDuty, setConfirmDuty] = useState(false);
   const [fuelOpen, setFuelOpen] = useState(false);
   const timer = useRef<number | null>(null);
 
@@ -139,7 +140,7 @@ export default function DriverQuickAction() {
     tone = ' driver-fab-err';
   } else if (!onDuty) {
     label = 'Go on duty';
-    action = goOnDuty;
+    action = () => setConfirmDuty(true);
   } else if (assigned) {
     label = 'Start trip';
     sub = laneOf(assigned);
@@ -196,6 +197,32 @@ export default function DriverQuickAction() {
           {sub && <span className="driver-fab-sub">{sub}</span>}
         </span>
       </button>
+
+      <Modal
+        open={confirmDuty}
+        onClose={() => setConfirmDuty(false)}
+        title="Go on duty?"
+        footer={
+          <>
+            <button className="btn-ghost" onClick={() => setConfirmDuty(false)}>Not yet</button>
+            <button
+              className="btn-green"
+              disabled={busy}
+              onClick={() => {
+                setConfirmDuty(false);
+                void goOnDuty();
+              }}
+            >
+              {busy ? 'Updating…' : 'Go on duty'}
+            </button>
+          </>
+        }
+      >
+        <p className="muted" style={{ margin: 0 }}>
+          You'll show as <strong>available</strong> to dispatch — assigned loads can come your
+          way, and time on duty counts against your HOS cycle.
+        </p>
+      </Modal>
 
       <Modal
         open={confirm !== null && confirmTrip !== null}

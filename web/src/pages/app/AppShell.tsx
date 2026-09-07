@@ -83,6 +83,7 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
   const [showOnboard, setShowOnboard] = useState(false);
   const duty = useDuty();
   const [dutyBusy, setDutyBusy] = useState(false);
+  const [confirmDuty, setConfirmDuty] = useState<'ACTIVE' | 'OFF_DUTY' | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -274,7 +275,7 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
                   type="button"
                   className={`duty-btn ${duty === 'ACTIVE' ? 'duty-on' : ''}`}
                   disabled={dutyBusy || !duty}
-                  onClick={() => void setDutyStatus('ACTIVE')}
+                  onClick={() => setConfirmDuty('ACTIVE')}
                 >
                   <span className="duty-dot" aria-hidden />
                   On duty
@@ -283,7 +284,7 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
                   type="button"
                   className={`duty-btn ${duty === 'OFF_DUTY' ? 'duty-off' : ''}`}
                   disabled={dutyBusy || !duty}
-                  onClick={() => void setDutyStatus('OFF_DUTY')}
+                  onClick={() => setConfirmDuty('OFF_DUTY')}
                 >
                   <span className="duty-dot" aria-hidden />
                   Off duty
@@ -359,7 +360,7 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
               type="button"
               className={`mobile-duty ${duty === 'ACTIVE' ? 'on' : ''}`}
               disabled={dutyBusy || !duty || duty === 'SUSPENDED'}
-              onClick={() => void setDutyStatus(duty === 'ACTIVE' ? 'OFF_DUTY' : 'ACTIVE')}
+              onClick={() => setConfirmDuty(duty === 'ACTIVE' ? 'OFF_DUTY' : 'ACTIVE')}
               aria-pressed={duty === 'ACTIVE'}
               aria-label={
                 duty === 'ACTIVE'
@@ -453,6 +454,42 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
             </>
           )}
         </div>
+      </Modal>
+
+      <Modal
+        open={confirmDuty !== null}
+        onClose={() => setConfirmDuty(null)}
+        title={confirmDuty === 'ACTIVE' ? 'Go on duty?' : 'Go off duty?'}
+        footer={
+          <>
+            <button className="btn-ghost" onClick={() => setConfirmDuty(null)}>Cancel</button>
+            <button
+              className={confirmDuty === 'ACTIVE' ? 'btn-green' : 'btn-primary'}
+              disabled={dutyBusy}
+              onClick={() => {
+                const next = confirmDuty;
+                setConfirmDuty(null);
+                if (next) void setDutyStatus(next);
+              }}
+            >
+              {dutyBusy ? 'Updating…' : confirmDuty === 'ACTIVE' ? 'Go on duty' : 'Go off duty'}
+            </button>
+          </>
+        }
+      >
+        <p className="muted" style={{ margin: 0 }}>
+          {confirmDuty === 'ACTIVE' ? (
+            <>
+              You'll show as <strong>available</strong> to dispatch — assigned loads can come your
+              way, and time on duty counts against your HOS cycle.
+            </>
+          ) : (
+            <>
+              You'll stop showing as available and your on-duty clock pauses until you flip
+              back. Your trips, fuel and records stay safe.
+            </>
+          )}
+        </p>
       </Modal>
 
       <Modal
