@@ -106,7 +106,7 @@ export default function SearchTrucks() {
               ))}
             </select>
           </label>
-          <label>
+          <label className="span-2">
             Equipment
             <select value={equipment} onChange={(e) => setEquipment(e.target.value)}>
               <option value="">Any equipment</option>
@@ -115,7 +115,7 @@ export default function SearchTrucks() {
               ))}
             </select>
           </label>
-          <label>
+          <label className="span-2">
             Min rate
             <input type="number" min="0" step="50" value={minRate} onChange={(e) => setMinRate(e.target.value)} placeholder="1500" />
           </label>

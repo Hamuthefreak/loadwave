@@ -2474,12 +2474,27 @@ textarea:focus {
     font-size: 1.3rem;
   }
 
+  /* Board filters on phones: Origin ⇄ Destination stay side by side
+     (the lane is the control drivers touch first), equipment pairs with
+     min rate, and the date + search button span the full width. */
   .search-filters {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: end;
   }
 
+  /* Undo the 1000px span-2 and the global full-width button rule so the
+     swap button sits compactly between the two lane selects. */
   .search-filters .swap-btn {
-    grid-column: span 1;
+    grid-column: auto;
+    width: auto;
+    padding: 10px 14px;
+  }
+
+  /* Pickup after and the Search button each take a full row. */
+  .search-filters label:last-of-type,
+  .search-filters .search-go,
+  .search-filters button[type='submit'] {
+    grid-column: 1 / -1;
   }
 
   .compare-cols {
@@ -3977,6 +3992,29 @@ a {
   .trip-actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  /* Forms: paired 2-up layout instead of a tall single stack — volume | total,
+     jurisdiction | unit, etc. Full-width fields span both columns. */
+  .form-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  /* Date/time pickers are wide — they own a full row. The field before
+     them (e.g. Currency) fills the row's other half instead of leaving
+     a dangling half-empty row. */
+  .form-grid > *:is(label, div):has(input[type='datetime-local']) {
+    grid-column: 1 / -1;
+  }
+
+  .form-grid .full,
+  .form-grid .span-2 {
+    grid-column: 1 / -1;
+  }
+
+  .board-search .form-grid {
+    grid-template-columns: 1fr 1fr;
   }
 
   .trip-card .trip-head-side {
