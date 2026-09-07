@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { api, getTokenUser } from '../api';
 import { Modal } from './ui';
 import { money, regionLabel, timeAgo } from '../utils/format';
@@ -21,6 +21,121 @@ const JURISDICTIONS = [
   'NY', 'NJ', 'PA', 'MA', 'CT', 'VT', 'NH', 'ME', 'IL', 'MI', 'OH', 'IN', 'TX', 'GA', 'FL', 'TN', 'VA', 'NC', 'WA', 'OR', 'CO',
 ];
 
+/**
+ * Cab-side quick-entry pad: two big paired fields (volume | total) with
+ * a shared number pad. Used by the driver fuel modal and the ops IFTA
+ * log. Rendered only on phones via CSS (.fuel-pad display rules).
+ */
+export function FuelNumpad({
+  volume,
+  amount,
+  onVolume,
+  onAmount,
+  unit,
+  currency,
+  volumeLabel = 'Volume',
+  amountLabel = 'Total paid',
+}: {
+  volume: string;
+  amount: string;
+  onVolume: (v: string) => void;
+  onAmount: (v: string) => void;
+  unit: 'L' | 'GAL';
+  currency: string;
+  volumeLabel?: string;
+  amountLabel?: string;
+}) {
+  const [active, setActive] = useState<'volume' | 'amount'>('volume');
+
+  const pressKey = (k: string) => {
+    const cur = active === 'volume' ? volume : amount;
+    let next = cur;
+    if (k === '.') {
+      if (!cur.includes('.')) next = cur === '' ? '0.' : cur + '.';
+    } else if (k === 'del') {
+      next = cur.slice(0, -1);
+    } else if (k === 'clear') {
+      next = '';
+    } else {
+      // Leading zero: replace instead of "0.5" -> "00.5".
+      if (cur === '0') next = k;
+      else if (cur.split('.')[1]?.length >= 3) return;
+      else next = cur + k;
+    }
+    if (active === 'volume') onVolume(next);
+    else onAmount(next);
+  };
+
+  const quickVolume = (v: number) => onVolume(String(v));
+
+  const perUnit =
+    volume && amount && Number(volume) > 0 && Number(amount) > 0
+      ? Number(amount) / Number(volume)
+      : null;
+
+  return (
+    <div className="fuel-pad">
+      <div className="fuel-pad-fields">
+        <button
+          type="button"
+          className={`fuel-pad-field ${active === 'volume' ? 'active' : ''}`}
+          onClick={() => setActive('volume')}
+          aria-pressed={active === 'volume'}
+        >
+          <span className="fuel-pad-label">
+            {volumeLabel} <b>{unit}</b>
+          </span>
+          <span className="fuel-pad-value">{volume || '0'}</span>
+          <span className="fuel-pad-hint">{active === 'volume' ? 'tapping keys fills this' : 'tap to enter'}</span>
+        </button>
+        <button
+          type="button"
+          className={`fuel-pad-field ${active === 'amount' ? 'active' : ''}`}
+          onClick={() => setActive('amount')}
+          aria-pressed={active === 'amount'}
+        >
+          <span className="fuel-pad-label">
+            {amountLabel} <b>{currency}</b>
+          </span>
+          <span className="fuel-pad-value">{amount || '0'}</span>
+          <span className="fuel-pad-hint">{active === 'amount' ? 'tapping keys fills this' : 'tap to enter'}</span>
+        </button>
+      </div>
+
+      {perUnit !== null && (
+        <p className="fuel-pad-price">
+          ≈ {money(perUnit, currency)} /{unit === 'L' ? 'L' : 'gal'}
+          {unit === 'GAL' ? ` · ${money(perUnit / 3.78541, currency)}/L` : ''}
+        </p>
+      )}
+
+      <div className="fuel-pad-chips">
+        {(unit === 'L' ? [100, 200, 300] : [25, 50, 75]).map((v) => (
+          <button key={v} type="button" className="chip" onClick={() => quickVolume(v)}>
+            {v} {unit === 'L' ? 'L' : 'gal'}
+          </button>
+        ))}
+        <button type="button" className="chip" onClick={() => setActive('amount')}>
+          enter total…
+        </button>
+      </div>
+
+      <div className="fuel-pad-keys" role="group" aria-label="Number pad">
+        {['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'del'].map((k) => (
+          <button
+            key={k}
+            type="button"
+            className={`fuel-key ${k === 'del' ? 'del' : ''}`}
+            onClick={() => pressKey(k)}
+            aria-label={k === 'del' ? 'Backspace' : k}
+          >
+            {k === 'del' ? '⌫' : k}
+          </button>
+        ))}      </div>
+    </div>
+  );
+}
+
 export function FuelLogModal({
   open,
   onClose,
@@ -38,29 +153,28 @@ export function FuelLogModal({
   const [when, setWhen] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [active, setActive] = useState<'volume' | 'amount'>('volume');
 
-  /** Shared phone numpad: type into whichever big field is highlighted. */
-  const pressKey = (k: string) => {
-    const cur = active === 'volume' ? volume : amount;
-    let next = cur;
-    if (k === '.') {
-      if (!cur.includes('.')) next = cur === '' ? '0.' : cur + '.';
-    } else if (k === 'del') {
-      next = cur.slice(0, -1);
-    } else if (k === 'clear') {
-      next = '';
-    } else {
-      // Leading zero: replace instead of "0.5" -> "00.5".
-      if (cur === '0') next = k;
-      else if (cur.split('.')[1]?.length >= 3) return;
-      else next = cur + k;
-    }
-    if (active === 'volume') setVolume(next);
-    else setAmount(next);
-  };
-
-  const quickVolume = (v: number) => setVolume(String(v));
+  // Remember the last stop: reopen with the same jurisdiction / currency /
+  // unit so a repeat fill is two taps (volume + total).
+  useEffect(() => {
+    if (!open) return;
+    const driverId = getTokenUser()?.driverId;
+    if (!driverId) return;
+    void api<FuelLogRow[]>('/api/fuel/me?limit=1')
+      .then((rows) => {
+        const last = rows?.[0];
+        if (!last) return;
+        setJurisdiction((j) => (j === 'QC' ? last.jurisdictionCode : j));
+        setCurrency((c) => (c === 'CAD' ? (last.transactionCurrency as 'CAD' | 'USD') || 'CAD' : c));
+        if (last.originalVolumeUnit === 'GAL') {
+          setUnit('GAL');
+          setVolume(String(Math.round((Number(last.volumeLitres) / 3.78541) * 10) / 10));
+        } else {
+          setUnit('L');
+        }
+      })
+      .catch(() => undefined);
+  }, [open]);
 
   const reset = () => {
     setJurisdiction('QC');
@@ -109,11 +223,6 @@ export function FuelLogModal({
       setBusy(false);
     }
   };
-
-  const perUnit =
-    volume && amount && Number(volume) > 0 && Number(amount) > 0
-      ? Number(amount) / Number(volume)
-      : null;
 
   return (
     <Modal
@@ -185,73 +294,21 @@ export function FuelLogModal({
               <option value="USD">USD</option>
             </select>
           </label>
-          <label>
+          <label className="span-2">
             When (optional — defaults to now)
             <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
           </label>
         </div>
 
         {/* Phone: big paired fields + shared numpad (hidden on desktop) */}
-        <div className="fuel-pad">
-          <div className="fuel-pad-fields">
-            <button
-              type="button"
-              className={`fuel-pad-field ${active === 'volume' ? 'active' : ''}`}
-              onClick={() => setActive('volume')}
-              aria-pressed={active === 'volume'}
-            >
-              <span className="fuel-pad-label">
-                Volume <b>{unit === 'L' ? 'L' : 'GAL'}</b>
-              </span>
-              <span className="fuel-pad-value">{volume || '0'}</span>
-              <span className="fuel-pad-hint">{active === 'volume' ? 'tapping keys fills this' : 'tap to enter'}</span>
-            </button>
-            <button
-              type="button"
-              className={`fuel-pad-field ${active === 'amount' ? 'active' : ''}`}
-              onClick={() => setActive('amount')}
-              aria-pressed={active === 'amount'}
-            >
-              <span className="fuel-pad-label">
-                Total paid <b>{currency}</b>
-              </span>
-              <span className="fuel-pad-value">{amount || '0'}</span>
-              <span className="fuel-pad-hint">{active === 'amount' ? 'tapping keys fills this' : 'tap to enter'}</span>
-            </button>
-          </div>
-
-          {perUnit !== null && (
-            <p className="fuel-pad-price">
-              ≈ {money(perUnit, currency)} /{unit === 'L' ? 'L' : 'gal'}
-              {unit === 'GAL' ? ` · ${money(perUnit / 3.78541, currency)}/L` : ''}
-            </p>
-          )}
-
-          <div className="fuel-pad-chips">
-            {(unit === 'L' ? [100, 200, 300] : [25, 50, 75]).map((v) => (
-              <button key={v} type="button" className="chip" onClick={() => quickVolume(v)}>
-                {v} {unit === 'L' ? 'L' : 'gal'}
-              </button>
-            ))}
-            <button type="button" className="chip" onClick={() => setActive('amount')}>
-              enter total…
-            </button>
-          </div>
-
-          <div className="fuel-pad-keys" role="group" aria-label="Number pad">
-            {['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'del'].map((k) => (
-              <button
-                key={k}
-                type="button"
-                className={`fuel-key ${k === 'del' ? 'del' : ''}`}
-                onClick={() => pressKey(k)}
-                aria-label={k === 'del' ? 'Backspace' : k}
-              >
-                {k === 'del' ? '⌫' : k}
-              </button>
-            ))}
-          </div>
-        </div>
+        <FuelNumpad
+          volume={volume}
+          amount={amount}
+          onVolume={setVolume}
+          onAmount={setAmount}
+          unit={unit}
+          currency={currency}
+        />
       </form>
     </Modal>
   );

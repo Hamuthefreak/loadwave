@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api } from '../../api';
 import { Badge, Empty, PageHeader } from '../../components/ui';
+import { FuelNumpad } from '../../components/FuelLogger';
 import { money, num, num1, regionLabel, shortDate } from '../../utils/format';
 
 interface IftaSummary {
@@ -140,7 +141,7 @@ export default function Ifta() {
         <h3>Log a fuel purchase</h3>
         <form onSubmit={logFuel}>
           <div className="form-grid">
-            <label>
+            <label className="span-2">
               Jurisdiction
               <select value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value)}>
                 {JURISDICTIONS.map((j) => (
@@ -148,19 +149,36 @@ export default function Ifta() {
                 ))}
               </select>
             </label>
-            <label>
+            <label className="span-2">
               Date
               <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} />
             </label>
-            <label>
+            <label className="fuel-form-fields">
               Litres
               <input type="number" min="0" step="0.1" required value={litres} onChange={(e) => setLitres(e.target.value)} placeholder="e.g. 250" />
             </label>
-            <label>
+            <label className="fuel-form-fields">
               Amount (CAD)
               <input type="number" min="0" step="0.01" required value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 425.50" />
             </label>
-            <button type="submit" className="btn-green" disabled={saving} style={{ alignSelf: 'end' }}>
+            <button type="submit" className="btn-green ifta-submit-desktop" disabled={saving} style={{ alignSelf: 'end' }}>
+              {saving ? 'Saving…' : 'Log fuel'}
+            </button>
+          </div>
+
+          {/* Phones: numpad entry; the desktop litres/amount fields hide */}
+          <div className="ifta-pad-wrap">
+            <FuelNumpad
+              volume={litres}
+              amount={amount}
+              onVolume={setLitres}
+              onAmount={setAmount}
+              unit="L"
+              currency="CAD"
+              volumeLabel="Litres"
+              amountLabel="Amount"
+            />
+            <button type="submit" className="btn-green ifta-pad-submit" disabled={saving}>
               {saving ? 'Saving…' : 'Log fuel'}
             </button>
           </div>

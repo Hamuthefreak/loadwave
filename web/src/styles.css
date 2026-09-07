@@ -4001,13 +4001,9 @@ a {
     gap: 10px;
   }
 
-  /* Date/time pickers are wide — they own a full row. The field before
-     them (e.g. Currency) fills the row's other half instead of leaving
-     a dangling half-empty row. */
-  .form-grid > *:is(label, div):has(input[type='datetime-local']) {
-    grid-column: 1 / -1;
-  }
-
+  /* Date/time pickers are wide — they own a full row. Components mark
+     them with .span-2 (no :has() — older ELD-tablet WebViews don't
+     support it). */
   .form-grid .full,
   .form-grid .span-2 {
     grid-column: 1 / -1;
@@ -4543,9 +4539,9 @@ a {
 }
 
 @media (max-width: 480px) {
-  /* Visually hide the desktop volume/total inputs on phones (the numpad
-     replaces them), but keep them in the form and focusable — hiding with
-     display:none makes them unfocusable and blocks native form submit. */
+  /* Visually hide desktop inputs on phones when a numpad replaces them
+     (fuel modal volume/total, IFTA litres/amount), but keep them in the
+     form and focusable — display:none blocks native form submit. */
   .fuel-form-fields {
     position: absolute;
     left: -9999px;
@@ -4554,6 +4550,10 @@ a {
     overflow: hidden;
     opacity: 0;
     pointer-events: none;
+  }
+
+  .ifta-pad-wrap .fuel-pad-field {
+    min-height: 92px;
   }
 
   .fuel-pad {
@@ -4681,5 +4681,35 @@ a {
   .fuel-key.del {
     color: var(--red);
     font-size: 1.3rem;
+  }
+}
+
+/* IFTA ops fuel log: numpad replaces the desktop litres/amount fields
+   on phones; the pad's submit button is phone-only, and the desktop
+   submit hides so there is exactly one CTA at every width. */
+.ifta-pad-wrap {
+  display: none;
+}
+
+.ifta-pad-submit {
+  display: none;
+}
+
+@media (max-width: 480px) {
+  .ifta-pad-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .ifta-pad-submit {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .ifta-submit-desktop {
+    display: none;
   }
 }
