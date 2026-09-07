@@ -4535,3 +4535,151 @@ a {
     width: 120px;
   }
 }
+
+/* ---------- Cab-side fuel numpad (phones only) ---------- */
+
+.fuel-pad {
+  display: none;
+}
+
+@media (max-width: 480px) {
+  /* Visually hide the desktop volume/total inputs on phones (the numpad
+     replaces them), but keep them in the form and focusable — hiding with
+     display:none makes them unfocusable and blocks native form submit. */
+  .fuel-form-fields {
+    position: absolute;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .fuel-pad {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 2px;
+  }
+
+  .fuel-pad-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .fuel-pad-field {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    background: var(--panel-2);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    text-align: left;
+    min-height: 86px;
+    transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.06s ease;
+  }
+
+  .fuel-pad-field.active {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+
+  .fuel-pad-field:active {
+    transform: scale(0.98);
+  }
+
+  .fuel-pad-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .fuel-pad-label b {
+    color: var(--accent);
+    font-size: 0.66rem;
+    background: var(--accent-soft);
+    border-radius: 999px;
+    padding: 2px 7px;
+  }
+
+  .fuel-pad-value {
+    font-size: 1.7rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .fuel-pad-hint {
+    font-size: 0.64rem;
+    color: var(--faint);
+  }
+
+  .fuel-pad-price {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--green);
+    font-weight: 700;
+    text-align: center;
+  }
+
+  .fuel-pad-chips {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .fuel-pad-chips .chip {
+    flex: 1;
+    min-width: 0;
+    justify-content: center;
+    padding: 9px 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .fuel-pad-keys {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 2px;
+  }
+
+  .fuel-key {
+    min-height: 52px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 1.25rem;
+    font-weight: 700;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.1s ease, transform 0.06s ease;
+  }
+
+  .fuel-key:active {
+    background: var(--panel-3);
+    transform: scale(0.96);
+  }
+
+  .fuel-key.del {
+    color: var(--red);
+    font-size: 1.3rem;
+  }
+}
