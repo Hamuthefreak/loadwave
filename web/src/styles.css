@@ -1030,6 +1030,10 @@ tfoot td {
   display: none;
 }
 
+.nav-sheet-root {
+  display: none;
+}
+
 @media (max-width: 860px) {
   .auth-shell {
     grid-template-columns: 1fr;
@@ -1076,43 +1080,6 @@ tfoot td {
 
   .stat-value {
     font-size: 1.4rem;
-  }
-
-  .mobile-bottom-nav {
-    display: flex;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 40;
-    background: var(--panel);
-    backdrop-filter: blur(10px);
-    border-top: 1px solid var(--border);
-    justify-content: space-around;
-    padding: 8px 4px calc(8px + env(safe-area-inset-bottom));
-  }
-
-  .mobile-bottom-nav button {
-    background: none;
-    color: var(--muted);
-    font-size: 0.7rem;
-    font-weight: 700;
-    padding: 6px 12px;
-    border-radius: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    align-items: center;
-  }
-
-  .mobile-bottom-nav button span {
-    font-size: 1.1rem;
-    line-height: 1;
-  }
-
-  .mobile-bottom-nav button.active {
-    color: var(--accent);
-    background: var(--accent-soft);
   }
 
   .board-search .form-grid {
@@ -2403,37 +2370,321 @@ textarea:focus {
     padding: 10px 14px;
   }
 
+  /* ---- Bottom nav: 3 tabs + raised quick-actions button + More.
+         A fixed 5-slot grid — no sideways scrolling, no squashing. ---- */
   .mobile-bottom-nav {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr 1fr 74px 1fr 1fr;
+    align-items: stretch;
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
-    z-index: 40;
+    z-index: 60;
     background: var(--panel);
-    backdrop-filter: blur(10px);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-top: 1px solid var(--border);
-    justify-content: space-around;
-    padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.18);
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
   }
 
-  .mobile-bottom-nav a {
+  .mobile-bottom-nav a,
+  .mobile-bottom-nav .mobile-more-btn {
     color: var(--muted);
+    background: none; /* neutralize the global green button base */
     text-decoration: none;
-    font-size: 0.68rem;
+    font-size: 0.66rem;
     font-weight: 700;
-    padding: 6px 12px;
-    border-radius: 10px;
+    padding: 7px 4px;
+    border-radius: 12px;
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 4px;
     align-items: center;
+    justify-content: center;
     text-align: center;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    transition: color 0.15s ease, background 0.15s ease;
+  }
+
+  .mobile-bottom-nav .mobile-more-btn:hover:not(:disabled),
+  .mobile-bottom-nav .mobile-more-btn:active {
+    background: var(--panel-2);
+  }
+
+  .mobile-bottom-nav a svg,
+  .mobile-bottom-nav .mobile-more-btn svg {
+    width: 22px;
+    height: 22px;
   }
 
   .mobile-bottom-nav a.active {
-    color: var(--accent);
+    color: var(--accent-strong);
     background: var(--accent-soft);
+  }
+
+  /* Raised center button: the thumb-friendly quick-actions entry point. */
+  .mobile-quick-btn {
+    width: 54px;
+    height: 54px;
+    margin: -20px auto 2px;
+    border: none;
+    border-radius: 50%;
+    background: linear-gradient(160deg, var(--accent), var(--accent-strong));
+    color: var(--accent-ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35), 0 0 0 4px var(--panel);
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.12s ease;
+  }
+
+  .mobile-quick-btn svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .mobile-quick-btn:active {
+    transform: scale(0.92);
+  }
+
+  /* ---- Mobile sheets: quick actions + the full "More" menu ---- */
+  .nav-sheet-root {
+    display: flex;
+    align-items: flex-end;
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+  }
+
+  .nav-sheet-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    animation: sheet-fade 0.18s ease;
+  }
+
+  .nav-sheet {
+    position: relative;
+    width: 100%;
+    max-height: 82vh;
+    max-height: 82dvh;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 20px 20px 0 0;
+    padding: 10px 16px calc(18px + env(safe-area-inset-bottom));
+    box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.4);
+    animation: sheet-up 0.22s cubic-bezier(0.2, 0.8, 0.3, 1);
+  }
+
+  .nav-sheet-handle {
+    width: 40px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--panel-3);
+    margin: 2px auto 12px;
+    flex-shrink: 0;
+  }
+
+  .nav-sheet-title {
+    margin: 0 0 12px;
+    font-size: 1rem;
+    font-weight: 800;
+  }
+
+  .nav-sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  .nav-sheet-head .nav-sheet-title {
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nav-sheet-badges {
+    flex-shrink: 0;
+  }
+
+  .nav-sheet-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .nav-sheet-grid-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .nav-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 13px 6px 11px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    font-weight: 700;
+    font-size: 0.76rem;
+    font-family: inherit;
+    text-align: center;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.12s ease, background 0.12s ease;
+  }
+
+  .nav-tile:active {
+    transform: scale(0.96);
+    background: var(--panel-3);
+  }
+
+  .nav-tile:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .nav-tile-active {
+    border-color: var(--accent);
+    color: var(--accent-strong);
+  }
+
+  .nav-tile-ico {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+  }
+
+  .nav-tile-ico svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* Duty tile: the dot carries the on/off meaning, like the sidebar. */
+  .nav-tile-duty .nav-tile-ico {
+    background: var(--green-soft);
+    color: var(--green);
+  }
+
+  .nav-tile-duty .nav-tile-ico .duty-dot {
+    width: 12px;
+    height: 12px;
+    background: var(--green);
+    box-shadow: 0 0 0 3px var(--green-soft);
+    animation: duty-pulse 2.4s ease-in-out infinite;
+  }
+
+  .nav-sheet-scroll {
+    overflow-y: auto;
+    min-height: 0;
+    margin: 0 -16px;
+    padding: 0 16px;
+    flex: 1;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .nav-sheet-group {
+    margin-bottom: 14px;
+  }
+
+  .nav-sheet-group-label {
+    display: block;
+    font-size: 0.66rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 0 2px 8px;
+  }
+
+  .nav-sheet-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 2px;
+  }
+
+  .nav-row-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    font-weight: 700;
+    font-size: 0.85rem;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .nav-row-btn:active {
+    background: var(--panel-3);
+  }
+
+  .nav-row-btn svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    color: var(--muted);
+  }
+
+  .nav-row-btn .bell-count {
+    /* Reuse the badge inside the More-sheet row: inline, not the absolute
+       corner pin tuned for the bell buttons. */
+    position: static;
+    margin-left: auto;
+  }
+
+  .nav-row-static {
+    cursor: default;
+    justify-content: space-between;
+  }
+
+  .nav-row-static .theme-toggle {
+    width: 34px;
+    height: 34px;
+  }
+
+  .nav-row-danger,
+  .nav-row-danger svg {
+    color: var(--red);
+  }
+
+  .nav-sheet-mc {
+    text-align: center;
+    margin: 8px 0 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .nav-sheet,
+    .nav-sheet-backdrop {
+      animation: none;
+    }
   }
 }
 
@@ -3204,54 +3455,22 @@ html[data-theme='light'] .lane-arrow {
   background: var(--green);
 }
 
-.mobile-duty {
-  color: var(--muted);
-  font-size: 0.68rem;
-  font-weight: 700;
-  font-family: inherit;
-  border: none;
-  background: none;
-  padding: 6px 12px;
-  border-radius: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  align-items: center;
-  cursor: pointer;
-  transition: color 0.15s ease;
-}
 
-.mobile-duty:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.mobile-duty .duty-dot {
-  width: 8px;
-  height: 8px;
-  display: block;
-  border-radius: 50%;
-  background: var(--muted);
-  opacity: 0.6;
-  transition: all 0.2s ease;
-}
-
-/* On duty: a glowing dot instead of a loud background pill — matches the
-   other nav items while staying clearly readable. */
-.mobile-duty.on {
-  color: var(--green);
-}
-
-.mobile-duty.on .duty-dot {
-  background: var(--green);
-  opacity: 1;
-  box-shadow: 0 0 0 3px var(--green-soft);
-  animation: duty-pulse 2.4s ease-in-out infinite;
-}
 
 @keyframes duty-pulse {
   0%, 100% { box-shadow: 0 0 0 3px var(--green-soft); }
   50% { box-shadow: 0 0 0 5px var(--green-soft); }
+}
+
+@keyframes sheet-fade {
+  from { opacity: 0; }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(48px);
+    opacity: 0;
+  }
 }
 
 /* ---------- My Trips (driver) ---------- */
@@ -3815,29 +4034,6 @@ a {
 }
 
 @media (max-width: 720px) {
-  /* Bottom nav: too many destinations for one row — scroll sideways
-     instead of squashing or overflowing off-screen. */
-  .mobile-bottom-nav {
-    justify-content: flex-start;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    gap: 2px;
-  }
-
-  .mobile-bottom-nav::-webkit-scrollbar {
-    display: none;
-  }
-
-  .mobile-bottom-nav a,
-  .mobile-bottom-nav button {
-    flex-shrink: 0;
-  }
-
-  .mobile-bottom-nav a {
-    padding: 4px 10px;
-  }
-
   /* The compare sheet floats above the fixed bottom nav */
   .compare-sheet {
     left: 10px;
@@ -4112,14 +4308,14 @@ a {
     font-size: 1.15rem;
   }
 
-  .mobile-bottom-nav a {
+  .mobile-bottom-nav a,
+  .mobile-bottom-nav .mobile-more-btn {
     font-size: 0.58rem;
-    padding: 4px 6px;
   }
 
-  .mobile-bottom-nav button {
-    font-size: 0.6rem;
-    padding: 4px 6px;
+  /* Three columns of tiles get too tight at SE width — fall back to two. */
+  .nav-sheet-grid-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .grid {
@@ -4199,53 +4395,6 @@ a {
     background: var(--red);
     color: #fff;
     box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
-  }
-}
-
-/* Shortcut dock — secondary one-tap actions stacked above the FAB. */
-
-.driver-dock {
-  display: none;
-}
-
-@media (max-width: 860px) {
-  .driver-dock {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-    position: fixed;
-    right: 14px;
-    bottom: calc(148px + env(safe-area-inset-bottom));
-    z-index: 49;
-  }
-
-  .driver-dock-btn {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 8px;
-    border: 1px solid var(--border);
-    background: var(--panel);
-    color: var(--text);
-    font-family: inherit;
-    font-size: 0.78rem;
-    font-weight: 700;
-    padding: 11px 14px;
-    border-radius: 999px;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
-    cursor: pointer;
-    touch-action: manipulation;
-    min-width: 116px;
-  }
-
-  .driver-dock-btn svg {
-    color: var(--green);
-    flex-shrink: 0;
-  }
-
-  .driver-dock-btn:active {
-    background: var(--panel-2);
   }
 }
 

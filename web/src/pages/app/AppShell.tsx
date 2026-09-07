@@ -3,6 +3,7 @@ import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-route
 import { api, canManageRoles, getTokenUser, roleLabels } from '../../api';
 import { Modal } from '../../components/ui';
 import ThemeToggle from '../../components/ThemeToggle';
+import { FuelLogModal } from '../../components/FuelLogger';
 import { setDuty, useDuty } from '../../duty-store';
 import { syncPushSubscription } from '../../push';
 import { timeAgo } from '../../utils/format';
@@ -82,6 +83,9 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
   const [notifOpen, setNotifOpen] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [showOnboard, setShowOnboard] = useState(false);
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [fuelOpen, setFuelOpen] = useState(false);
   const duty = useDuty();
   const [dutyBusy, setDutyBusy] = useState(false);
   const [confirmDuty, setConfirmDuty] = useState<'ACTIVE' | 'OFF_DUTY' | null>(null);
@@ -237,6 +241,51 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
   );
   const allItems = groups.flatMap((g) => g.items);
 
+  // Mobile bottom nav: 3 role-aware primary tabs + the quick-actions button +
+  // "More" (every other destination). Everything lives in `allItems` so the
+  // sheets never offer a page the user can't open.
+  const primaryPaths = canManage
+    ? ['/app/dashboard', '/app/myloads', '/app/board']
+    : user?.driverId
+      ? ['/app/dashboard', '/app/board', '/app/trips']
+      : ['/app/dashboard', '/app/board', '/app/trucks'];
+  const primary = primaryPaths
+    .map((p) => allItems.find((i) => i.to === p))
+    .filter((i): i is (typeof allItems)[number] => Boolean(i));
+  if (primary.length < 3) {
+    for (const item of allItems) {
+      if (primary.length >= 3) break;
+      if (!primary.some((p) => p.to === item.to)) primary.push(item);
+    }
+  }
+
+  const closeSheets = () => {
+    setQuickOpen(false);
+    setMoreOpen(false);
+  };
+
+  // Sheets should close on Escape and lock background scrolling while open.
+  const sheetOpen = quickOpen || moreOpen;
+  useEffect(() => {
+    if (!sheetOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeSheets();
+    };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheetOpen]);
+
+  const navTo = (to: string) => {
+    closeSheets();
+    navigate(to);
+  };
+
   const blockedPath = RESTRICTED_PATHS.some((p) => {
     if (location.pathname !== p && !location.pathname.startsWith(`${p}/`)) return false;
     const item = GROUPS.flatMap((g) => g.items).find((i) => i.to === p);
@@ -354,41 +403,55 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
             <BellIcon />
             {unread > 0 && <span className="bell-count">{unread > 9 ? '9+' : unread}</span>}
           </button>
-          <button className="nav-link logout" onClick={() => setConfirmSignOut(true)}>
-            Sign out
-          </button>
         </header>
         <main className="content">
           {blockedPath ? <Navigate to="/app/dashboard" replace /> : <Outlet />}
         </main>
         <nav className="mobile-bottom-nav" aria-label="Primary">
-          {user?.driverId && !canManage && (
-            <button
-              type="button"
-              className={`mobile-duty ${duty === 'ACTIVE' ? 'on' : ''}`}
-              disabled={dutyBusy || !duty || duty === 'SUSPENDED'}
-              onClick={() => setConfirmDuty(duty === 'ACTIVE' ? 'OFF_DUTY' : 'ACTIVE')}
-              aria-pressed={duty === 'ACTIVE'}
-              aria-label={
-                duty === 'ACTIVE'
-                  ? 'Duty status: on duty. Tap to go off duty.'
-                  : 'Duty status: off duty. Tap to go on duty.'
-              }
-            >
-              <span className="duty-dot" aria-hidden />
-              <span>Duty {duty === 'ACTIVE' ? 'on' : 'off'}</span>
-            </button>
-          )}
-          {allItems.map((item) => (
+          {primary[0] && (
             <NavLink
-              key={item.to}
-              to={item.to}
+              to={primary[0].to}
               className={({ isActive }) => (isActive ? 'active' : '')}
             >
-              {item.mark}
-              {item.label}
+              {primary[0].mark}
+              <span>{shortLabel(primary[0].label)}</span>
             </NavLink>
-          ))}
+          )}
+          {primary[1] && (
+            <NavLink
+              to={primary[1].to}
+              className={({ isActive }) => (isActive ? 'active' : '')}
+            >
+              {primary[1].mark}
+              <span>{shortLabel(primary[1].label)}</span>
+            </NavLink>
+          )}
+          <button
+            type="button"
+            className="mobile-quick-btn"
+            onClick={() => setQuickOpen(true)}
+            aria-label="Quick actions"
+          >
+            <IconBolt />
+          </button>
+          {primary[2] && (
+            <NavLink
+              to={primary[2].to}
+              className={({ isActive }) => (isActive ? 'active' : '')}
+            >
+              {primary[2].mark}
+              <span>{shortLabel(primary[2].label)}</span>
+            </NavLink>
+          )}
+          <button
+            type="button"
+            className="mobile-more-btn"
+            onClick={() => setMoreOpen(true)}
+            aria-label="All pages and account"
+          >
+            <IconDots />
+            <span>More</span>
+          </button>
         </nav>
       </div>
 
@@ -532,6 +595,150 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
           </div>
         )}
       </Modal>
+
+      {/* Mobile-only sheets: quick actions + the full menu behind "More". */}
+      {(quickOpen || moreOpen) && (
+        <div className="nav-sheet-root" role="dialog" aria-modal="true">
+          <div className="nav-sheet-backdrop" onClick={closeSheets} />
+          {quickOpen && (
+            <div className="nav-sheet">
+              <span className="nav-sheet-handle" aria-hidden />
+              <h2 className="nav-sheet-title">Quick actions</h2>
+              <div className="nav-sheet-grid">
+                {user?.driverId && !canManage && (
+                  <>
+                    <button
+                      type="button"
+                      className={`nav-tile ${duty === 'ACTIVE' ? 'nav-tile-duty' : ''}`}
+                      disabled={dutyBusy || !duty || duty === 'SUSPENDED'}
+                      onClick={() => {
+                        closeSheets();
+                        setConfirmDuty(duty === 'ACTIVE' ? 'OFF_DUTY' : 'ACTIVE');
+                      }}
+                    >
+                      <span className="nav-tile-ico">
+                        <span className="duty-dot" aria-hidden />
+                      </span>
+                      <span>{duty === 'ACTIVE' ? 'Go off duty' : 'Go on duty'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="nav-tile"
+                      onClick={() => {
+                        closeSheets();
+                        setFuelOpen(true);
+                      }}
+                    >
+                      <span className="nav-tile-ico"><IconFuel /></span>
+                      <span>Log fuel stop</span>
+                    </button>
+                  </>
+                )}
+                {canManage && (
+                  <>
+                    <button type="button" className="nav-tile" onClick={() => navTo('/app/myloads')}>
+                      <span className="nav-tile-ico"><IconList /></span>
+                      <span>Post a load</span>
+                    </button>
+                    <button type="button" className="nav-tile" onClick={() => navTo('/app/ifta')}>
+                      <span className="nav-tile-ico"><IconFuel /></span>
+                      <span>Log fuel purchase</span>
+                    </button>
+                  </>
+                )}
+                <button type="button" className="nav-tile" onClick={() => navTo('/app/board')}>
+                  <span className="nav-tile-ico"><IconSearch /></span>
+                  <span>Find loads</span>
+                </button>
+                <button type="button" className="nav-tile" onClick={() => navTo('/app/trucks')}>
+                  <span className="nav-tile-ico"><IconTruck /></span>
+                  <span>Find trucks</span>
+                </button>
+                {user?.driverId && !canManage && (
+                  <button type="button" className="nav-tile" onClick={() => navTo('/app/trips')}>
+                    <span className="nav-tile-ico"><IconRoute /></span>
+                    <span>My trips</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          {moreOpen && (
+            <div className="nav-sheet nav-sheet-tall">
+              <span className="nav-sheet-handle" aria-hidden />
+              <div className="nav-sheet-head">
+                <h2 className="nav-sheet-title">{tenant?.name ?? 'Menu'}</h2>
+                <span className="side-company-badges nav-sheet-badges">
+                  {roleBadges.map((r) => (
+                    <span className="badge badge-gray" key={r}>{r}</span>
+                  ))}
+                </span>
+              </div>
+              <div className="nav-sheet-scroll">
+                {groups.map((group) => (
+                  <div className="nav-sheet-group" key={group.label}>
+                    <span className="nav-sheet-group-label">{group.label}</span>
+                    <div className="nav-sheet-grid nav-sheet-grid-3">
+                      {group.items.map((item) => (
+                        <button
+                          key={item.to}
+                          type="button"
+                          className={`nav-tile ${location.pathname === item.to ? 'nav-tile-active' : ''}`}
+                          onClick={() => navTo(item.to)}
+                        >
+                          <span className="nav-tile-ico">{item.mark}</span>
+                          <span>{item.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <div className="nav-sheet-row nav-sheet-row-account">
+                  <button
+                    type="button"
+                    className="nav-row-btn"
+                    onClick={() => {
+                      closeSheets();
+                      setNotifOpen(true);
+                    }}
+                  >
+                    <BellIcon />
+                    <span>Notifications</span>
+                    {unread > 0 && <span className="bell-count">{unread > 9 ? '9+' : unread}</span>}
+                  </button>
+                  <div className="nav-row-btn nav-row-static">
+                    <span className="nav-row-theme-label">Theme</span>
+                    <ThemeToggle className="theme-toggle" />
+                  </div>
+                  <button
+                    type="button"
+                    className="nav-row-btn nav-row-danger"
+                    onClick={() => {
+                      closeSheets();
+                      setConfirmSignOut(true);
+                    }}
+                  >
+                    <IconLock />
+                    <span>Sign out</span>
+                  </button>
+                  {tenant?.mcNumber && (
+                    <small className="muted nav-sheet-mc">MC {tenant.mcNumber}{tenant?.usdotNumber ? ` · USDOT ${tenant.usdotNumber}` : ''}</small>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <FuelLogModal
+        open={fuelOpen}
+        onClose={() => setFuelOpen(false)}
+        onLogged={() => {
+          setFuelOpen(false);
+          window.dispatchEvent(new Event('loadwave:fuel-logged'));
+        }}
+      />
     </div>
   );
 }
@@ -584,6 +791,26 @@ function IconLock() {
 }
 function IconMoney() {
   return <Icon d="M2 6h20v12H2zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM6 9h.01M18 9h.01M6 15h.01M18 15h.01" />;
+}
+
+function IconBolt() {
+  return <Icon d="M13 2 4.5 13.5H11L9.5 22 19 10h-6.5L13 2Z" />;
+}
+
+function IconDots() {
+  return <Icon d="M5 12h.01M12 12h.01M19 12h.01" />;
+}
+
+// Bottom-nav labels must fit a fifth of a phone width — trim the long ones.
+function shortLabel(label: string): string {
+  const map: Record<string, string> = {
+    Dashboard: 'Home',
+    'My Loads': 'Loads',
+    'Search Loads': 'Board',
+    'Search Trucks': 'Trucks',
+    'My Trips': 'Trips',
+  };
+  return map[label] ?? label;
 }
 
 function BellIcon() {

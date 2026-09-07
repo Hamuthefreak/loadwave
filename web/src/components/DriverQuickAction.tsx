@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, getTokenUser } from '../api';
 import { setDuty, useDuty } from '../duty-store';
-import { FuelLogModal } from './FuelLogger';
 import { Modal } from './ui';
 import { km, money, regionLabel } from '../utils/format';
 
@@ -26,22 +25,18 @@ function laneOf(t: MiniTrip): string {
 }
 
 /**
- * Driver quick actions, floating above the mobile bottom nav so they're
- * reachable from the dashboard without scrolling:
+ * Driver one-tap contextual action, floating above the mobile bottom nav:
  *
- *   Primary FAB (one tap):
- *     - Off duty                  → "Go on duty"
- *     - On duty + assigned load   → "Start trip"      (confirm modal)
- *     - On duty, in transit       → "Mark delivered"  (confirm modal)
- *     - On duty, nothing assigned → "Find loads"      (jump to the board)
+ *   - Off duty                  → "Go on duty"
+ *   - On duty + assigned load   → "Start trip"      (confirm modal)
+ *   - On duty, in transit       → "Mark delivered"  (confirm modal)
+ *   - On duty, nothing assigned → "Find loads"      (jump to the board)
  *
- *   Shortcut dock (above the FAB):
- *     - Log fuel  (opens the cab-side fuel form)
- *     - My trips  (jump to the trips page)
- *
- * Hidden for suspended drivers and on desktop (the sidebar has the duty
- * toggle). Duty flips stay one-tap — they're instantly reversible toggles —
- * while trip transitions always ask for confirmation.
+ * Secondary shortcuts (log fuel, trips, duty flip) live in the shell's
+ * quick-actions sheet — this FAB stays single-purpose. Hidden for suspended
+ * drivers and on desktop (the sidebar has the duty toggle). Duty flips stay
+ * one-tap — they're instantly reversible toggles — while trip transitions
+ * always ask for confirmation.
  */
 export default function DriverQuickAction() {
   const user = useMemo(() => getTokenUser(), []);
@@ -52,7 +47,6 @@ export default function DriverQuickAction() {
   const [notice, setNotice] = useState<Notice>(null);
   const [confirm, setConfirm] = useState<'start' | 'deliver' | null>(null);
   const [confirmDuty, setConfirmDuty] = useState(false);
-  const [fuelOpen, setFuelOpen] = useState(false);
   const timer = useRef<number | null>(null);
 
   const loadTrips = useCallback(async () => {
@@ -164,25 +158,6 @@ export default function DriverQuickAction() {
 
   return (
     <>
-      <div className="driver-dock" aria-label="Quick shortcuts">
-        <button
-          type="button"
-          className="driver-dock-btn"
-          onClick={() => setFuelOpen(true)}
-        >
-          <FuelIcon />
-          <span>Log fuel</span>
-        </button>
-        <button
-          type="button"
-          className="driver-dock-btn"
-          onClick={() => navigate('/app/trips')}
-        >
-          <RouteIcon />
-          <span>My trips</span>
-        </button>
-      </div>
-
       <button
         type="button"
         className={`driver-fab${tone}`}
@@ -273,32 +248,6 @@ export default function DriverQuickAction() {
           </div>
         )}
       </Modal>
-
-      <FuelLogModal
-        open={fuelOpen}
-        onClose={() => setFuelOpen(false)}
-        onLogged={() => {
-          setFuelOpen(false);
-          // Tell the dashboard's fuel card to refresh.
-          window.dispatchEvent(new Event('loadwave:fuel-logged'));
-        }}
-      />
     </>
-  );
-}
-
-function FuelIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M5 21V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v17M3 21h12M13 8h3a2 2 0 0 1 2 2v6a1.5 1.5 0 0 0 3 0V9l-2.5-2.5M6.5 7h5" />
-    </svg>
-  );
-}
-
-function RouteIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M4 21V4M4 5h16l-3 3.5L20 12H4" />
-    </svg>
   );
 }
