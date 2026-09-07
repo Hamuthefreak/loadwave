@@ -651,7 +651,11 @@ tfoot td {
 }
 
 .load-card:hover .load-rate .amount {
-  color: var(--accent);
+  color: #fff;
+  background: var(--accent-strong);
+  border-radius: 8px;
+  padding: 2px 10px;
+  box-shadow: 0 2px 10px rgba(103, 176, 47, 0.35);
 }
 
 .load-rate .ppm {
