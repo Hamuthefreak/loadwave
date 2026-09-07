@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, canManageRoles, getTokenUser } from '../../api';
 import { useDuty } from '../../duty-store';
+import { alertStatus as pushAlertStatus, enableLoadAlerts } from '../../push';
 import { Badge, Lane, PageHeader, Stat } from '../../components/ui';
 import DriverQuickAction from '../../components/DriverQuickAction';
 import { FuelLogButton, FuelStopsList, type FuelLogRow } from '../../components/FuelLogger';
@@ -376,6 +377,25 @@ interface TruckMini {
   status: string;
 }
 
+interface HosDaySegment {
+  dutyStatus: string;
+  startTime: string;
+  endTime: string | null;
+}
+
+interface HosDayRow {
+  date: string;
+  onDutyMinutes: number;
+  offDutyMinutes: number;
+  segments: HosDaySegment[];
+}
+
+interface HosDailyLogRow {
+  driverId: string;
+  timezone: string;
+  days: HosDayRow[];
+}
+
 // Driver-facing dashboard: shows the live board and the driver's own status,
 // and leaves out the ops tooling (revenue, fuel, IFTA, fleet, drivers) that a
 // DRIVER account can't access anyway.
@@ -386,6 +406,9 @@ function DriverDashboard() {
   const [driver, setDriver] = useState<DriverRow | null>(null);
   const [cycle, setCycle] = useState<HosCycle | null>(null);
   const [fuelRows, setFuelRows] = useState<FuelLogRow[]>([]);
+  const [daily, setDaily] = useState<HosDailyLogRow | null>(null);
+  const [alertsBusy, setAlertsBusy] = useState(false);
+  const [alertsOn, setAlertsOn] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const user = useMemo(() => getTokenUser(), []);
@@ -406,14 +429,16 @@ function DriverDashboard() {
       setTrucks(tr);
       if (user?.driverId) {
         try {
-          const [d, c, f] = await Promise.all([
+          const [d, c, f, dl] = await Promise.all([
             api<DriverRow>(`/api/drivers/${user.driverId}`),
             api<HosCycle>(`/api/hos/status/${user.driverId}`).catch(() => null),
             api<FuelLogRow[]>('/api/fuel/me?limit=5').catch(() => [] as FuelLogRow[]),
+            api<HosDailyLogRow>(`/api/hos/logs/${user.driverId}`).catch(() => null),
           ]);
           setDriver(d);
           setCycle(c);
           setFuelRows(f);
+          setDaily(dl);
         } catch {
           /* driver profile not linked yet */
         }
@@ -422,6 +447,18 @@ function DriverDashboard() {
       setError(e instanceof Error ? e.message : 'Failed to load dashboard');
     }
   }, [user]);
+
+  // The browser decides the alert button's visibility; track opt-in state too
+  // so the button disappears immediately after the user enables alerts.
+  const showAlertCta = !alertsOn && pushAlertStatus() === 'default';
+
+  const turnOnAlerts = async () => {
+    if (alertsBusy) return;
+    setAlertsBusy(true);
+    const ok = await enableLoadAlerts();
+    setAlertsBusy(false);
+    if (ok) setAlertsOn(true);
+  };
 
   useEffect(() => {
     void load();
@@ -465,7 +502,16 @@ function DriverDashboard() {
       <PageHeader
         title={`${greeting}, ${driver?.name ?? tenant.name}`}
         sub={driver ? 'Here is what is live for you on the board.' : 'Here is what is live for your fleet on the board.'}
-        actions={<button className="btn-ghost" onClick={() => void load()}>↻ Refresh</button>}
+        actions={
+          <>
+            {showAlertCta && (
+              <button className="btn-ghost" onClick={() => void turnOnAlerts()} disabled={alertsBusy}>
+                {alertsBusy ? 'Enabling…' : '🔔 Enable load alerts'}
+              </button>
+            )}
+            <button className="btn-ghost" onClick={() => void load()}>↻ Refresh</button>
+          </>
+        }
       />
 
       <div className="grid">
@@ -480,69 +526,84 @@ function DriverDashboard() {
       </div>
 
       <h2>Right now</h2>
-      <div className="card now-loading" style={nowHauling ? {} : { opacity: 0.75 }}>
-        {nowHauling ? (
-          <>
-            <Lane
-              big
-              originCountry={nowHauling.originCountry}
-              originRegion={nowHauling.originRegion}
-              destinationCountry={nowHauling.destinationCountry}
-              destinationRegion={nowHauling.destinationRegion}
-            />
-            <div>
-              <div className="amount">{money(nowHauling.freightAmountBase ?? nowHauling.freightAmountTransaction, nowHauling.freightCurrency)}</div>
-              <div className="muted small">
-                {km(nowHauling.distanceKmEstimate)}
-                {nowHauling.distanceKmEstimate
-                  ? ` · ${perMile(nowHauling.freightAmountBase ?? nowHauling.freightAmountTransaction, nowHauling.distanceKmEstimate) ?? '—'}/mi`
-                  : ''}
+      <div className="grid grid-2">
+        <div className="card now-loading" style={cycle ? {} : { gridColumn: '1 / -1' }}>
+          {nowHauling ? (
+            <>
+              <Lane
+                big
+                originCountry={nowHauling.originCountry}
+                originRegion={nowHauling.originRegion}
+                destinationCountry={nowHauling.destinationCountry}
+                destinationRegion={nowHauling.destinationRegion}
+              />
+              <div>
+                <div className="amount">{money(nowHauling.freightAmountBase ?? nowHauling.freightAmountTransaction, nowHauling.freightCurrency)}</div>
+                <div className="muted small">
+                  {km(nowHauling.distanceKmEstimate)}
+                  {nowHauling.distanceKmEstimate
+                    ? ` · ${perMile(nowHauling.freightAmountBase ?? nowHauling.freightAmountTransaction, nowHauling.distanceKmEstimate) ?? '—'}/mi`
+                    : ''}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="now-empty">
+              <span className="now-empty-mark" aria-hidden><RouteIcon /></span>
+              <div>
+                <strong>No active load right now.</strong>
+                <p className="muted small">
+                  {openCount > 0
+                    ? `${openCount} load${openCount === 1 ? '' : 's'} on the board waiting for a carrier.`
+                    : 'Nothing on the board yet — check back soon or ask your dispatcher to post loads.'}
+                </p>
+                {openCount > 0 && (
+                  <button className="btn-green" style={{ marginTop: 10 }} onClick={() => navigate('/app/board')}>
+                    Find loads
+                  </button>
+                )}
               </div>
             </div>
-          </>
-        ) : (
-          <div>
-            <strong>No active load right now.</strong>
-            <p className="muted small">
-              {openCount > 0
-                ? `${openCount} load${openCount === 1 ? '' : 's'} on the board waiting for a carrier.`
-                : 'Nothing on the board yet — check back soon or ask your dispatcher to post loads.'}
-            </p>
-          </div>
-        )}
+          )}
+        </div>
+
+        {cycle && <HosHoursCard cycle={cycle} daily={daily} />}
       </div>
 
-      {cycle && <HosHoursCard cycle={cycle} />}
-
       {user?.driverId && (
-        <div className="card">
-          <div className="hos-head">
-            <div>
-              <h3 style={{ marginBottom: 2 }}>Fuel stops</h3>
-              <span className="muted small">Logged from the cab · flows into your IFTA automatically</span>
+        <div className="grid grid-2">
+          <div className="card">
+            <div className="hos-head">
+              <div>
+                <h3 style={{ marginBottom: 2 }}>Fuel stops</h3>
+                <span className="muted small">Logged from the cab · flows into your IFTA automatically</span>
+              </div>
+              <FuelLogButton onLogged={() => load()} />
             </div>
-            <FuelLogButton onLogged={() => load()} />
+            <FuelStopsList rows={fuelRows} />
           </div>
-          <FuelStopsList rows={fuelRows} />
+
+          <div className="card">
+            <h3>Jump in</h3>
+            <div className="quick-actions">
+              <button className="quick-action" onClick={() => navigate('/app/board')}>
+                <span className="quick-action-ico" aria-hidden><SearchIcon /></span>
+                <strong>Find loads</strong><span>Search the board · book in one tap</span>
+              </button>
+              <button className="quick-action" onClick={() => navigate('/app/trucks')}>
+                <span className="quick-action-ico" aria-hidden><TruckIcon /></span>
+                <strong>Browse trucks</strong><span>See available equipment</span>
+              </button>
+              <button className="quick-action" onClick={() => navigate('/app/tools')}>
+                <span className="quick-action-ico" aria-hidden><GaugeIcon /></span>
+                <strong>Rate check</strong><span>Lane benchmarks and market tools</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      <div className="card">
-        <h3>Jump in</h3>
-        <div className="quick-actions">
-          <button className="quick-action" onClick={() => navigate('/app/board')}>
-            <strong>Find loads</strong><span>Search the board · book in one tap</span>
-          </button>
-          <button className="quick-action" onClick={() => navigate('/app/trucks')}>
-            <strong>Browse trucks</strong><span>See available equipment</span>
-          </button>
-          <button className="quick-action" onClick={() => navigate('/app/tools')}>
-            <strong>Rate check</strong><span>Lane benchmarks and market tools</span>
-          </button>
-        </div>
-      </div>
-
-      <div className="grid">
+      <div className="grid grid-2">
         <div className="card">
           <h3>Driver profile</h3>
           {driver ? (
@@ -625,7 +686,7 @@ function HosBar({ used, limit, label }: { used: number; limit: number; label: st
   );
 }
 
-function HosHoursCard({ cycle }: { cycle: HosCycle }) {
+function HosHoursCard({ cycle, daily }: { cycle: HosCycle; daily: HosDailyLogRow | null }) {
   const limit7 = cycle.limit7 ?? 70;
   const over = cycle.violations.length > 0;
   return (
@@ -658,6 +719,8 @@ function HosHoursCard({ cycle }: { cycle: HosCycle }) {
         </div>
       )}
 
+      {daily && daily.days.length > 0 && <HosDailyStrip days={daily.days} />}
+
       <p className="muted small" style={{ marginBottom: 0 }}>
         {cycle.has24hOffIn14
           ? '✓ 24h consecutive off-duty recorded in the last 14 days'
@@ -665,6 +728,67 @@ function HosHoursCard({ cycle }: { cycle: HosCycle }) {
       </p>
     </div>
   );
+}
+
+function weekdayShort(date: string): string {
+  return new Date(`${date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short' });
+}
+
+// Seven-day duty strip: each day is a green on-duty bar over the off-duty
+// track, with the on-duty hours underneath. The first cell is today.
+function HosDailyStrip({ days }: { days: HosDayRow[] }) {
+  return (
+    <div className="hos-daily">
+      <div className="hos-daily-head">
+        <strong>Daily duty log</strong>
+        <span className="muted small">On duty per day · {days[0]?.date?.slice(0, 4)}</span>
+      </div>
+      <div className="hos-daily-grid">
+        {days.map((d, i) => {
+          const total = d.onDutyMinutes + d.offDutyMinutes;
+          const onPct = total > 0 ? Math.round((d.onDutyMinutes / total) * 100) : 0;
+          const detail = d.segments.length > 0
+            ? d.segments.map((s) => {
+                const hrs = s.endTime ? (new Date(s.endTime).getTime() - new Date(s.startTime).getTime()) / 3_600_000 : null;
+                return `${s.dutyStatus.replace(/_/g, ' ').toLowerCase()} ${hrs !== null ? fmtHours(hrs) : 'in progress'}`;
+              }).join(' · ')
+            : 'No duty recorded';
+          return (
+            <div className={`hos-day${i === 0 ? ' today' : ''}`} key={d.date} title={`${d.date}: ${detail}`}>
+              <span className="hos-day-name">{i === 0 ? 'Today' : weekdayShort(d.date)}</span>
+              <span className="hos-day-bar" aria-hidden>
+                <span className="hos-day-on" style={{ width: `${onPct}%` }} />
+              </span>
+              <span className="hos-day-hours">{d.onDutyMinutes > 0 ? fmtHours(d.onDutyMinutes / 60) : '—'}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Small inline icons for the dashboard quick actions / empty states.
+function QIcon({ d, extra }: { d: string; extra?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={d} />
+      {extra ? <path d={extra} /> : null}
+    </svg>
+  );
+}
+
+function SearchIcon() {
+  return <QIcon d="M21 21l-4.35-4.35M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z" />;
+}
+function TruckIcon() {
+  return <QIcon d="M1 5h13v11H1zM14 9h4l3 3.5V16h-7M5.5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM17.5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" />;
+}
+function GaugeIcon() {
+  return <QIcon d="M12 15l4.5-4.5M4 19a9 9 0 1 1 16 0" />;
+}
+function RouteIcon() {
+  return <QIcon d="M4 21V4M4 5h16l-3 3.5L20 12H4" />;
 }
 
 function tzLabel(tz: string): string {

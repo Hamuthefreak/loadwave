@@ -25,6 +25,11 @@ export interface AppEnv {
   CORS_ORIGIN: string;
   /** Public app base URL used in emailed links (password reset, invites). */
   APP_URL: string;
+  /** Web Push VAPID keys — empty disables push delivery (bell still works). */
+  VAPID_PUBLIC_KEY: string;
+  VAPID_PRIVATE_KEY: string;
+  /** Contact for the push service (mailto: preferred). */
+  VAPID_SUBJECT: string;
 }
 
 const schema = {
@@ -50,6 +55,9 @@ const schema = {
     DIAGNOSTICS_KEY_FILE: { type: 'string', default: '' },
     CORS_ORIGIN: { type: 'string', default: '' },
     APP_URL: { type: 'string', default: 'http://localhost:5173' },
+    VAPID_PUBLIC_KEY: { type: 'string', default: '' },
+    VAPID_PRIVATE_KEY: { type: 'string', default: '' },
+    VAPID_SUBJECT: { type: 'string', default: 'mailto:ops@loadwave.app' },
     LNG: { type: 'string', enum: ['en', 'fr'], default: 'en' },
     LNG_COUNTRY: { type: 'string', default: 'CA' },
   },

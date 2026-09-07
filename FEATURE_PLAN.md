@@ -326,3 +326,30 @@ own loads) and a notification-on-assign test.
 - **Found along the way** — the dashboard's duty stat used its own stale fetch; now store-driven.
 
 **Status:** web typecheck + build clean; verified live at phone width (638px preview): Go on duty → ACTIVE, Start trip → IN_TRANSIT + "Maria Chen started the QC → ON trip" notification, FAB recontextualized after each tap, bottom-nav toggle in sync.
+
+## ✅ Done — push alerts, daily duty log & dashboard declutter
+
+- **Web push notifications** — drivers get a browser alert the instant dispatch
+  assigns a load (and on office trip updates). PushSubscription table (hashed
+  keys never stored raw, pruned on 404/410), VAPID keys via env (dev keys
+  generated; empty = gracefully disabled), `POST /api/push/subscribe` +
+  `GET /api/push/config`, service worker (`/sw.js`) with tap-to-open, silent
+  re-sync on app start (throttled to 5 min on failure), "🔔 Enable load
+  alerts" CTA on the driver dashboard when permission is undecided.
+- **Daily duty log** — every on/off-duty flip now writes real HOS log
+  segments (MANUAL ingest), and `GET /api/hos/logs/:driverId` returns a
+  7-day per-day breakdown in the driver's home timezone. The Hours card gets
+  a "Daily duty log" strip: 7 day cells with green on-duty bars + hours,
+  today highlighted; the cycle bars now reflect actual logged minutes.
+- **Dashboard declutter** — "Right now" is now paired rows: active load +
+  Hours card side by side, then Fuel stops + Jump in, then profiles; empty
+  state got an icon + Find loads CTA; quick actions got icons. Grid stacks
+  below 560px.
+- Found along the way — the embedded preview browser can't reach its push
+  service (environment limitation), so push is verified via unit tests +
+  live API; duty flips now feed HOS minutes immediately (the cycle card
+  showed 0h 1m after a test flip).
+
+**Status:** 25 suites / 151 tests pass, typecheck + lint + web build clean,
+live-verified in the preview (paired grids, daily strip, duty→log→cycle
+chain, assign→bell pipeline). Pushed to main.

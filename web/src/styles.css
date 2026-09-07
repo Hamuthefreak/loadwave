@@ -4210,3 +4210,124 @@ a {
     background: var(--panel-2);
   }
 }
+
+/* ---------- Dashboard: paired two-column rows (Right now / Cab tools) ---------- */
+
+.grid.grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 560px) {
+  .grid.grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.now-empty {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.now-empty-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--green-soft);
+  color: var(--green);
+  flex-shrink: 0;
+}
+
+.now-empty-mark svg {
+  width: 22px;
+  height: 22px;
+}
+
+.quick-action-ico {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-2);
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+.quick-action-ico svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ---------- Daily duty log strip (inside the Hours card) ---------- */
+
+.hos-daily {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.hos-daily-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.hos-daily-head strong {
+  font-size: 0.85rem;
+}
+
+.hos-daily-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.hos-day {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.hos-day-name {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hos-day.today .hos-day-name {
+  color: var(--green);
+}
+
+.hos-day-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--panel-3);
+  overflow: hidden;
+  display: flex;
+}
+
+.hos-day-on {
+  background: var(--green);
+  border-radius: 4px 0 0 4px;
+  transition: width 0.3s ease;
+}
+
+.hos-day-hours {
+  font-size: 0.6rem;
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+}

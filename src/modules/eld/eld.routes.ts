@@ -128,4 +128,20 @@ export function registerEldRoutes(app: FastifyInstance, deps: EldModuleDeps): vo
       return reply.send(status);
     },
   );
+
+  app.get<{ Params: { driverId: string } }>(
+    '/api/hos/logs/:driverId',
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const user = request.user;
+      const target = request.params.driverId;
+      if (user.roles.includes('DRIVER' as UserRole) && user.driverId !== target) {
+        return reply
+          .code(403)
+          .send({ error: 'FORBIDDEN', message: 'drivers may only view their own duty log' });
+      }
+      const log = await deps.hos.dailyLog(user.tenantId, target, 7);
+      return reply.send(log);
+    },
+  );
 }

@@ -4,6 +4,7 @@ import { api, canManageRoles, getTokenUser, roleLabels } from '../../api';
 import { Modal } from '../../components/ui';
 import ThemeToggle from '../../components/ThemeToggle';
 import { setDuty, useDuty } from '../../duty-store';
+import { syncPushSubscription } from '../../push';
 import { timeAgo } from '../../utils/format';
 
 interface Tenant {
@@ -170,6 +171,12 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
     }
     if (n.link) navigate(n.link);
   };
+
+  // Drivers who already allowed notifications get their push subscription
+  // re-wired silently (never prompts); the dashboard offers the opt-in.
+  useEffect(() => {
+    if (user?.driverId && !canManage) syncPushSubscription();
+  }, [user, canManage]);
 
   // Keep the browser tab label in sync with the page the user is on.
   useEffect(() => {

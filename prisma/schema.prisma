@@ -80,10 +80,11 @@ model User {
   // a sign-in from an unknown fingerprint fires a "new device" alert.
   knownDevices String[] @default([])
 
-  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  refreshTokens RefreshToken[]
+  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  refreshTokens  RefreshToken[]
   passwordResets PasswordResetToken[]
-  notifications Notification[]
+  notifications  Notification[]
+  pushSubscriptions PushSubscription[]
 
   @@index([tenantId])
 }
@@ -106,6 +107,21 @@ model RefreshToken {
 
 // One-time password reset tokens: raw token handed to the user once (in the
 // reset email), stored here only as a hash. Single-use, short-lived.
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
 model PasswordResetToken {
   id        String    @id @default(uuid())
   userId    String

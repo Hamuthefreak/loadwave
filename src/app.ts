@@ -78,6 +78,8 @@ import { registerSearchRoutes } from './modules/search/saved-search.routes';
 
 import { PrismaNotificationService } from './modules/notification/notification.service';
 import { onLoadDispatched, onLoadStatusChanged } from './modules/notification/dispatch-notifier';
+import { createPushService, type PushService } from './modules/notification/push.service';
+import { registerPushRoutes } from './modules/notification/push.routes';
 import { onSessionIssued } from './modules/notification/auth-notifier';
 import { PrismaLoadDocumentService } from './modules/documents/document.service';
 import { registerDocumentRoutes } from './modules/documents/document.routes';
@@ -120,6 +122,7 @@ export interface AppDeps {
   email: PrismaEmailService;
   documents: PrismaLoadDocumentService;
   importService: PrismaImportService;
+  push: PushService;
 }
 
 export interface BuildAppOptions {
@@ -161,6 +164,16 @@ function buildBaseServices(
       board.listPublic(tenantId, filters),
     );
   const importService = overrides.importService ?? new PrismaImportService(prisma, loads);
+  const push =
+    overrides.push ??
+    createPushService({
+      // Structural slice of the real delegate (upsert/findMany/deleteMany).
+      prisma: prisma.pushSubscription as unknown as Parameters<typeof createPushService>[0]['prisma'],
+      vapidPublicKey: env.VAPID_PUBLIC_KEY,
+      vapidPrivateKey: env.VAPID_PRIVATE_KEY,
+      vapidSubject: env.VAPID_SUBJECT,
+      logger,
+    });
 
   const unlocked: Omit<AppDeps, 'auth' | 'team'> = {
     prisma,
@@ -191,6 +204,7 @@ function buildBaseServices(
     documents: overrides.documents ?? new PrismaLoadDocumentService(prisma),
     email,
     importService,
+    push,
   };
   void logger;
   return unlocked;
@@ -327,6 +341,7 @@ function registerRoutes(app: FastifyInstance, deps: AppDeps, prisma: PrismaClien
   registerMarketRoutes(app, { market: deps.market });
   registerSearchRoutes(app, { searches: deps.searches });
   registerNotificationRoutes(app, { notifications: deps.notifications, email: deps.email });
+  registerPushRoutes(app, { push: deps.push });
   registerDispatchRoutes(app, { loads: deps.loads });
   registerDocumentRoutes(app, { documents: deps.documents });
   registerImportRoutes(app, { importService: deps.importService });
@@ -410,11 +425,17 @@ function subscribeWorkers(app: FastifyInstance, deps: AppDeps): void {
   });
 
   bus.subscribe<LoadDispatchedPayload>(EVENTS.LOAD_DISPATCHED, async (payload) => {
-    await onLoadDispatched({ prisma: deps.prisma, notifications: deps.notifications, logger: app.log }, payload);
+    await onLoadDispatched(
+      { prisma: deps.prisma, notifications: deps.notifications, push: deps.push, logger: app.log },
+      payload,
+    );
   });
 
   bus.subscribe<LoadStatusChangedPayload>(EVENTS.LOAD_STATUS_CHANGED, async (payload) => {
-    await onLoadStatusChanged({ prisma: deps.prisma, notifications: deps.notifications, logger: app.log }, payload);
+    await onLoadStatusChanged(
+      { prisma: deps.prisma, notifications: deps.notifications, push: deps.push, logger: app.log },
+      payload,
+    );
   });
 
   bus.subscribe<HosLogUpdatedPayload>(EVENTS.HOS_LOG_UPDATED, async (payload) => {

@@ -94,15 +94,43 @@ export class PrismaDriverService implements DriverService {
   async update(tenantId: string, driverId: string, input: DriverUpdateInput): Promise<DriverRow> {
     const existing = await this.prisma.driver.findFirst({ where: { id: driverId, tenantId } });
     if (!existing) throw notFound('driver not found');
-    const row = await this.prisma.driver.update({
-      where: { id: driverId },
-      data: {
-        ...(input.name !== undefined ? { name: input.name } : {}),
-        ...(input.licenseNumber !== undefined ? { licenseNumber: input.licenseNumber } : {}),
-        ...(input.homeTerminalTz !== undefined ? { homeTerminalTz: input.homeTerminalTz } : {}),
-        ...(input.cycleType !== undefined ? { cycleType: input.cycleType } : {}),
-        ...(input.status !== undefined ? { status: input.status } : {}),
-      },
+    const data = {
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.licenseNumber !== undefined ? { licenseNumber: input.licenseNumber } : {}),
+      ...(input.homeTerminalTz !== undefined ? { homeTerminalTz: input.homeTerminalTz } : {}),
+      ...(input.cycleType !== undefined ? { cycleType: input.cycleType } : {}),
+      ...(input.status !== undefined ? { status: input.status } : {}),
+    };
+
+    // Duty transitions are recorded on the driver's HOS log so the daily log
+    // and the cycle hours card are backed by real segments: leaving ACTIVE
+    // closes the current segment; entering ACTIVE opens an on-duty one.
+    const statusChanged = input.status !== undefined && input.status !== existing.status;
+    if (!statusChanged) {
+      const row = await this.prisma.driver.update({ where: { id: driverId }, data });
+      return this.map(row);
+    }
+
+    const now = new Date();
+    const row = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.driver.update({ where: { id: driverId }, data });
+      const open = await tx.hosLog.findFirst({
+        where: { tenantId, driverId, endTime: null },
+        orderBy: { startTime: 'desc' },
+      });
+      if (open) {
+        await tx.hosLog.update({ where: { id: open.id }, data: { endTime: now } });
+      }
+      await tx.hosLog.create({
+        data: {
+          tenantId,
+          driverId,
+          dutyStatus: input.status === 'ACTIVE' ? 'ON_DUTY_NOT_DRIVING' : 'OFF_DUTY',
+          startTime: now,
+          ingestSource: 'MANUAL',
+        },
+      });
+      return updated;
     });
     return this.map(row);
   }

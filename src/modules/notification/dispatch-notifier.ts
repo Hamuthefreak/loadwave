@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import type { LoadDispatchedPayload, LoadStatusChangedPayload } from '../../events/domain-events';
 import type { NotificationService } from './notification.service';
+import type { PushService } from './push.service';
 
 // Minimal logger surface so Fastify's app.log can be passed without fighting
 // the pino typings.
@@ -11,6 +12,8 @@ export interface NotifierLogger {
 export interface DispatchNotifierDeps {
   prisma: Pick<PrismaClient, 'user' | 'driver'>;
   notifications: NotificationService;
+  /** Optional web-push bridge — fires a browser alert alongside the bell row. */
+  push?: Pick<PushService, 'sendToUser'>;
   logger?: NotifierLogger;
 }
 
@@ -77,6 +80,12 @@ export async function onLoadDispatched(
         link: TRIP_LINK,
         emailTo: user.email,
         payload: { loadId: p.loadId },
+      });
+      // Browser push, so the driver hears about it even with the tab closed.
+      await deps.push?.sendToUser(user.id, {
+        title: `New trip: ${l}`,
+        body: 'A load was assigned to you — open My Trips to start it.',
+        url: TRIP_LINK,
       });
     }
   }
@@ -149,6 +158,11 @@ export async function onLoadStatusChanged(
       link: TRIP_LINK,
       emailTo: user.email,
       payload: { loadId: p.loadId },
+    });
+    await deps.push?.sendToUser(user.id, {
+      title: `Trip update: ${l}`,
+      body: `Dispatch marked this load ${STATUS_LABEL[p.toStatus] ?? p.toStatus}.`,
+      url: TRIP_LINK,
     });
   }
 }

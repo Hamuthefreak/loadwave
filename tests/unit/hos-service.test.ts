@@ -21,7 +21,15 @@ function buildService(rows: {
     driver: {
       findFirst: jest.fn(async ({ where }: { where: { id: string; tenantId: string } }) => {
         const d = rows.drivers.find((x) => x.id === where.id);
-        return d ? { id: d.id, tenantId: where.tenantId, cycleType: d.cycleType, status: d.status ?? 'ACTIVE' } : null;
+        return d
+          ? {
+              id: d.id,
+              tenantId: where.tenantId,
+              cycleType: d.cycleType,
+              status: d.status ?? 'ACTIVE',
+              homeTerminalTz: 'America/Toronto',
+            }
+          : null;
       }),
       findMany: jest.fn(async () =>
         rows.drivers.map((d) => ({ id: d.id, cycleType: d.cycleType })),
@@ -84,6 +92,55 @@ describe('PrismaHosService cycle computation', () => {
     expect(rows[0].onDutyHours7).toBeCloseTo(75, 6);
     expect(rows[0].remaining7).toBe(0);
     expect(rows[0].violations.some((v) => v.includes('exceeded'))).toBe(true);
+  });
+
+  it('dailyLog buckets segments into the driver-local calendar days', async () => {
+    const svc = buildService({
+      drivers: [{ id: 'd1', cycleType: 'CYCLE_1' }],
+      logs: [
+        {
+          driverId: 'd1',
+          dutyStatus: 'DRIVING',
+          // 2026-09-04 06:00→10:00 EDT (America/Toronto, UTC-4 in September)
+          startTime: new Date('2026-09-04T10:00:00Z'),
+          endTime: new Date('2026-09-04T14:00:00Z'),
+        },
+        {
+          driverId: 'd1',
+          dutyStatus: 'OFF_DUTY',
+          startTime: new Date('2026-09-04T14:00:00Z'),
+          endTime: new Date('2026-09-04T22:00:00Z'),
+        },
+      ],
+    });
+    // 2026-09-05 00:00Z = 2026-09-04 20:00 local
+    const log = await svc.dailyLog('t1', 'd1', 2, new Date('2026-09-05T00:00:00Z'));
+    expect(log.days).toHaveLength(2);
+    expect(log.days[0].date).toBe('2026-09-04');
+    expect(log.days[0].onDutyMinutes).toBe(240);
+    expect(log.days[0].offDutyMinutes).toBe(480);
+    expect(log.days[0].segments).toHaveLength(2);
+    expect(log.days[1].date).toBe('2026-09-03');
+    expect(log.days[1].onDutyMinutes).toBe(0);
+  });
+
+  it('dailyLog counts an open (in-progress) segment through the as-of instant', async () => {
+    const svc = buildService({
+      drivers: [{ id: 'd1', cycleType: 'CYCLE_1' }],
+      logs: [
+        {
+          driverId: 'd1',
+          dutyStatus: 'ON_DUTY_NOT_DRIVING',
+          startTime: new Date('2026-09-04T12:00:00Z'),
+          endTime: null,
+        },
+      ],
+    });
+    // 08:00→12:00 EDT = 4h on duty; the segment crosses midnight local?
+    // No — 12:00Z = 08:00 local, and asOf 18:00Z = 14:00 local, same day.
+    const log = await svc.dailyLog('t1', 'd1', 1, new Date('2026-09-04T18:00:00Z'));
+    expect(log.days[0].onDutyMinutes).toBe(360);
+    expect(log.days[0].segments[0].endTime).toBeNull();
   });
 
   it('overview returns every driver (even with no logs) and cycle-2 14-day data', async () => {
