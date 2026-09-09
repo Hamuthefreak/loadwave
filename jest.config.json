@@ -14,5 +14,18 @@
     "!src/main.ts",
     "!src/**/index.ts",
     "!src/**/types.ts"
-  ]
+  ],
+  "transform": {
+    "^.+\\.ts$": [
+      "ts-jest",
+      {
+        "diagnostics": {
+          "ignoreCodes": [
+            2578,
+            151002
+          ]
+        }
+      }
+    ]
+  }
 }

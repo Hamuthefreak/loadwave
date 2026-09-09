@@ -4,8 +4,11 @@ import {
   mostCommonStopPrefill,
   sameJurisdictionStreak,
   type FuelStopRow,
-  // @ts-ignore — jest transpiles this cross-package ESM import fine; the root
-  // tsc program is CJS-first and flags the module kind. Harmless either way.
+  // The root tsc program (Node16 resolution) flags this CJS→ESM import as
+  // TS1479. ts-jest compiles it fine and would call the directive "unused",
+  // so that diagnostic is ignored in jest.config.json — while `npm run
+  // typecheck` still enforces @ts-expect-error correctness everywhere else.
+  // @ts-expect-error — cross-package ESM import from the web workspace
 } from '../../web/src/utils/fuelPrefill';
 
 describe('mapLastStopToPrefill', () => {
