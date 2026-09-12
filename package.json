@@ -22,7 +22,8 @@
     "db:postgis": "node scripts/enable-postgis.js",
     "db:seed-places": "tsx scripts/seed-places.ts",
     "import:loads": "tsx scripts/import-loads.ts",
-    "db:seed-demo": "tsx scripts/seed-demo.ts"
+    "db:seed-demo": "tsx scripts/seed-demo.ts",
+    "verify:postgis": "tsx scripts/verify-postgis.ts"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",

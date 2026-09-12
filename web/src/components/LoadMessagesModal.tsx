@@ -43,6 +43,12 @@ interface ThreadView {
   };
   conversations: Conversation[];
   thread: Msg[];
+  booking: {
+    acceptedAmount: string | null;
+    canBook: boolean;
+    committedAmount: string | null;
+    isBooker: boolean;
+  };
 }
 
 /**
@@ -58,6 +64,7 @@ export function LoadMessagesModal({
   onClose,
   onSeen,
   onRateAccepted,
+  onBooked,
 }: {
   loadId: string | null;
   onClose: () => void;
@@ -65,6 +72,8 @@ export function LoadMessagesModal({
   onSeen?: (loadId: string) => void;
   /** Fired after an offer is accepted, so the parent can reload the load. */
   onRateAccepted?: (loadId: string) => void;
+  /** Fired after a carrier commits to an agreed rate (the load is booked). */
+  onBooked?: (loadId: string) => void;
 }) {
   const [data, setData] = useState<ThreadView | null>(null);
   const [withTenant, setWithTenant] = useState<string | null>(null);
@@ -74,6 +83,8 @@ export function LoadMessagesModal({
   const [err, setErr] = useState<string | null>(null);
   /** The offer awaiting confirmation: nothing changes on a single tap. */
   const [pending, setPending] = useState<{ counterpartyTenantId: string; amount: string } | null>(null);
+  /** The agreed-rate booking awaiting confirmation (carrier side). */
+  const [confirmBook, setConfirmBook] = useState(false);
 
   const open = loadId !== null;
 
@@ -107,6 +118,7 @@ export function LoadMessagesModal({
     setDraft('');
     setAmount('');
     setPending(null);
+    setConfirmBook(false);
     if (loadId) void refresh(loadId, null);
   }, [loadId, refresh]);
 
@@ -152,6 +164,23 @@ export function LoadMessagesModal({
       onRateAccepted?.(loadId);
     } catch (ex) {
       setErr(ex instanceof Error ? ex.message : 'Could not accept that offer');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** The rate the poster already accepted for this carrier's thread. */
+  const commit = async () => {
+    if (!loadId || busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await api(`/api/board/loads/${loadId}/commit-offer`, { method: 'POST', body: {} });
+      setConfirmBook(false);
+      await refresh(loadId, withTenant);
+      onBooked?.(loadId);
+    } catch (ex) {
+      setErr(ex instanceof Error ? ex.message : 'Could not book this load');
     } finally {
       setBusy(false);
     }
@@ -207,6 +236,37 @@ export function LoadMessagesModal({
             </button>
           </div>
         </div>
+      )}
+
+      {/* Carrier side: the poster agreed to a price — book it in one tap. */}
+      {data?.booking.canBook && data.booking.committedAmount && (
+        confirmBook ? (
+          <div className="neg-confirm" role="alertdialog" aria-label="Confirm booking">
+            <p>
+              Book <strong>{data.load.label}</strong> at{' '}
+              <strong>{money(data.booking.committedAmount, currency)}</strong> — the rate{' '}
+              {data.load.posterName} agreed to? Booking is final.
+            </p>
+            <div className="neg-confirm-actions">
+              <button type="button" className="btn-ghost btn-sm" onClick={() => setConfirmBook(false)} disabled={busy}>
+                Cancel
+              </button>
+              <button type="button" className="btn-green btn-sm" onClick={() => void commit()} disabled={busy}>
+                {busy ? 'Booking…' : 'Confirm booking'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" className="btn-green btn-block neg-book" onClick={() => setConfirmBook(true)}>
+            Book at {money(data.booking.committedAmount, currency)} — agreed rate
+          </button>
+        )
+      )}
+      {data?.booking.isBooker && (
+        <p className="neg-booked" role="status">
+          ✓ You booked this load
+          {data.load.rate != null ? ` at ${money(data.load.rate, currency)}` : ''}.
+        </p>
       )}
 
       {needsPick && data && data.conversations.length > 1 && (

@@ -93,13 +93,19 @@ async function buildWithFakes(loadOverrides: Record<string, unknown> = {}) {
   } as unknown as PrismaClient;
 
   const notifications = { notify: jest.fn(async () => ({})) } as unknown as NotificationService;
-  const messages = new PrismaMessageService(prisma, notifications);
+  // The commit path books through the board; a carrier with no accepted offer
+  // must never reach it, and a rival's claim must surface as a conflict.
+  const board = {
+    // Accepting the offer already rewrote the asking rate to the agreed amount.
+    book: jest.fn(async () => ({ ...load, marketplaceStatus: 'BOOKED', freightAmountTransaction: '1050' })),
+  } as never;
+  const messages = new PrismaMessageService(prisma, notifications, board);
   const bus = new EventBus();
   const app = await buildApp({
     env: ENV,
     deps: { bus, prisma, messages, notifications: notifications as never },
   });
-  return { app, prisma, notifications };
+  return { app, prisma, notifications, board };
 }
 
 function token(app: Awaited<ReturnType<typeof buildApp>>, tenantId: string): string {
@@ -250,6 +256,52 @@ describe('negotiation thread privacy (HTTP)', () => {
       headers: { authorization: `Bearer ${token(app, CARRIER_A)}` },
     });
     expect(res.statusCode).toBe(404);
+    await app.close();
+  });
+});
+
+describe('committing to an accepted offer (HTTP)', () => {
+  it('refuses a commit when the poster never accepted a rate', async () => {
+    const { app, board } = await buildWithFakes();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/board/loads/${LOAD_ID}/commit-offer`,
+      headers: { authorization: `Bearer ${token(app, CARRIER_A)}` },
+    });
+    expect(res.statusCode).toBe(400);
+    // Nothing may reach the booking path without an agreed price.
+    expect((board as unknown as { book: jest.Mock }).book).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('books through the board once the poster has accepted', async () => {
+    const { app, prisma, board } = await buildWithFakes();
+    const accepted = {
+      ...A_ROW,
+      id: 'a-accepted',
+      authorTenantId: POSTER,
+      kind: 'OFFER_ACCEPTED',
+      proposedAmount: 1050,
+      currency: 'CAD',
+    };
+    (prisma.loadMessage.findMany as unknown as jest.Mock).mockImplementation(
+      async (args: { where: { counterpartyTenantId?: unknown; kind?: string } }) => {
+        if (args.where.kind === 'OFFER_ACCEPTED') return [accepted];
+        if (args.where.counterpartyTenantId === CARRIER_A) return [A_ROW, accepted];
+        if (args.where.counterpartyTenantId === CARRIER_B) return [B_ROW];
+        return [];
+      },
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/board/loads/${LOAD_ID}/commit-offer`,
+      headers: { authorization: `Bearer ${token(app, CARRIER_A)}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ amount: '1050', bookedByTenantId: CARRIER_A });
+    expect((board as unknown as { book: jest.Mock }).book).toHaveBeenCalledWith(CARRIER_A, LOAD_ID);
     await app.close();
   });
 });

@@ -323,7 +323,7 @@ export default function SearchLoads() {
       )}
 
       {selected && (
-        <DetailDrawer load={selected} onClose={() => setSelected(null)} onBook={() => { setBooking(selected); setSelected(null); }} />
+        <DetailDrawer load={selected} onClose={() => setSelected(null)} onBook={() => { setBooking(selected); setSelected(null); }} onBooked={() => { setSelected(null); void load(); }} />
       )}
 
       <BookingModal
@@ -772,7 +772,7 @@ function LaneTrend({ origin, destination }: { origin: string; destination: strin
   );
 }
 
-function DetailDrawer({ load, onClose, onBook }: { load: BoardLoad; onClose: () => void; onBook: () => void }) {
+function DetailDrawer({ load, onClose, onBook, onBooked }: { load: BoardLoad; onClose: () => void; onBook: () => void; onBooked?: () => void }) {
   const rate = load.freightAmountBase ?? load.freightAmountTransaction;
   const verified = load.postedByVerified ?? Boolean(load.postedByMcNumber || load.postedByUsdotNumber);
   const [copied, setCopied] = useState(false);
@@ -811,7 +811,7 @@ function DetailDrawer({ load, onClose, onBook }: { load: BoardLoad; onClose: () 
             <DetailRow label="Posted" value={timeAgo(load.createdAt)} />
           </dl>
           <FuelNetEstimator rate={rate} currency={load.freightCurrency} distanceKm={load.distanceKmEstimate} />
-          {load.marketplaceStatus === 'PUBLIC' && <NegotiationPanel loadId={load.id} posterName={load.postedByTenantName} loadRate={rate ? Number(rate) : null} currency={load.freightCurrency} />}
+          {load.marketplaceStatus === 'PUBLIC' && <NegotiationPanel loadId={load.id} posterName={load.postedByTenantName} loadRate={rate ? Number(rate) : null} currency={load.freightCurrency} onBooked={onBooked} />}
           <div className="drawer-carrier">
             <div className="carrier-name">{load.postedByTenantName}</div>
             {verified ? (
@@ -906,11 +906,14 @@ function NegotiationPanel({
   posterName,
   loadRate,
   currency,
+  onBooked,
 }: {
   loadId: string;
   posterName: string;
   loadRate: number | null;
   currency: string;
+  /** Fired after this carrier commits to an agreed rate, so the board reloads. */
+  onBooked?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [thread, setThread] = useState<MessageRow[]>([]);
@@ -919,17 +922,26 @@ function NegotiationPanel({
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  /** What this carrier can do about the price: an accepted offer is bookable. */
+  const [booking, setBooking] = useState<ThreadBooking | null>(null);
+  const [confirmBook, setConfirmBook] = useState(false);
+  const [bookedAt, setBookedAt] = useState<string | null>(null);
+
+  const fetchThread = useCallback(async () => {
+    const res = await api<{ thread: MessageRow[]; booking?: ThreadBooking }>(
+      `/api/board/loads/${loadId}/messages`,
+    );
+    setThread(res.thread ?? []);
+    setBooking(res.booking ?? null);
+    setUnread(0);
+    return res;
+  }, [loadId]);
 
   // Opening the thread marks the poster's replies as read, so clear the badge.
   useEffect(() => {
     if (!open) return;
-    api<{ thread: MessageRow[] }>(`/api/board/loads/${loadId}/messages`)
-      .then((res) => {
-        setThread(res.thread ?? []);
-        setUnread(0);
-      })
-      .catch(() => setThread([]));
-  }, [open, loadId]);
+    void fetchThread().catch(() => setThread([]));
+  }, [open, fetchThread]);
 
   // Unread replies from the poster on this load (carrier-side badge).
   useEffect(() => {
@@ -959,11 +971,30 @@ function NegotiationPanel({
       });
       setDraft('');
       setAmount('');
-      const res = await api<{ thread: MessageRow[] }>(`/api/board/loads/${loadId}/messages`);
-      setThread(res.thread ?? []);
-      setUnread(0);
+      await fetchThread();
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'could not send');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Commit to the rate the poster already accepted — the load books at it. */
+  const commit = async () => {
+    if (busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await api<{ amount: string; currency: string }>(
+        `/api/board/loads/${loadId}/commit-offer`,
+        { method: 'POST', body: {} },
+      );
+      setConfirmBook(false);
+      setBookedAt(money(res.amount, res.currency));
+      await fetchThread().catch(() => undefined);
+      onBooked?.();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'could not book this load');
     } finally {
       setBusy(false);
     }
@@ -1003,6 +1034,34 @@ function NegotiationPanel({
               </div>
             ))}
           </div>
+          {bookedAt && (
+            <p className="neg-booked" role="status">
+              ✓ Booked at {bookedAt} — the rate you both agreed on.
+            </p>
+          )}
+          {!bookedAt && booking?.canBook && booking.committedAmount && (
+            confirmBook ? (
+              <div className="neg-confirm" role="alertdialog" aria-label="Confirm booking">
+                <p>
+                  Book <strong>{posterName}</strong> at{' '}
+                  <strong>{money(booking.committedAmount, currency)}</strong> — the rate they accepted?
+                  Booking is final.
+                </p>
+                <div className="neg-confirm-actions">
+                  <button type="button" className="btn-ghost btn-sm" onClick={() => setConfirmBook(false)} disabled={busy}>
+                    Cancel
+                  </button>
+                  <button type="button" className="btn-green btn-sm" onClick={() => void commit()} disabled={busy}>
+                    {busy ? 'Booking…' : 'Confirm booking'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" className="btn-green btn-block neg-book" onClick={() => setConfirmBook(true)}>
+                Book this load at {money(booking.committedAmount, currency)} — agreed rate
+              </button>
+            )
+          )}
           {err && <p className="app-crash-msg" style={{ margin: '6px 0' }}>{err}</p>}
           <div className="negotiation-compose">
             <input
@@ -1048,4 +1107,11 @@ interface MessageRow {
   proposedAmount: string | null;
   currency: string | null;
   createdAt: string;
+}
+
+interface ThreadBooking {
+  acceptedAmount: string | null;
+  canBook: boolean;
+  committedAmount: string | null;
+  isBooker: boolean;
 }

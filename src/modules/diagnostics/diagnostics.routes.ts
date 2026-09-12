@@ -60,7 +60,14 @@ export function registerDiagnosticsRoutes(app: FastifyInstance, deps: Diagnostic
     };
 
     // Resilient: the report must be readable even when the database is down.
-    let db: { reachable: boolean; tenantCount?: number; loadCount?: number; boardLoadCount?: number; error?: string } = {
+    let db: {
+      reachable: boolean;
+      tenantCount?: number;
+      loadCount?: number;
+      boardLoadCount?: number;
+      postgis?: boolean;
+      error?: string;
+    } = {
       reachable: false,
     };
     try {
@@ -70,6 +77,14 @@ export function registerDiagnosticsRoutes(app: FastifyInstance, deps: Diagnostic
         deps.prisma.load.count({ where: { marketplaceStatus: 'PUBLIC' } }),
       ]);
       db = { reachable: true, tenantCount: tenants, loadCount: loads, boardLoadCount: board };
+      try {
+        const rows = await deps.prisma.$queryRawUnsafe<Array<{ ok: boolean }>>(
+          `SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'postgis') AS ok`,
+        );
+        db.postgis = Boolean(rows[0]?.ok);
+      } catch {
+        // Older databases without pg_extension visible: leave it unknown.
+      }
     } catch (e) {
       db = { reachable: false, error: e instanceof Error ? e.message : 'database error' };
     }
@@ -85,6 +100,13 @@ export function registerDiagnosticsRoutes(app: FastifyInstance, deps: Diagnostic
         detail: db.reachable
           ? `${db.tenantCount} tenants · ${db.loadCount} loads · ${db.boardLoadCount} on board`
           : db.error,
+      },
+      {
+        name: 'PostGIS extension',
+        ok: db.postgis === true,
+        detail: db.postgis
+          ? 'installed — GPS route segments drive IFTA distance by jurisdiction'
+          : 'not installed — IFTA distance by jurisdiction from GPS route segments is off (run deploy/install-postgis.sh on the server)',
       },
     ];
 

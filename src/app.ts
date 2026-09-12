@@ -170,7 +170,7 @@ function buildBaseServices(
     overrides.notifications ??
     new PrismaNotificationService(prisma, email, tenantEmail(prisma));
   const messages =
-    overrides.messages ?? new PrismaMessageService(prisma, notifications);
+    overrides.messages ?? new PrismaMessageService(prisma, notifications, board);
   const ratings = overrides.ratings ?? new PrismaRatingService(new PrismaRatingRepo(prisma));
   const market = overrides.market ?? new PrismaMarketService(prisma);
   const searches =

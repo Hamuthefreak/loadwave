@@ -80,9 +80,9 @@ if npm run db:postgis; then
 else
   echo "WARN: PostGIS is not installed on this server."
   echo "      IFTA distance-by-jurisdiction from GPS route segments stays disabled."
-  echo "      To enable it (as a user allowed to install packages):"
-  echo "        apt-get install -y postgresql-16-postgis-3 && systemctl restart postgresql"
-  echo "      then re-run this deploy."
+  echo "      To enable it, run this ON the server as a user allowed to install packages:"
+  echo "        bash /opt/loadboard/deploy/install-postgis.sh"
+  echo "      then re-run this deploy (it creates the extension and geometry column)."
 fi
 
 echo "==> Seeding geo places (idempotent)"

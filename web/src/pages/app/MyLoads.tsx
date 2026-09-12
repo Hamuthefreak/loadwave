@@ -382,6 +382,10 @@ function MyLoadsTab() {
           setSuccess('Offer accepted — the board now shows the new asking rate.');
           await load();
         }}
+        onBooked={async () => {
+          setSuccess('Booked — the carrier committed to the agreed rate.');
+          await load();
+        }}
       />
 
       <RateCarrierModal

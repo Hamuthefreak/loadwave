@@ -5407,6 +5407,23 @@ tr.scorecard-tr > td {
   gap: 8px;
 }
 
+/* Carrier side: the poster agreed to a price, so booking is one tap away. */
+.neg-book {
+  margin: 6px 0 10px;
+  font-weight: 700;
+}
+
+.neg-booked {
+  margin: 6px 0 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--green);
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 /* System lines (e.g. "offer accepted") are facts, not someone speaking. */
 .msg.sys .msg-body {
   font-style: italic;

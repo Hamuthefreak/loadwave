@@ -81,6 +81,16 @@ export function registerMessageRoutes(app: FastifyInstance, deps: MessageModuleD
     },
   );
 
+  // Carrier commits to a rate the poster already accepted: books the load
+  // at that price in one tap.
+  app.post<{ Params: { loadId: string } }>(
+    '/api/board/loads/:loadId/commit-offer',
+    { schema: { params: paramsSchema }, preHandler: app.authenticate },
+    async (request) => {
+      return deps.messages.commitOffer(request.user.tenantId, request.params.loadId);
+    },
+  );
+
   // Unread counts for both sides: `loads` = your posted loads that have
   // unanswered carrier messages (badge on My Loads); `threads` = replies
   // waiting on loads you negotiated (badge on the board).

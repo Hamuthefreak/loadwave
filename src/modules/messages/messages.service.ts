@@ -1,13 +1,20 @@
 import type { PrismaClient } from '@prisma/client';
-import { badRequest, forbidden, notFound } from '../../utils/errors';
+import { badRequest, conflict, forbidden, notFound } from '../../utils/errors';
+import type { ILoadBoardService } from '../board/board.service';
 import type { NotificationService } from '../notification/notification.service';
 
 export type MessageKind = 'MESSAGE' | 'RATE_PROPOSAL' | 'SYSTEM';
 
-/** Only these two are ever authored by a user. */
+/**
+ * Stored kinds. OFFER_ACCEPTED is a system line, but a distinct one: it is
+ * what tells a carrier the poster agreed to their price, so it survives as
+ * structured data (with the accepted amount) rather than body text.
+ */
+export const MESSAGE_ACCEPTED = 'OFFER_ACCEPTED';
+
 function toKind(raw: string): MessageKind {
   if (raw === 'RATE_PROPOSAL') return 'RATE_PROPOSAL';
-  if (raw === 'SYSTEM') return 'SYSTEM';
+  if (raw === MESSAGE_ACCEPTED || raw === 'SYSTEM') return 'SYSTEM';
   return 'MESSAGE';
 }
 
@@ -57,6 +64,17 @@ export interface ThreadView {
   /** Poster only: every carrier that has reached out on this load. */
   conversations: ConversationSummary[];
   thread: MessageRow[];
+  /** What this viewer can do next about the price. */
+  booking: {
+    /** The amount the poster accepted for this carrier's thread, if any. */
+    acceptedAmount: string | null;
+    /** Accepted, and the load is still open, so the carrier can commit. */
+    canBook: boolean;
+    /** The price this carrier would book at (the accepted one). */
+    committedAmount: string | null;
+    /** This carrier is the one that booked it. */
+    isBooker: boolean;
+  };
 }
 
 export interface PostMessageInput {
@@ -86,6 +104,23 @@ export interface MessageService {
     loadId: string,
     counterpartyTenantId: string,
   ): Promise<AcceptedOffer>;
+  /**
+   * The carrier side of an accepted offer: book the load at the agreed price
+   * in one tap. The rate is already the accepted amount, so this only has to
+   * win the claim race and tell both sides it is done.
+   */
+  commitOffer(tenantId: string, loadId: string): Promise<BookedOffer>;
+}
+
+export interface BookedOffer {
+  loadId: string;
+  /** The price actually booked (the load's rate after acceptance). */
+  amount: string;
+  currency: string;
+  bookedByTenantId: string;
+  bookedAt: string;
+  /** True when this carrier had already committed to it. */
+  alreadyBooked: boolean;
 }
 
 export interface AcceptedOffer {
@@ -94,6 +129,13 @@ export interface AcceptedOffer {
   currency: string;
   /** The load's rate after accepting. */
   loadRate: string;
+}
+
+/** Booking a load at the price both sides already agreed to. */
+function acceptanceFrom(rows: Array<{ kind: string; proposedAmount: unknown }>): string | null {
+  const accepted = rows.filter((r) => r.kind === MESSAGE_ACCEPTED && r.proposedAmount != null);
+  const last = accepted[accepted.length - 1];
+  return last ? String(last.proposedAmount) : null;
 }
 
 const MAX_BODY = 2000;
@@ -109,6 +151,8 @@ export class PrismaMessageService implements MessageService {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly notifications: NotificationService,
+    /** Committing an accepted offer is a booking, so it goes through the board. */
+    private readonly board: ILoadBoardService,
   ) {}
 
   /**
@@ -289,6 +333,13 @@ export class PrismaMessageService implements MessageService {
       },
       viewer: { role: isPoster ? 'poster' : 'carrier', counterpartyTenantId, counterpartyName: otherName },
       conversations,
+      booking: {
+        acceptedAmount: isPoster ? null : acceptanceFrom(rows),
+        // Only the carrier whose price was accepted can still commit.
+        canBook: !isPoster && load.marketplaceStatus === 'PUBLIC' && acceptanceFrom(rows) != null,
+        committedAmount: isPoster || load.marketplaceStatus !== 'PUBLIC' ? null : acceptanceFrom(rows),
+        isBooker: !isPoster && load.bookedByTenantId === tenantId,
+      },
       thread: rows.map((r) => ({
         id: r.id,
         loadId: r.loadId,
@@ -353,7 +404,10 @@ export class PrismaMessageService implements MessageService {
         authorTenantId: tenantId,
         counterpartyTenantId,
         body: note,
-        kind: 'SYSTEM',
+        kind: MESSAGE_ACCEPTED,
+        // The agreed amount stays structured, so the carrier can commit to it.
+        proposedAmount: amount,
+        currency,
         readByPoster: true,
         readByOther: false,
       },
@@ -372,6 +426,95 @@ export class PrismaMessageService implements MessageService {
       amount: String(amount),
       currency,
       loadRate: String(amount),
+    };
+  }
+
+  /** This carrier's accepted amount on a load, if the poster agreed to one. */
+  private async acceptedFor(loadId: string, carrierTenantId: string): Promise<number | null> {
+    const rows = await this.prisma.loadMessage.findMany({
+      where: {
+        loadId,
+        counterpartyTenantId: carrierTenantId,
+        kind: MESSAGE_ACCEPTED,
+        proposedAmount: { not: null },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 1,
+      select: { proposedAmount: true },
+    });
+    const amount = rows[0]?.proposedAmount;
+    return amount != null ? Number(amount) : null;
+  }
+
+  async commitOffer(tenantId: string, loadId: string): Promise<BookedOffer> {
+    const load = await this.prisma.load.findFirst({
+      where: { id: loadId, marketplaceStatus: { in: ['PUBLIC', 'BOOKED'] } },
+      select: {
+        id: true,
+        tenantId: true,
+        originRegion: true,
+        destinationRegion: true,
+        marketplaceStatus: true,
+        freightCurrency: true,
+        freightAmountTransaction: true,
+        bookedByTenantId: true,
+      },
+    });
+    if (!load) throw notFound('load not found on the board');
+    if (load.tenantId === tenantId) throw forbidden('you cannot book a load posted by your own company');
+
+    const agreed = await this.acceptedFor(load.id, tenantId);
+    const lane = `${load.originRegion} → ${load.destinationRegion}`;
+
+    // Idempotent: a double tap (or a retry after a dropped response) is a no-op.
+    if (load.bookedByTenantId === tenantId) {
+      return {
+        loadId: load.id,
+        amount: String(load.freightAmountTransaction ?? agreed ?? ''),
+        currency: load.freightCurrency,
+        bookedByTenantId: tenantId,
+        bookedAt: new Date().toISOString(),
+        alreadyBooked: true,
+      };
+    }
+
+    // Committing is booking at the agreed price — without an agreement there is
+    // nothing to commit to, and the board's own Book button is the right path.
+    if (agreed == null) throw badRequest('the poster has not accepted an offer from you on this load');
+    if (load.marketplaceStatus !== 'PUBLIC') throw conflict('load was just booked by another carrier');
+
+    const booked = await this.board.book(tenantId, load.id);
+
+    const amount = booked.freightAmountTransaction != null ? String(booked.freightAmountTransaction) : String(agreed);
+    await this.prisma.loadMessage.create({
+      data: {
+        loadId: load.id,
+        authorTenantId: tenantId,
+        counterpartyTenantId: tenantId,
+        body: `Booked — committed at the agreed rate of ${booked.freightCurrency} ${amount}.`,
+        kind: 'SYSTEM',
+        proposedAmount: agreed,
+        currency: booked.freightCurrency,
+        readByOther: true,
+        readByPoster: false,
+      },
+    });
+
+    await this.notifications.notify({
+      tenantId: load.tenantId,
+      kind: 'load_booked',
+      title: `${lane} is booked`,
+      body: `The carrier committed at the agreed rate of ${booked.freightCurrency} ${amount}.`,
+      link: '/app/myloads',
+    });
+
+    return {
+      loadId: load.id,
+      amount,
+      currency: booked.freightCurrency,
+      bookedByTenantId: tenantId,
+      bookedAt: booked.bookedAt ?? new Date().toISOString(),
+      alreadyBooked: false,
     };
   }
 

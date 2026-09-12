@@ -271,7 +271,7 @@ export class PrismaFuelService implements FuelService {
        FROM "FuelTransaction"
        WHERE "tenantId" = $1
          AND ($2::text IS NULL OR "assetId" = $2)
-         AND "occurredAt" >= $3 AND "occurredAt" < $4
+         AND "occurredAt" >= $3::timestamp AND "occurredAt" < $4::timestamp
        GROUP BY 1 ORDER BY 1`,
       filter.tenantId,
       filter.assetId ?? null,

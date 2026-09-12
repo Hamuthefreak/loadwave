@@ -38,10 +38,18 @@ function carrierMsg(id: string, counterparty: string, body: string, overrides: R
 }
 
 function makeService(
-  opts: { loadOverrides?: Record<string, unknown>; conversations?: unknown[]; offer?: unknown } = {},
+  opts: {
+    loadOverrides?: Record<string, unknown>;
+    conversations?: unknown[];
+    offer?: unknown;
+    /** Rows returned for the OFFER_ACCEPTED lookup (carrier commit path). */
+    accepted?: Array<{ proposedAmount: number }>;
+    bookFails?: Error;
+  } = {},
 ) {
   const load = { ...LOAD, ...(opts.loadOverrides ?? {}) };
   const conversations = opts.conversations ?? [];
+  const accepted = opts.accepted ?? [];
   const prisma = {
     load: {
       findFirst: jest.fn().mockResolvedValue(load),
@@ -49,8 +57,9 @@ function makeService(
     },
     loadMessage: {
       findFirst: jest.fn().mockResolvedValue(opts.offer ?? null),
-      findMany: jest.fn().mockImplementation((args: { where: { counterpartyTenantId?: unknown } }) => {
+      findMany: jest.fn().mockImplementation((args: { where: { counterpartyTenantId?: unknown; kind?: string } }) => {
         // Conversation summary scan (poster inbox) vs. one thread read.
+        if (args.where.kind === 'OFFER_ACCEPTED') return Promise.resolve(accepted);
         if (args.where.counterpartyTenantId && typeof args.where.counterpartyTenantId === 'object') {
           return Promise.resolve(conversations);
         }
@@ -63,8 +72,22 @@ function makeService(
     tenant: { findMany: jest.fn().mockResolvedValue([{ id: 'carrier-a', name: 'Carrier A' }]) },
   } as unknown as ConstructorParameters<typeof PrismaMessageService>[0];
   const notifications = { notify: jest.fn().mockResolvedValue({}) } as unknown as NotificationService;
-  const service = new PrismaMessageService(prisma, notifications);
-  return { service, notifications, prisma };
+  const board = {
+    listPublic: jest.fn(),
+    listOwn: jest.fn(),
+    makePublic: jest.fn(),
+    book: opts.bookFails
+      ? jest.fn().mockRejectedValue(opts.bookFails)
+      : jest.fn().mockResolvedValue({
+          id: 'load-1',
+          bookedByTenantId: 'carrier-a',
+          bookedAt: '2026-01-02T09:00:00.000Z',
+          freightCurrency: 'CAD',
+          freightAmountTransaction: '1050',
+        }),
+  } as unknown as ConstructorParameters<typeof PrismaMessageService>[2];
+  const service = new PrismaMessageService(prisma, notifications, board);
+  return { service, notifications, prisma, board };
 }
 
 describe('load message validation', () => {
@@ -149,7 +172,13 @@ describe('accepting an offer', () => {
     expect(updated.data.freightAmountBase).toBe(1050);
 
     const system = (prisma.loadMessage.create as unknown as jest.Mock).mock.calls[0][0].data;
-    expect(system).toMatchObject({ kind: 'SYSTEM', counterpartyTenantId: 'carrier-a', readByPoster: true });
+    // A distinct stored kind, so the carrier's commit can find the agreed amount.
+    expect(system).toMatchObject({
+      kind: 'OFFER_ACCEPTED',
+      counterpartyTenantId: 'carrier-a',
+      readByPoster: true,
+      proposedAmount: 1050,
+    });
     expect(system.body).toContain('1050');
 
     // Only the carrier that offered gets told.
@@ -170,6 +199,64 @@ describe('accepting an offer', () => {
     const { service, prisma } = makeService({ offer: null });
     await expect(service.acceptOffer('poster-tenant', 'load-1', 'carrier-a')).rejects.toThrow();
     expect(prisma.load.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('carrier committing to an accepted offer', () => {
+  const accepted = [{ proposedAmount: 1050 }];
+
+  it('books the load through the board at the agreed price', async () => {
+    const { service, board, notifications, prisma } = makeService({ accepted });
+    const result = await service.commitOffer('carrier-a', 'load-1');
+
+    expect(result).toMatchObject({
+      amount: '1050',
+      currency: 'CAD',
+      bookedByTenantId: 'carrier-a',
+      alreadyBooked: false,
+    });
+    expect((board.book as jest.Mock).mock.calls[0]).toEqual(['carrier-a', 'load-1']);
+
+    // Both sides get a record of it: a system line in the thread, a bell for the poster.
+    const system = (prisma.loadMessage.create as jest.Mock).mock.calls[0][0].data;
+    expect(system).toMatchObject({
+      kind: 'SYSTEM',
+      counterpartyTenantId: 'carrier-a',
+      readByPoster: false,
+      readByOther: true,
+    });
+    expect((notifications.notify as jest.Mock).mock.calls[0][0]).toMatchObject({
+      tenantId: 'poster-tenant',
+      kind: 'load_booked',
+    });
+  });
+
+  it('refuses to commit with no accepted offer — the board Book button is the path', async () => {
+    const { service, board } = makeService();
+    await expect(service.commitOffer('carrier-a', 'load-1')).rejects.toThrow(/accepted an offer/i);
+    expect(board.book).not.toHaveBeenCalled();
+  });
+
+  it('refuses the poster booking its own load', async () => {
+    const { service, board } = makeService({ accepted });
+    await expect(service.commitOffer('poster-tenant', 'load-1')).rejects.toThrow();
+    expect(board.book).not.toHaveBeenCalled();
+  });
+
+  it('is idempotent — a retry after a dropped response does not re-book', async () => {
+    const { service, board } = makeService({
+      accepted,
+      loadOverrides: { marketplaceStatus: 'BOOKED', bookedByTenantId: 'carrier-a' },
+    });
+    const result = await service.commitOffer('carrier-a', 'load-1');
+    expect(result.alreadyBooked).toBe(true);
+    expect(board.book).not.toHaveBeenCalled();
+  });
+
+  it('surfaces the board race when another carrier booked first', async () => {
+    const { service, board } = makeService({ accepted, bookFails: new Error('load was just booked by another carrier') });
+    await expect(service.commitOffer('carrier-a', 'load-1')).rejects.toThrow(/another carrier/i);
+    expect(board.book).toHaveBeenCalledTimes(1);
   });
 });
 
