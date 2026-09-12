@@ -61,6 +61,26 @@ export function registerMessageRoutes(app: FastifyInstance, deps: MessageModuleD
     },
   );
 
+  const acceptSchema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['counterpartyTenantId'],
+    properties: { counterpartyTenantId: { type: 'string', minLength: 1, maxLength: 64 } },
+  } as const;
+
+  // Poster accepts a carrier's offer: the asking rate becomes that amount.
+  app.post<{ Params: { loadId: string }; Body: { counterpartyTenantId: string } }>(
+    '/api/board/loads/:loadId/accept-offer',
+    { schema: { body: acceptSchema, params: paramsSchema }, preHandler: app.authenticate },
+    async (request) => {
+      return deps.messages.acceptOffer(
+        request.user.tenantId,
+        request.params.loadId,
+        request.body.counterpartyTenantId,
+      );
+    },
+  );
+
   // Unread counts for both sides: `loads` = your posted loads that have
   // unanswered carrier messages (badge on My Loads); `threads` = replies
   // waiting on loads you negotiated (badge on the board).

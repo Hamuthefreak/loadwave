@@ -5354,6 +5354,65 @@ tr.scorecard-tr > td {
   vertical-align: middle;
 }
 
+/* Poster's negotiation inbox: offer comparison + accept */
+.neg-sub {
+  margin-top: -4px;
+  margin-bottom: 8px;
+}
+
+.neg-convo-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.neg-convo-row .neg-convo {
+  flex: 1;
+  min-width: 0;
+}
+
+.neg-offer {
+  color: var(--green);
+  font-family: var(--font-mono);
+}
+
+.neg-delta.down { color: var(--green); }
+.neg-delta.up { color: var(--amber); }
+
+.neg-accept {
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.neg-accept-inline {
+  margin-top: 6px;
+}
+
+.neg-confirm {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 6px 0 10px;
+  font-size: 13px;
+}
+
+.neg-confirm p {
+  margin: 0 0 8px;
+}
+
+.neg-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* System lines (e.g. "offer accepted") are facts, not someone speaking. */
+.msg.sys .msg-body {
+  font-style: italic;
+  color: var(--muted);
+}
+
 /* Poster's list of carrier conversations on one load */
 .neg-convo-list {
   list-style: none;

@@ -989,7 +989,7 @@ function NegotiationPanel({
               </p>
             )}
             {thread.map((m) => (
-              <div key={m.id} className={`msg ${m.mine ? 'mine' : 'theirs'}`}>
+              <div key={m.id} className={`msg ${m.mine ? 'mine' : 'theirs'} ${m.kind === 'SYSTEM' ? 'sys' : ''}`}>
                 {m.kind === 'RATE_PROPOSAL' && m.proposedAmount != null && (
                   <div className={`msg-offer ${Number(m.proposedAmount) > (loadRate ?? 0) ? 'over' : 'under'}`}>
                     {money(m.proposedAmount, m.currency ?? currency)}
@@ -1043,7 +1043,7 @@ interface MessageRow {
   id: string;
   mine: boolean;
   authorLabel: string;
-  kind: 'MESSAGE' | 'RATE_PROPOSAL';
+  kind: 'MESSAGE' | 'RATE_PROPOSAL' | 'SYSTEM';
   body: string | null;
   proposedAmount: string | null;
   currency: string | null;

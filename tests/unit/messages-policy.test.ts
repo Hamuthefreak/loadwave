@@ -37,13 +37,18 @@ function carrierMsg(id: string, counterparty: string, body: string, overrides: R
   };
 }
 
-function makeService(opts: { loadOverrides?: Record<string, unknown>; conversations?: unknown[] } = {}) {
+function makeService(
+  opts: { loadOverrides?: Record<string, unknown>; conversations?: unknown[]; offer?: unknown } = {},
+) {
   const load = { ...LOAD, ...(opts.loadOverrides ?? {}) };
   const conversations = opts.conversations ?? [];
   const prisma = {
-    load: { findFirst: jest.fn().mockResolvedValue(load) },
+    load: {
+      findFirst: jest.fn().mockResolvedValue(load),
+      update: jest.fn().mockResolvedValue(load),
+    },
     loadMessage: {
-      findFirst: jest.fn().mockResolvedValue(null),
+      findFirst: jest.fn().mockResolvedValue(opts.offer ?? null),
       findMany: jest.fn().mockImplementation((args: { where: { counterpartyTenantId?: unknown } }) => {
         // Conversation summary scan (poster inbox) vs. one thread read.
         if (args.where.counterpartyTenantId && typeof args.where.counterpartyTenantId === 'object') {
@@ -126,6 +131,45 @@ describe('carrier reaching out', () => {
     expect(view.conversations).toEqual([]);
     const call = (prisma.loadMessage.findMany as jest.Mock).mock.calls[0][0];
     expect(call.where).toMatchObject({ loadId: 'load-1', counterpartyTenantId: 'carrier-a' });
+  });
+});
+
+describe('accepting an offer', () => {
+  const offer = { proposedAmount: 1050, currency: 'CAD' };
+
+  it('rewrites the asking rate and records who agreed to what', async () => {
+    const { service, prisma, notifications } = makeService({ offer });
+    const result = await service.acceptOffer('poster-tenant', 'load-1', 'carrier-a');
+
+    expect(result).toMatchObject({ amount: '1050', currency: 'CAD', loadRate: '1050' });
+    const updated = (prisma.load.update as unknown as jest.Mock).mock.calls[0][0];
+    expect(updated.where).toEqual({ id: 'load-1' });
+    expect(updated.data.freightAmountTransaction).toBe(1050);
+    // Base amount keeps the same derivation as load creation: amount × rate.
+    expect(updated.data.freightAmountBase).toBe(1050);
+
+    const system = (prisma.loadMessage.create as unknown as jest.Mock).mock.calls[0][0].data;
+    expect(system).toMatchObject({ kind: 'SYSTEM', counterpartyTenantId: 'carrier-a', readByPoster: true });
+    expect(system.body).toContain('1050');
+
+    // Only the carrier that offered gets told.
+    expect(notifications.notify).toHaveBeenCalledTimes(1);
+    expect((notifications.notify as jest.Mock).mock.calls[0][0]).toMatchObject({
+      tenantId: 'carrier-a',
+      title: expect.stringContaining('accepted'),
+    });
+  });
+
+  it('refuses a carrier accepting its own offer', async () => {
+    const { service, prisma } = makeService({ offer });
+    await expect(service.acceptOffer('carrier-a', 'load-1', 'carrier-a')).rejects.toThrow();
+    expect(prisma.load.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses when that carrier never proposed a rate', async () => {
+    const { service, prisma } = makeService({ offer: null });
+    await expect(service.acceptOffer('poster-tenant', 'load-1', 'carrier-a')).rejects.toThrow();
+    expect(prisma.load.update).not.toHaveBeenCalled();
   });
 });
 

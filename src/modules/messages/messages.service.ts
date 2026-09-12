@@ -2,7 +2,14 @@ import type { PrismaClient } from '@prisma/client';
 import { badRequest, forbidden, notFound } from '../../utils/errors';
 import type { NotificationService } from '../notification/notification.service';
 
-export type MessageKind = 'MESSAGE' | 'RATE_PROPOSAL';
+export type MessageKind = 'MESSAGE' | 'RATE_PROPOSAL' | 'SYSTEM';
+
+/** Only these two are ever authored by a user. */
+function toKind(raw: string): MessageKind {
+  if (raw === 'RATE_PROPOSAL') return 'RATE_PROPOSAL';
+  if (raw === 'SYSTEM') return 'SYSTEM';
+  return 'MESSAGE';
+}
 
 export interface MessageRow {
   id: string;
@@ -24,6 +31,9 @@ export interface ConversationSummary {
   unread: number;
   lastAt: string;
   lastPreview: string;
+  /** That carrier's latest rate offer, for comparing them side by side. */
+  lastOfferAmount: string | null;
+  lastOfferAt: string | null;
   isBooker: boolean;
 }
 
@@ -67,6 +77,23 @@ export interface MessageService {
     loads: Array<{ loadId: string; unread: number }>;
     threads: Array<{ loadId: string; counterpartyTenantId: string; unread: number }>;
   }>;
+  /**
+   * Poster accepts a carrier's latest offer: the load's asking rate becomes
+   * that amount and the thread records who agreed to what.
+   */
+  acceptOffer(
+    tenantId: string,
+    loadId: string,
+    counterpartyTenantId: string,
+  ): Promise<AcceptedOffer>;
+}
+
+export interface AcceptedOffer {
+  counterpartyTenantId: string;
+  amount: string;
+  currency: string;
+  /** The load's rate after accepting. */
+  loadRate: string;
 }
 
 const MAX_BODY = 2000;
@@ -179,17 +206,21 @@ export class PrismaMessageService implements MessageService {
 
     return Array.from(groups, ([counterpartyTenantId, list]) => {
       const last = list[list.length - 1];
+      const offers = list.filter((m) => m.kind === 'RATE_PROPOSAL' && m.proposedAmount != null);
+      const lastOffer = offers[offers.length - 1];
       return {
         counterpartyTenantId,
         counterpartyName: nameById.get(counterpartyTenantId) ?? 'Carrier',
         unread: list.filter((m) => m.authorTenantId !== viewerTenantId && !m.readByPoster).length,
         lastAt: last.createdAt.toISOString(),
         lastPreview: preview(
-          last.kind === 'RATE_PROPOSAL' ? 'RATE_PROPOSAL' : 'MESSAGE',
+          toKind(last.kind),
           last.body,
           last.proposedAmount != null ? String(last.proposedAmount) : null,
           last.currency,
         ).slice(0, 140),
+        lastOfferAmount: lastOffer ? String(lastOffer.proposedAmount) : null,
+        lastOfferAt: lastOffer ? lastOffer.createdAt.toISOString() : null,
         isBooker: counterpartyTenantId === bookedByTenantId,
       };
     }).sort((a, b) => (a.lastAt < b.lastAt ? 1 : -1));
@@ -264,12 +295,83 @@ export class PrismaMessageService implements MessageService {
         authorTenantId: r.authorTenantId,
         mine: r.authorTenantId === tenantId,
         authorLabel: r.authorTenantId === tenantId ? 'You' : (nameById.get(r.authorTenantId) ?? (isPoster ? 'Carrier' : 'Poster')),
-        kind: (r.kind === 'RATE_PROPOSAL' ? 'RATE_PROPOSAL' : 'MESSAGE') as MessageKind,
+        kind: toKind(r.kind),
         body: r.body,
         proposedAmount: r.proposedAmount != null ? String(r.proposedAmount) : null,
         currency: r.currency,
         createdAt: r.createdAt.toISOString(),
       })),
+    };
+  }
+
+  async acceptOffer(
+    tenantId: string,
+    loadId: string,
+    counterpartyTenantId: string,
+  ): Promise<AcceptedOffer> {
+    const load = await this.prisma.load.findFirst({
+      where: { id: loadId, marketplaceStatus: { in: ['PUBLIC', 'BOOKED'] } },
+      select: {
+        id: true,
+        tenantId: true,
+        originRegion: true,
+        destinationRegion: true,
+        freightCurrency: true,
+        exchangeRateToBase: true,
+      },
+    });
+    if (!load) throw notFound('load not found on the board');
+    // Only the carrier that posted the load sets its price.
+    if (load.tenantId !== tenantId) throw forbidden('only the posting carrier can accept an offer');
+
+    const offer = await this.prisma.loadMessage.findFirst({
+      where: { loadId: load.id, counterpartyTenantId, kind: 'RATE_PROPOSAL', proposedAmount: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      select: { proposedAmount: true, currency: true },
+    });
+    if (!offer?.proposedAmount) throw badRequest('that carrier has not proposed a rate');
+
+    const amount = Number(offer.proposedAmount);
+    if (!Number.isFinite(amount) || amount <= 0) throw badRequest('that offer is not a usable amount');
+    const currency = offer.currency ?? load.freightCurrency;
+    // Same derivation the load service uses on create: base = transaction × rate.
+    const rate = Number(load.exchangeRateToBase ?? 1) || 1;
+    const base = Math.round(amount * rate * 100) / 100;
+
+    await this.prisma.load.update({
+      where: { id: load.id },
+      data: { freightAmountTransaction: amount, freightAmountBase: base },
+    });
+
+    const lane = `${load.originRegion} → ${load.destinationRegion}`;
+    const note = `Offer accepted — the rate for ${lane} is now ${currency} ${amount}${
+      offer.currency && offer.currency !== load.freightCurrency ? ` (listed in ${load.freightCurrency})` : ''
+    }.`;
+    await this.prisma.loadMessage.create({
+      data: {
+        loadId: load.id,
+        authorTenantId: tenantId,
+        counterpartyTenantId,
+        body: note,
+        kind: 'SYSTEM',
+        readByPoster: true,
+        readByOther: false,
+      },
+    });
+
+    await this.notifications.notify({
+      tenantId: counterpartyTenantId,
+      kind: 'load_message',
+      title: `Offer accepted on ${lane}`,
+      body: `The poster agreed to ${currency} ${amount}.`,
+      link: '/app/board',
+    });
+
+    return {
+      counterpartyTenantId,
+      amount: String(amount),
+      currency,
+      loadRate: String(amount),
     };
   }
 
@@ -351,7 +453,7 @@ export class PrismaMessageService implements MessageService {
       authorTenantId: row.authorTenantId,
       mine: true,
       authorLabel: 'You',
-      kind: (row.kind === 'RATE_PROPOSAL' ? 'RATE_PROPOSAL' : 'MESSAGE') as MessageKind,
+      kind: toKind(row.kind),
       body: row.body,
       proposedAmount: row.proposedAmount != null ? String(row.proposedAmount) : null,
       currency: row.currency,

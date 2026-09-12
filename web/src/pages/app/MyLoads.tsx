@@ -378,6 +378,10 @@ function MyLoadsTab() {
         loadId={msgFor}
         onClose={() => setMsgFor(null)}
         onSeen={(id) => setUnread((prev) => (prev[id] ? { ...prev, [id]: 0 } : prev))}
+        onRateAccepted={async () => {
+          setSuccess('Offer accepted — the board now shows the new asking rate.');
+          await load();
+        }}
       />
 
       <RateCarrierModal
