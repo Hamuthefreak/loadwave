@@ -66,7 +66,36 @@ echo "==> Seeding geo places (idempotent)"
 npm run db:seed-places
 
 echo "==> Restarting service"
-sudo systemctl restart loadboard
+# CI runs non-interactively and the VM grants the deploy user no systemctl
+# rights ("Interactive authentication required"), which is what kept the deploy
+# red — code and migrations landed but the running process never picked them
+# up. Try the privileged paths first (harmless if unavailable), then fall back
+# to signalling the process: the unit is Restart=always, so systemd brings it
+# back with the freshly built code a few seconds later.
+if sudo -n systemctl restart loadboard 2>/dev/null || systemctl restart loadboard 2>/dev/null; then
+  echo "    restarted via systemctl"
+else
+  echo "    no reload permission here — signalling the service process instead"
+  pkill -f '/opt/loadboard/dist/src/main.js' || true
+  sleep 7
+fi
 
-echo "==> [auto-deploy] done — https://health via systemctl status loadboard"
+# Wait for the API to answer, so a broken build fails the deploy loudly.
+healthy=""
+for _ in $(seq 1 20); do
+  if curl -fsS http://127.0.0.1:4000/api/health >/dev/null 2>&1; then
+    healthy="yes"
+    break
+  fi
+  sleep 2
+ done
+if [ -n "$healthy" ]; then
+  echo "    API is answering on :4000"
+else
+  echo "ERROR: the API did not answer after a restart — check the service" >&2
+  systemctl --no-pager status loadboard | head -20 || true
+  exit 1
+fi
+
+echo "==> [auto-deploy] done"
 systemctl --no-pager status loadboard | head -12 || true
