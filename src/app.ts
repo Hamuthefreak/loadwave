@@ -9,6 +9,7 @@ import type { AppEnv } from './config/env';
 import { loadEnv } from './config/env';
 import { buildLogger } from './logger/logger';
 import { getPrisma, type PrismaClient } from './db/prisma';
+import { withAdvisoryLock } from './db/advisory-lock';
 import { EventBus } from './events/event-bus';
 import {
   EVENTS,
@@ -370,11 +371,15 @@ function registerRoutes(app: FastifyInstance, deps: AppDeps, prisma: PrismaClien
 }
 
 function startSchedule(deps: AppDeps, logger: Logger): void {
+  // Every instance runs these timers, but only one may act: a second process
+  // would post recurring loads twice and notify the same people twice. Each
+  // job takes a Postgres advisory lock and skips the tick if another holds it.
+
   // Backfill today's lane snapshot on boot, then every 6 hours.
   const snapshot = (): void => {
-    void deps.market
-      .snapshot()
-      .catch((err: unknown) => logger.warn({ err }, 'market lane snapshot failed'));
+    void withAdvisoryLock(deps.prisma, 'loadwave:lane-snapshot', () => deps.market.snapshot()).catch(
+      (err: unknown) => logger.warn({ err }, 'market lane snapshot failed'),
+    );
   };
   snapshot();
   const timer = setInterval(snapshot, 6 * 60 * 60 * 1000);
@@ -382,9 +387,9 @@ function startSchedule(deps: AppDeps, logger: Logger): void {
 
   // Saved-search load alerts: first sweep shortly after boot, then every 5 min.
   const sweep = (): void => {
-    void deps.searches
-      .runAlerts(deps.notifications)
-      .catch((err: unknown) => logger.warn({ err }, 'saved-search alert sweep failed'));
+    void withAdvisoryLock(deps.prisma, 'loadwave:saved-search-alerts', () =>
+      deps.searches.runAlerts(deps.notifications),
+    ).catch((err: unknown) => logger.warn({ err }, 'saved-search alert sweep failed'));
   };
   const alertTimer = setInterval(sweep, 5 * 60 * 1000);
   alertTimer.unref?.();
@@ -392,9 +397,9 @@ function startSchedule(deps: AppDeps, logger: Logger): void {
 
   // Recurring loads: clone any due weekly load, then hourly afterwards.
   const recurrence = (): void => {
-    void runRecurrenceSweep(deps.prisma, logger).catch((err: unknown) =>
-      logger.warn({ err }, 'recurring load sweep failed'),
-    );
+    void withAdvisoryLock(deps.prisma, 'loadwave:recurring-loads', () =>
+      runRecurrenceSweep(deps.prisma, logger),
+    ).catch((err: unknown) => logger.warn({ err }, 'recurring load sweep failed'));
   };
   const recTimer = setInterval(recurrence, 60 * 60 * 1000);
   recTimer.unref?.();

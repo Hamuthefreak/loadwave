@@ -47,8 +47,20 @@ cd "$APP_DIR"
 echo "==> Migrations"
 npm run prisma:migrate:deploy
 
-echo "==> Enabling PostGIS (idempotent)"
-npm run db:postgis
+# PostGIS backs IFTA distance-by-jurisdiction from GPS route segments. It is
+# an OPTIONAL enhancement: the app runs without it, so a server that lacks the
+# extension must not fail the whole deploy (that is what kept production
+# frozen — the deploy aborted here, before the service restart).
+echo "==> Enabling PostGIS (idempotent, optional)"
+if npm run db:postgis; then
+  echo "    PostGIS ready"
+else
+  echo "WARN: PostGIS is not installed on this server."
+  echo "      IFTA distance-by-jurisdiction from GPS route segments stays disabled."
+  echo "      To enable it (as a user allowed to install packages):"
+  echo "        apt-get install -y postgresql-16-postgis-3 && systemctl restart postgresql"
+  echo "      then re-run this deploy."
+fi
 
 echo "==> Seeding geo places (idempotent)"
 npm run db:seed-places
