@@ -4,6 +4,14 @@ on:
   push:
     branches: [main]
 
+# One deploy at a time, always. Two pushes in quick succession used to run two
+# deploys concurrently on the same small VM; each one runs `npm ci`, which
+# deletes and reinstalls node_modules, so the pair can starve the box and leave
+# the service unable to start. Queued runs wait instead of overlapping.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
 jobs:
   verify:
     name: Verify (typecheck, tests, build)

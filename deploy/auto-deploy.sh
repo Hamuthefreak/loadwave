@@ -10,6 +10,17 @@ set -euo pipefail
 APP_DIR="/opt/loadboard"
 export NODE_ENV=production
 
+# Only one deploy may touch this checkout at a time. Two overlapping runs both
+# run `npm ci` (which wipes node_modules) and can leave the service unable to
+# start. The workflow also serialises runs; this guards manual invocations.
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"/tmp/loadboard-deploy.lock"
+  if ! flock -w 900 9; then
+    echo "ERROR: another deploy has been running for 15 minutes — refusing to overlap." >&2
+    exit 1
+  fi
+fi
+
 # Non-interactive SSH shells (GitHub Actions) don't source ~/.bashrc, so
 # node/npm may be missing from PATH. Explicitly locate them if needed.
 if ! command -v node >/dev/null 2>&1; then
@@ -33,15 +44,27 @@ git fetch origin
 git checkout --force main
 git pull --ff-only origin main
 
+# Install only when the lockfile changed. A full `npm ci` is the expensive,
+# risky part of a deploy on a small VM, and most pushes do not touch deps.
+install_deps() {
+  local dir="$1" marker="$2" current
+  current="$(sha256sum "$dir/package-lock.json" 2>/dev/null | cut -d' ' -f1)"
+  if [ -n "$current" ] && [ -f "$marker" ] && [ "$(cat "$marker")" = "$current" ] && [ -d "$dir/node_modules" ]; then
+    echo "    $(basename "$dir") dependencies unchanged — skipping install"
+    return 0
+  fi
+  (cd "$dir" && npm ci --include=dev)
+  printf '%s' "$current" > "$marker"
+}
+
 echo "==> Backend install + build"
-npm ci --include=dev
+install_deps "$APP_DIR" "$APP_DIR/.deploy-deps.hash"
 npx prisma generate
 npm run build
 
 echo "==> Frontend install + build"
-cd "$APP_DIR/web"
-npm ci --include=dev
-npm run build
+install_deps "$APP_DIR/web" "$APP_DIR/.deploy-deps-web.hash"
+cd "$APP_DIR/web" && npm run build
 cd "$APP_DIR"
 
 echo "==> Migrations"
