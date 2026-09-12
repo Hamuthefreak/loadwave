@@ -44,6 +44,10 @@ export interface BoardLoadRow {
   /** Lane benchmark: marketplace-wide avg $/mile for this O→D lane. */
   laneAvgPerMile?: number | null;
   laneSamples?: number;
+  /** Trust signals from the posting carrier (rating aggregates + verification). */
+  postedByRatingAvg?: number | null;
+  postedByRatingCount?: number;
+  postedByVerified?: boolean;
 }
 
 export interface LaneRateAverage {
@@ -68,7 +72,13 @@ export interface LoadBoardStore {
 interface StoreRow {
   id: string;
   tenantId: string;
-  tenant: { name: string; mcNumber?: string | null; usdotNumber?: string | null };
+  tenant: {
+    name: string;
+    mcNumber?: string | null;
+    usdotNumber?: string | null;
+    ratingAvg?: { toString(): string } | null;
+    ratingCount?: number;
+  };
   externalLoadboardId: string | null;
   originCountry: string;
   originRegion: string;
@@ -115,6 +125,10 @@ export class PrismaLoadBoardStore implements LoadBoardStore {
       postedByTenantName: row.tenant.name,
       postedByMcNumber: row.tenant.mcNumber ?? null,
       postedByUsdotNumber: row.tenant.usdotNumber ?? null,
+      postedByRatingAvg: row.tenant.ratingAvg != null ? Number(row.tenant.ratingAvg) : null,
+      postedByRatingCount: row.tenant.ratingCount ?? 0,
+      // Same derivation the tenants service uses for /api/tenants/me.
+      postedByVerified: Boolean(row.tenant.mcNumber || row.tenant.usdotNumber),
       externalLoadboardId: row.externalLoadboardId,
       originCountry: row.originCountry,
       originRegion: row.originRegion,
@@ -155,7 +169,9 @@ export class PrismaLoadBoardStore implements LoadBoardStore {
   private select = {
     id: true,
     tenantId: true,
-    tenant: { select: { name: true, mcNumber: true, usdotNumber: true } },
+    tenant: {
+      select: { name: true, mcNumber: true, usdotNumber: true, ratingAvg: true, ratingCount: true },
+    },
     externalLoadboardId: true,
     originCountry: true,
     originRegion: true,

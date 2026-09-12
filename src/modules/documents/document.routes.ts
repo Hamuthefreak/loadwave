@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { UserRole } from '../auth/auth.types';
 import {
   DOCUMENT_KINDS,
+  normalizeDocumentMime,
   type LoadDocumentService,
 } from './document.service';
 
@@ -74,9 +75,12 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentModul
       );
       if (!found) return reply.code(404).send({ error: 'NOT_FOUND', message: 'document not found' });
       const safeName = found.row.fileName.replace(/[^\w.\- ]+/g, '_');
+      // Never trust the stored type: rows written before the whitelist existed
+      // (or by a future bug) still get served as an opaque download.
       return reply
-        .header('Content-Type', found.row.mimeType)
+        .header('Content-Type', normalizeDocumentMime(found.row.mimeType))
         .header('Content-Disposition', `attachment; filename="${safeName}"`)
+        .header('X-Content-Type-Options', 'nosniff')
         .send(found.data);
     },
   );

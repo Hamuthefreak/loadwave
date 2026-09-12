@@ -22,6 +22,8 @@ export interface MarketService {
   snapshot(): Promise<number>;
   /** Trend series for the last `days` days across lanes (for sparklines). */
   laneHistory(days?: number): Promise<Array<{ statDate: string; originRegion: string; destinationRegion: string; loadsSeen: number; trucksSeen: number; avgRate: number | null }>>;
+  /** Daily average-rate series for ONE lane, oldest → newest (drawer sparkline). */
+  laneTrend(origin: string, destination: string, days: number): Promise<{ origin: string; destination: string; days: number; lane: Array<{ statDate: string; avgRate: number | null; loadsSeen: number }> }>;
 }
 
 export class PrismaMarketService implements MarketService {
@@ -163,5 +165,28 @@ export class PrismaMarketService implements MarketService {
       trucksSeen: r.trucksSeen,
       avgRate: r.avgRate != null ? Number(r.avgRate) : null,
     }));
+  }
+
+  async laneTrend(origin: string, destination: string, days: number): Promise<{ origin: string; destination: string; days: number; lane: Array<{ statDate: string; avgRate: number | null; loadsSeen: number }> }> {
+    const o = origin.trim().toUpperCase();
+    const d = destination.trim().toUpperCase();
+    const since = new Date();
+    since.setUTCHours(0, 0, 0, 0);
+    since.setDate(since.getDate() - days);
+    const rows = await this.prisma.laneDailyStat.findMany({
+      where: { originRegion: o, destinationRegion: d, statDate: { gte: since } },
+      orderBy: { statDate: 'asc' },
+      take: 120,
+    });
+    return {
+      origin: o,
+      destination: d,
+      days,
+      lane: rows.map((r) => ({
+        statDate: r.statDate.toISOString().slice(0, 10),
+        avgRate: r.avgRate != null ? Number(r.avgRate) : null,
+        loadsSeen: r.loadsSeen,
+      })),
+    };
   }
 }

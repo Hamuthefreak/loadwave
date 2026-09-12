@@ -4,6 +4,8 @@ import { Badge, Empty, Lane, PageHeader } from '../../components/ui';
 import DispatchModal, { type DispatchLoad } from '../../components/DispatchModal';
 import { LoadDocumentsModal } from '../../components/LoadDocumentsModal';
 import { InvoiceLoadModal } from '../../components/InvoiceLoadModal';
+import { LoadMessagesModal } from '../../components/LoadMessagesModal';
+import { RateCarrierModal } from '../../components/RateCarrierModal';
 import { km, money, perMile, regionLabel, shortDate } from '../../utils/format';
 import { EQUIPMENT_TYPES, equipmentLabel, REGION_OPTIONS } from './regions';
 import type { TruckRow } from './boardTypes';
@@ -53,6 +55,9 @@ function MyLoadsTab() {
   const [dispatchFor, setDispatchFor] = useState<OwnLoad | null>(null);
   const [podFor, setPodFor] = useState<OwnLoad | null>(null);
   const [invoiceFor, setInvoiceFor] = useState<OwnLoad | null>(null);
+  const [msgFor, setMsgFor] = useState<string | null>(null);
+  const [rateFor, setRateFor] = useState<OwnLoad | null>(null);
+  const [unread, setUnread] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -75,6 +80,13 @@ function MyLoadsTab() {
     setError(null);
     try {
       setRows(await api<OwnLoad[]>('/api/loads'));
+      api<{ loads: Array<{ loadId: string; unread: number }> }>('/api/messages/unread')
+        .then((res) => {
+          const map: Record<string, number> = {};
+          for (const r of res.loads ?? []) map[r.loadId] = r.unread;
+          setUnread(map);
+        })
+        .catch(() => setUnread({}));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load loads');
     } finally {
@@ -302,10 +314,15 @@ function MyLoadsTab() {
                   <td>
                     {l.marketplaceStatus === 'PRIVATE' ? (
                       <button className="btn-sm" onClick={() => void postToBoard(l.id)}>Post to board</button>
-                    ) : l.marketplaceStatus === 'PUBLIC' ? (
-                      <span className="muted small">Live on the board</span>
+                    ) : l.marketplaceStatus === 'PUBLIC' || l.marketplaceStatus === 'BOOKED' ? (
+                      <span className="row-actions">
+                        <button className="btn-sm" onClick={() => setMsgFor(l.id)}>
+                          Messages{unread[l.id] ? ` (${unread[l.id]})` : ''}
+                        </button>
+                        {unread[l.id] ? <span className="msg-dot" aria-hidden /> : null}
+                      </span>
                     ) : (
-                      <span className="muted small">{l.bookedByTenantId ? 'Taken by partner' : 'Taken'}</span>
+                      <span className="muted small">—</span>
                     )}
                   </td>
                   <td>
@@ -313,6 +330,9 @@ function MyLoadsTab() {
                       <span className="row-actions">
                         <button className="btn-sm" onClick={() => setPodFor(l)}>Add POD</button>
                         <button className="btn-sm" onClick={() => setInvoiceFor(l)}>Create invoice</button>
+                        {l.marketplaceStatus === 'BOOKED' && (
+                          <button className="btn-sm" title="Rate the carrier that booked this load" onClick={() => setRateFor(l)}>★ Rate</button>
+                        )}
                       </span>
                     ) : l.status === 'INVOICED' ? (
                       <span className="row-actions">
@@ -352,6 +372,18 @@ function MyLoadsTab() {
           setSuccess('Invoice created — the load is marked Invoiced.');
           await load();
         }}
+      />
+
+      <LoadMessagesModal
+        loadId={msgFor}
+        onClose={() => setMsgFor(null)}
+        onSeen={(id) => setUnread((prev) => (prev[id] ? { ...prev, [id]: 0 } : prev))}
+      />
+
+      <RateCarrierModal
+        loadId={rateFor?.id ?? null}
+        laneLabel={rateFor ? laneText(rateFor) : ''}
+        onClose={() => setRateFor(null)}
       />
     </div>
   );

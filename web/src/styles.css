@@ -26,6 +26,8 @@
   --radius: 6px;
   --radius-sm: 4px;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --backdrop: rgba(8, 10, 9, 0.72);
+  --grid-line: rgba(255, 255, 255, 0.06);
   --font-body: 'Archivo', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
   color-scheme: dark;
@@ -41,10 +43,21 @@ html[data-theme='light'] {
   --text: #1b1e1a;
   --muted: #5f675f;
   --faint: #8b938b;
-  --accent-ink: #ffffff;
+  /* Slightly deeper accent on daylight surfaces — keeps chips, arrows and
+     live-dots visible on white. Buttons keep their dark ink (see below). */
+  --accent: #67b02f;
+  --accent-ink: #0e1506;
   --accent-soft: rgba(103, 176, 47, 0.14);
   --green-soft: rgba(103, 176, 47, 0.14);
   --shadow: 0 1px 2px rgba(20, 24, 18, 0.06);
+  --backdrop: rgba(15, 18, 15, 0.42);
+  --grid-line: rgba(27, 30, 26, 0.1);
+  /* Status text must stay readable on white panels — same hues, darker
+     lightness. Accent keeps its dark ink in BOTH modes: white on this
+     mid-green fails contrast, so --accent-ink is never overridden. */
+  --green: #4d7a24;
+  --amber: #a87517;
+  --red: #b85048;
   color-scheme: light;
 }
 
@@ -54,6 +67,9 @@ html[data-theme='light'] {
 
 html {
   -webkit-text-size-adjust: 100%;
+  /* Phone hygiene: stop the rubber-band bounce behind the fixed nav, and
+     keep one-finger scrolling inside scrollable panes (tables, sheets). */
+  overscroll-behavior-y: none;
 }
 
 body {
@@ -469,7 +485,7 @@ select:focus {
 }
 
 input::placeholder {
-  color: #4c6080;
+  color: var(--faint);
 }
 
 .form-grid {
@@ -651,7 +667,7 @@ tfoot td {
 }
 
 .load-card:hover .load-rate .amount {
-  color: #fff;
+  color: var(--accent-ink);
   background: var(--accent-strong);
   border-radius: 8px;
   padding: 2px 10px;
@@ -775,7 +791,7 @@ tfoot td {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(8, 10, 9, 0.72);
+  background: var(--backdrop);
   backdrop-filter: blur(4px);
   display: grid;
   place-items: center;
@@ -1065,7 +1081,7 @@ tfoot td {
   }
 }
 
-@media (max-width: 860px) {
+@media (max-width: 960px) {
   .ptr-indicator {
     display: flex;
     align-items: center;
@@ -1126,7 +1142,7 @@ tfoot td {
   }
 }
 
-@media (max-width: 860px) {
+@media (max-width: 960px) {
   .auth-shell {
     grid-template-columns: 1fr;
   }
@@ -1401,7 +1417,7 @@ tfoot td {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: #fff;
+  color: var(--text);
 }
 
 .side-company-badges {
@@ -1632,6 +1648,22 @@ tfoot td {
   font-size: 0.8rem;
 }
 
+/* Trust chip: ★ 4.6 (12) — from carriers who completed loads with this poster */
+.rating-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--amber, #d9a13c);
+  font-weight: 800;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.rating-chip small {
+  color: var(--muted);
+  font-weight: 600;
+}
+
 .carrier-name {
   font-weight: 600;
   color: var(--text);
@@ -1645,7 +1677,7 @@ tfoot td {
 .drawer-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(5, 10, 20, 0.55);
+  background: var(--backdrop);
   z-index: 90;
   display: flex;
   justify-content: flex-end;
@@ -1704,8 +1736,8 @@ tfoot td {
 .route-map {
   position: relative;
   background:
-    linear-gradient(rgba(31, 47, 77, 0.35) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(31, 47, 77, 0.35) 1px, transparent 1px),
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
     var(--panel);
   background-size: 34px 34px;
   border: 1px solid var(--border);
@@ -1869,14 +1901,14 @@ textarea:focus {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--green), #1fb586);
+  background: linear-gradient(135deg, var(--green), var(--accent-strong));
   color: var(--accent-ink);
   text-decoration: none;
   padding: 13px 24px;
   border-radius: 12px;
   font-weight: 800;
   font-size: 0.95rem;
-  box-shadow: 0 8px 24px rgba(52, 211, 153, 0.25);
+  box-shadow: var(--shadow);
   transition: filter 0.12s ease, transform 0.06s ease;
 }
 
@@ -2335,7 +2367,7 @@ textarea:focus {
 }
 
 .cmp-no {
-  color: #3d4f6d;
+  color: var(--faint);
 }
 
 /* Footer */
@@ -2412,7 +2444,7 @@ textarea:focus {
   }
 }
 
-@media (max-width: 860px) {
+@media (max-width: 960px) {
   .app-shell {
     grid-template-columns: 1fr;
   }
@@ -2887,7 +2919,7 @@ textarea:focus {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  background: #fff;
+  background: var(--bg);
 }
 
 .route-fallback::after {
@@ -2895,8 +2927,8 @@ textarea:focus {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  border: 3px solid #fde9dd;
-  border-top-color: #f5793a;
+  border: 3px solid var(--accent-soft);
+  border-top-color: var(--accent);
   animation: spin 0.7s linear infinite;
 }
 
@@ -3090,7 +3122,7 @@ button.onboarding-step:hover {
   height: 16px;
   border-radius: 999px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-ink);
   font-size: 0.62rem;
   font-weight: 800;
   display: grid;
@@ -3191,7 +3223,7 @@ button.onboarding-step:hover {
   font-size: 1.15rem;
   text-transform: uppercase;
   letter-spacing: 0.01em;
-  color: #fff;
+  color: var(--text);
 }
 
 .diag-badge {
@@ -3457,27 +3489,28 @@ button.onboarding-step:hover {
   }
 }
 
+/* Smooth cross-fade while the theme toggles (marketing.css has the same
+   gate; this covers the app shell). `!important` beats per-rule transitions
+   for the duration of the fade only. */
+html.theme-fading,
+html.theme-fading * {
+  transition: background-color 0.5s ease, border-color 0.5s ease, color 0.5s ease,
+    fill 0.5s ease, box-shadow 0.5s ease !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.theme-fading,
+  html.theme-fading * {
+    transition: none !important;
+  }
+}
+
 
 /* ===================================================================
-   App light theme — targeted exceptions
+   App light theme — resolved via the token overrides above; no extra
+   exception rules needed (status colors are re-tuned per mode in the
+   html[data-theme='light'] block).
    =================================================================== */
-
-html[data-theme='light'] .ld-fresh {
-  color: #5f675f;
-}
-
-html[data-theme='light'] .ld-rate-chip,
-html[data-theme='light'] .ld-fresh strong {
-  color: #4d7a24;
-}
-
-html[data-theme='light'] .stat-green .stat-value {
-  color: #4d7a24;
-}
-
-html[data-theme='light'] .lane-arrow {
-  color: #67b02f;
-}
 
 /* ---------- Driver duty status (sidebar + mobile bar) ---------- */
 
@@ -3906,7 +3939,7 @@ html[data-theme='light'] .lane-arrow {
   color: var(--muted);
 }
 .delivery-hint.delivery-soon .delivery-count { color: var(--amber); }
-.delivery-hint.delivery-today .delivery-count { background: var(--accent); color: #fff; }
+.delivery-hint.delivery-today .delivery-count { background: var(--accent); color: var(--accent-ink); }
 .delivery-hint.delivery-overdue .delivery-count { background: var(--red, #c0392b); color: #fff; }
 
 /* Sign-in: show/hide password */
@@ -4062,8 +4095,10 @@ a {
   min-height: 100dvh;
 }
 
-/* Modals: never taller than the screen — the body scrolls on its own */
+/* Modals: never taller than the screen — the body scrolls on its own.
+   Plain vh first: old WebViews without dvh drop the min() line entirely. */
 .modal {
+  max-height: 92vh;
   max-height: min(92vh, 92dvh);
   display: flex;
   flex-direction: column;
@@ -4120,7 +4155,7 @@ a {
   border-radius: 999px;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 960px) {
   .shell-mobilebar .logout {
     padding: 7px 10px;
   }
@@ -4430,7 +4465,7 @@ a {
   display: none;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 960px) {
   .driver-fab {
     display: flex;
     align-items: center;
@@ -4443,7 +4478,7 @@ a {
     border-radius: 999px;
     padding: 13px 20px;
     background: var(--green);
-    color: #0d1510;
+    color: var(--accent-ink);
     font-family: inherit;
     font-size: 1rem;
     font-weight: 800;
@@ -5098,4 +5133,354 @@ a {
 tr.scorecard-tr > td {
   border-top: none;
   padding-top: 0;
+}
+
+/* ---------- Drawer: fuel & net estimator ---------- */
+.net-est {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.net-est-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: none;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+}
+
+.net-est-toggle small {
+  color: var(--muted);
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+.net-est-caret {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.net-est-body {
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.net-est-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.net-est-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.net-est-grid input {
+  width: 100%;
+  min-height: 44px;
+}
+
+.net-est-lines {
+  margin: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.net-est-lines div {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+}
+
+.net-est-lines dt {
+  color: var(--muted);
+}
+
+.net-est-lines dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.net-est-total {
+  border-top: 1px dashed var(--border);
+  padding-top: 8px;
+}
+
+.net-est-total dd {
+  color: var(--accent-strong);
+  font-size: 1.05rem;
+}
+
+@media (max-width: 560px) {
+  .net-est-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =================================================================== */
+/* Rate negotiation (board drawer + My Loads modal)                     */
+/* =================================================================== */
+
+.drawer-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.negotiation {
+  margin: 10px 0 2px;
+}
+
+.negotiation .btn-ghost {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-weight: 600;
+}
+
+.negotiation-open {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+  padding: 8px 10px 10px;
+}
+
+.negotiation-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.negotiation-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding: 2px;
+}
+
+.neg-thread-modal {
+  max-height: 46vh;
+  min-height: 120px;
+  margin: 10px 0 12px;
+}
+
+.neg-typing-pad { height: 2px; }
+
+.msg {
+  max-width: 88%;
+  border-radius: 12px;
+  padding: 8px 10px;
+  font-size: 0.86rem;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.msg.mine {
+  align-self: flex-end;
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+
+.msg.theirs { align-self: flex-start; }
+
+.msg-offer {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin-bottom: 2px;
+}
+
+.msg-offer.over { color: var(--green); }
+.msg-offer.under { color: var(--amber); }
+
+.msg-body { white-space: pre-wrap; word-break: break-word; }
+
+.msg-meta { margin-top: 3px; font-size: 0.68rem; }
+
+.negotiation-compose {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.neg-compose-modal { margin-top: 0; }
+
+.neg-amount {
+  width: 108px;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
+
+.neg-text { flex: 1; min-width: 0; }
+
+/* Unread count pill (messages button, negotiation panel) */
+.msg-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 6px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+/* Poster's list of carrier conversations on one load */
+.neg-convo-list {
+  list-style: none;
+  margin: 4px 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.neg-convo {
+  width: 100%;
+  text-align: left;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.neg-convo:hover { border-color: var(--accent); }
+
+.neg-convo-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.neg-convo-preview {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Unread dot next to the Messages button in My Loads */
+.msg-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-block;
+  align-self: center;
+}
+
+/* ---------- Lane rate trend sparkline (drawer) ---------- */
+
+.lane-trend {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+  padding: 8px 10px 6px;
+  margin: 10px 0 2px;
+}
+
+.lane-trend-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.lane-trend-dir {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.lane-trend-dir.up { color: var(--green); }
+.lane-trend-dir.down { color: var(--amber); }
+
+.lane-trend-svg {
+  width: 100%;
+  height: 44px;
+  display: block;
+  color: var(--accent);
+}
+
+/* ---------- Rate carrier modal ---------- */
+
+.rate-modal {
+  width: min(360px, calc(100vw - 32px));
+}
+
+.rate-stars {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.rate-star {
+  border: none;
+  background: transparent;
+  font-size: 2rem;
+  line-height: 1;
+  color: var(--faint);
+  cursor: pointer;
+  padding: 4px 6px;
+  transition: color 0.1s ease, transform 0.08s ease;
+}
+
+.rate-star.lit { color: var(--amber); }
+.rate-star:active { transform: scale(1.2); }
+
+.rate-comment {
+  width: 100%;
+  margin: 0 0 10px;
+  resize: vertical;
+}
+
+.rate-done { text-align: center; padding: 8px 4px 4px; }
+
+.rate-done-stars {
+  color: var(--amber);
+  font-size: 1.8rem;
+  letter-spacing: 0.2em;
+  margin-bottom: 6px;
+}
+
+@media (max-width: 480px) {
+  .negotiation-compose { flex-wrap: wrap; }
+  .neg-amount { width: 100%; }
+  .neg-text { flex: 1 1 auto; }
+  .negotiation-compose .btn-green { flex: 0 0 auto; }
 }

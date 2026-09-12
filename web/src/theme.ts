@@ -11,6 +11,19 @@ function readInitial(): Theme {
 
 let current: Theme = readInitial();
 
+/** Browser chrome (status bar, tab strip) matches the app surface. */
+const META_BG: Record<Theme, string> = { dark: '#111417', light: '#f4f4f2' };
+
+function syncMetaColor(theme: Theme): void {
+  let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (!meta) {
+    meta = document.createElement('meta');
+    meta.setAttribute('name', 'theme-color');
+    document.head.appendChild(meta);
+  }
+  meta.setAttribute('content', META_BG[theme]);
+}
+
 export function currentTheme(): Theme {
   return current;
 }
@@ -22,6 +35,7 @@ export function getTheme(): Theme {
 export function applyTheme(theme: Theme): void {
   current = theme;
   document.documentElement.dataset.theme = theme;
+  syncMetaColor(theme);
   try {
     localStorage.setItem(STORAGE_KEY, theme);
   } catch {
@@ -47,3 +61,6 @@ export function subscribeTheme(listener: Listener): () => void {
     listeners.delete(listener);
   };
 }
+
+// Align the browser chrome with whichever theme the inline boot script set.
+syncMetaColor(current);

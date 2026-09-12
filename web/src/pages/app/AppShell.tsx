@@ -299,7 +299,7 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
   pullYRef.current = pullY;
   useEffect(() => {
     const canPull = () =>
-      window.matchMedia('(max-width: 860px)').matches &&
+      window.matchMedia('(max-width: 960px)').matches &&
       !document.querySelector('.nav-sheet-root, .modal-backdrop') &&
       (document.scrollingElement?.scrollTop ?? 0) <= 0;
 
@@ -371,7 +371,7 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
     const onStart = (e: TouchEvent) => {
       swipe.active = false;
       if (e.touches.length !== 1) return;
-      if (!window.matchMedia('(max-width: 860px)').matches) return;
+      if (!window.matchMedia('(max-width: 960px)').matches) return;
       if (document.querySelector('.nav-sheet-root, .modal-backdrop')) return;
       if (!allowed(e.target)) return;
       swipe.x = e.touches[0].clientX;

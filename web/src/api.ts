@@ -3,6 +3,10 @@
 // Requests are made with a RELATIVE path (e.g. "/auth/login"). In development
 // Vite proxies those calls to http://localhost:4000 (see vite.config.ts).
 
+import { purgeOfflineCache } from './offline-cache';
+
+export { purgeOfflineCache };
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -66,7 +70,8 @@ function clearTokens(): void {
 
 /**
  * Signs out everywhere: best-effort revocation of the refresh token on the
- * server (so the session cannot be replayed), then clears local storage.
+ * server (so the session cannot be replayed), then clears local storage and
+ * the cached authenticated responses.
  */
 export async function signOut(): Promise<void> {
   const refreshToken = getRefreshToken();
@@ -82,6 +87,7 @@ export async function signOut(): Promise<void> {
     }
   }
   clearTokens();
+  await purgeOfflineCache();
 }
 
 export interface TokenUser {
@@ -197,7 +203,10 @@ export async function api<T>(
       if (fresh) headers['Authorization'] = `Bearer ${fresh}`;
       res = await doFetch();
     }
-    if (!refreshed) clearTokens();
+    if (!refreshed) {
+      clearTokens();
+      void purgeOfflineCache();
+    }
   }
 
   const text = await res.text();

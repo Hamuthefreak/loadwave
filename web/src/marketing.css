@@ -175,7 +175,7 @@
 
 .ld-hero {
   padding: 176px 0 0;
-  background-image: radial-gradient(820px 480px at 50% -10%, rgba(245, 121, 58, 0.12), transparent 62%);
+  background-image: radial-gradient(820px 480px at 50% -10%, rgba(127, 201, 71, 0.12), transparent 62%);
   background-color: var(--page);
   overflow: hidden;
 }
@@ -297,7 +297,7 @@
   position: absolute;
   inset: 8% 12% auto;
   height: 62%;
-  background: radial-gradient(closest-side, rgba(245, 121, 58, 0.32), rgba(245, 121, 58, 0.06) 62%, transparent 75%);
+  background: radial-gradient(closest-side, rgba(127, 201, 71, 0.32), rgba(127, 201, 71, 0.06) 62%, transparent 75%);
   filter: blur(18px);
   pointer-events: none;
 }
@@ -455,8 +455,8 @@
   left: -40px;
   right: -40px;
   height: 44%;
-  background: radial-gradient(closest-side at 30% 30%, rgba(245, 121, 58, 0.5), transparent 70%),
-    radial-gradient(closest-side at 78% 20%, rgba(245, 121, 58, 0.4), transparent 70%);
+  background: radial-gradient(closest-side at 30% 30%, rgba(127, 201, 71, 0.5), transparent 70%),
+    radial-gradient(closest-side at 78% 20%, rgba(127, 201, 71, 0.4), transparent 70%);
   filter: blur(14px);
   z-index: 1;
   pointer-events: none;
@@ -572,7 +572,7 @@
   left: -30px;
   right: 30px;
   height: 70%;
-  background: radial-gradient(closest-side at 20% 20%, rgba(245, 121, 58, 0.4), transparent 70%),
+  background: radial-gradient(closest-side at 20% 20%, rgba(127, 201, 71, 0.4), transparent 70%),
     radial-gradient(closest-side at 85% 15%, rgba(79, 138, 31, 0.22), transparent 70%);
   filter: blur(16px);
   pointer-events: none;
@@ -661,7 +661,7 @@
 }
 
 .ld-photo-glow-dark {
-  background: radial-gradient(closest-side at 20% 20%, rgba(245, 121, 58, 0.45), transparent 70%);
+  background: radial-gradient(closest-side at 20% 20%, rgba(127, 201, 71, 0.45), transparent 70%);
 }
 
 .ld-number-badge {
@@ -720,7 +720,7 @@
   position: absolute;
   color: var(--orange);
   transform: translate(-50%, -100%);
-  filter: drop-shadow(0 6px 12px rgba(245, 121, 58, 0.4));
+  filter: drop-shadow(0 6px 12px rgba(127, 201, 71, 0.4));
   animation: ld-pulse 2.4s infinite;
 }
 
@@ -781,14 +781,14 @@
   color: #fff;
   display: grid;
   place-items: center;
-  box-shadow: 0 8px 18px rgba(245, 121, 58, 0.4);
+  box-shadow: 0 8px 18px rgba(127, 201, 71, 0.4);
 }
 
 /* ---------- Tracking CTA — dark split ---------- */
 
 .ld-cta {
   background:
-    radial-gradient(700px 400px at 8% 0%, rgba(245, 121, 58, 0.16), transparent 60%),
+    radial-gradient(700px 400px at 8% 0%, rgba(127, 201, 71, 0.16), transparent 60%),
     linear-gradient(180deg, #14181c, #101316);
   padding: 100px 0;
 }
@@ -1634,7 +1634,7 @@
   margin: 0;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 960px) {
   .ld-auth-shell {
     grid-template-columns: 1fr;
   }
@@ -2119,7 +2119,7 @@ section[id] {
 .ld-lease-chips a:hover {
   border-color: var(--orange);
   color: var(--orange);
-  box-shadow: 0 8px 20px rgba(245, 121, 58, 0.14);
+  box-shadow: 0 8px 20px rgba(127, 201, 71, 0.14);
 }
 
 .ld-map-foot {
@@ -2164,7 +2164,7 @@ section[id] {
 /* Final CTA banner */
 
 .ld-final {
-  background-image: radial-gradient(700px 380px at 85% 0%, rgba(245, 121, 58, 0.1), transparent 60%);
+  background-image: radial-gradient(700px 380px at 85% 0%, rgba(127, 201, 71, 0.1), transparent 60%);
   background-color: var(--page);
   padding: 70px 0;
   border-top: 1px solid var(--line);
@@ -2238,7 +2238,7 @@ section[id] {
 
 .ld-newsletter-form input:focus {
   border-color: var(--orange);
-  box-shadow: 0 0 0 3px rgba(245, 121, 58, 0.2);
+  box-shadow: 0 0 0 3px rgba(127, 201, 71, 0.2);
 }
 
 .ld-newsletter-done {
@@ -2466,8 +2466,8 @@ section[id] {
 }
 
 @keyframes ld-map-play {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 121, 58, 0.35); }
-  50%      { box-shadow: 0 0 0 10px rgba(245, 121, 58, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(127, 201, 71, 0.35); }
+  50%      { box-shadow: 0 0 0 10px rgba(127, 201, 71, 0); }
 }
 
 /* Respect users who prefer reduced motion */
@@ -2548,7 +2548,7 @@ section[id] {
 }
 
 .theme-toggle:focus-visible {
-  outline: 2px solid var(--orange, #f5793a);
+  outline: 2px solid var(--accent, #67b02f);
   outline-offset: 2px;
 }
 
@@ -2666,7 +2666,7 @@ html[data-theme='dark'] .ld-mkt .ld-pill-light {
 
 html[data-theme='dark'] .ld-mkt .ld-pill-light:hover {
   background: #2a3138;
-  border-color: rgba(245, 121, 58, 0.55);
+  border-color: rgba(103, 176, 47, 0.55);
 }
 
 html[data-theme='dark'] .ld-mkt .ld-feature-card:hover {

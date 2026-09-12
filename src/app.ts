@@ -62,6 +62,11 @@ import { registerIftaRoutes } from './modules/ifta/ifta.routes';
 import { PrismaLoadBoardStore } from './modules/board/board.store';
 import { LoadBoardService } from './modules/board/board.service';
 import { registerBoardRoutes } from './modules/board/board.routes';
+import { registerMessageRoutes } from './modules/messages/messages.routes';
+import { PrismaMessageService } from './modules/messages/messages.service';
+import { PrismaRatingRepo } from './modules/ratings/rating.repo';
+import { PrismaRatingService } from './modules/ratings/rating.service';
+import { registerRatingRoutes } from './modules/ratings/rating.routes';
 import { registerDetentionRoutes } from './modules/detention/detention.routes';
 import { PrismaDetentionService } from './modules/detention/detention.service';
 import { runRecurrenceSweep } from './modules/recurring/recurring.service';
@@ -117,6 +122,8 @@ export interface AppDeps {
   ifta: IftaService;
   geometry: PostgisRouteGeometryService;
   board: LoadBoardService;
+  messages: PrismaMessageService;
+  ratings: PrismaRatingService;
   trucks: TruckService;
   geo: PrismaGeoService;
   market: PrismaMarketService;
@@ -161,6 +168,9 @@ function buildBaseServices(
   const notifications =
     overrides.notifications ??
     new PrismaNotificationService(prisma, email, tenantEmail(prisma));
+  const messages =
+    overrides.messages ?? new PrismaMessageService(prisma, notifications);
+  const ratings = overrides.ratings ?? new PrismaRatingService(new PrismaRatingRepo(prisma));
   const market = overrides.market ?? new PrismaMarketService(prisma);
   const searches =
     overrides.searches ??
@@ -182,6 +192,8 @@ function buildBaseServices(
   const unlocked: Omit<AppDeps, 'auth' | 'team'> = {
     prisma,
     bus,
+    messages,
+    ratings,
     tenants: overrides.tenants ?? new PrismaTenantService(prisma),
     drivers: overrides.drivers ?? new PrismaDriverService(prisma),
     assets: overrides.assets ?? new PrismaAssetService(prisma),
@@ -341,6 +353,8 @@ function registerRoutes(app: FastifyInstance, deps: AppDeps, prisma: PrismaClien
   registerInvoicingRoutes(app, { loads: deps.loads, invoices: deps.invoices });
   registerIftaRoutes(app, { prisma, bus: deps.bus, fuel: deps.fuel, ifta: deps.ifta });
   registerBoardRoutes(app, { board: deps.board });
+  registerMessageRoutes(app, { messages: deps.messages });
+  registerRatingRoutes(app, { ratings: deps.ratings });
   registerTruckRoutes(app, { trucks: deps.trucks });
   registerGeoRoutes(app, { geo: deps.geo });
   registerMarketRoutes(app, { market: deps.market });

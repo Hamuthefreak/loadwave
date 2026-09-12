@@ -30,4 +30,18 @@ export function registerMarketRoutes(app: FastifyInstance, deps: MarketModuleDep
       return deps.market.laneHistory(Number.isFinite(days) ? days : 30);
     },
   );
+
+  // Per-lane daily average-rate trend for rate analytics (drawer sparkline).
+  app.get<{ Params: { origin: string; destination: string }; Querystring: { days?: string } }>(
+    '/api/market/lanes/:origin/:destination/trend',
+    { preHandler: app.authenticate },
+    async (request) => {
+      const days = Number(request.query.days ?? 30);
+      return deps.market.laneTrend(
+        request.params.origin,
+        request.params.destination,
+        Number.isFinite(days) ? Math.min(Math.max(days, 7), 120) : 30,
+      );
+    },
+  );
 }

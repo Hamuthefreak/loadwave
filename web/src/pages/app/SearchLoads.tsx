@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api';
 import { Badge, Spinner, Modal, lockScroll } from '../../components/ui';
 import { SaveSearchModal } from '../../components/SaveSearchModal';
-import { daysLabel, daysUntil, km, money, perMile, regionLabel, shortDate, timeAgo } from '../../utils/format';
+import { daysLabel, daysUntil, km, money, moneyShort, perMile, regionLabel, shortDate, timeAgo } from '../../utils/format';
 import {
   EQUIPMENT_TYPES,
   equipmentLabel,
@@ -370,7 +370,7 @@ export function LoadCard({
 }) {
   const rate = load.freightAmountBase ?? load.freightAmountTransaction;
   const taken = load.marketplaceStatus === 'BOOKED';
-  const verified = Boolean(load.postedByMcNumber || load.postedByUsdotNumber);
+  const verified = load.postedByVerified ?? Boolean(load.postedByMcNumber || load.postedByUsdotNumber);
   const perMileVal = perMile(rate, load.distanceKmEstimate);
   // Rate-my-lane: how this load's $/mile compares to the marketplace average
   // for the same lane over the last 90 days.
@@ -424,6 +424,15 @@ export function LoadCard({
       </div>
       <div className="carrier-row">
         <span className="carrier-name">{load.postedByTenantName}</span>
+        {(load.postedByRatingCount ?? 0) > 0 && load.postedByRatingAvg != null && (
+          <span
+            className="rating-chip"
+            title="Average rating from carriers who completed loads with this poster"
+          >
+            ★ {Number(load.postedByRatingAvg).toFixed(1)}
+            <small>({load.postedByRatingCount})</small>
+          </span>
+        )}
         {verified ? (
           <Badge tone="green">
             <span className="badge-dot" /> Verified{load.postedByMcNumber ? ` · ${/^(MC|USDOT)/i.test(load.postedByMcNumber) ? load.postedByMcNumber : `MC ${load.postedByMcNumber}`}` : ''}
@@ -598,9 +607,175 @@ function CompareView({
   );
 }
 
+/**
+ * Quick "what does this actually pay?" estimate in the drawer: diesel cost for
+ * the linehaul at the user's fuel price and economy. Values persist on the
+ * device so repeat checks are zero-tap; nothing is sent to the server.
+ */
+function FuelNetEstimator({
+  rate,
+  currency,
+  distanceKm,
+}: {
+  rate: string | null;
+  currency: string;
+  distanceKm: string | null;
+}) {
+  const isCad = currency === 'CAD';
+  const [open, setOpen] = useState(false);
+  const [price, setPrice] = useState<string>(() => {
+    try { return localStorage.getItem('loadwave.fuelPrice') ?? ''; } catch { return ''; }
+  });
+  const [efficiency, setEfficiency] = useState<string>(() => {
+    try {
+      return localStorage.getItem(isCad ? 'loadwave.kmL' : 'loadwave.mpg') ?? (isCad ? '2.6' : '6.0');
+    } catch { return isCad ? '2.6' : '6.0'; }
+  });
+
+  const numRate = Number(rate ?? 0);
+  const numKm = Number(distanceKm ?? 0);
+  const p = Number(price);
+  const eff = Number(efficiency);
+
+  const litres = isCad && eff > 0 ? numKm / eff : null;
+  const gallons = !isCad && eff > 0 ? (numKm * 0.621371) / eff : null;
+  const qty = isCad ? litres : gallons;
+  const unit = isCad ? 'L' : 'gal';
+  const fuelCost = qty != null && p > 0 ? qty * p : null;
+  const net = fuelCost != null ? numRate - fuelCost : null;
+  const netPerKm = net != null && numKm > 0 ? net / numKm : null;
+
+  if (!numRate || !numKm) return null;
+
+  const persist = (key: string, val: string) => {
+    try { localStorage.setItem(key, val); } catch { /* private mode */ }
+  };
+
+  return (
+    <div className="net-est">
+      <button type="button" className="net-est-toggle" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <span aria-hidden>⛽</span>
+        {net != null ? (
+          <span>
+            ≈ {money(net.toFixed(2), currency)} after diesel
+            {netPerKm != null && <small> · {money(netPerKm.toFixed(2), currency)}/km</small>}
+          </span>
+        ) : (
+          <span>Estimate fuel cost &amp; net pay</span>
+        )}
+        <span className="net-est-caret" aria-hidden>{open ? '▴' : '▾'}</span>
+      </button>
+      {open && (
+        <div className="net-est-body">
+          <div className="net-est-grid">
+            <label>
+              <span>Fuel price ({isCad ? '$/L' : '$/gal'})</span>
+              <input
+                inputMode="decimal"
+                value={price}
+                onChange={(e) => { setPrice(e.target.value); persist('loadwave.fuelPrice', e.target.value); }}
+                placeholder={isCad ? '1.65' : '3.80'}
+              />
+            </label>
+            <label>
+              <span>Fuel economy ({isCad ? 'km/L' : 'mpg'})</span>
+              <input
+                inputMode="decimal"
+                value={efficiency}
+                onChange={(e) => { setEfficiency(e.target.value); persist(isCad ? 'loadwave.kmL' : 'loadwave.mpg', e.target.value); }}
+                placeholder={isCad ? '2.6' : '6.0'}
+              />
+            </label>
+          </div>
+          {fuelCost != null && net != null ? (
+            <dl className="net-est-lines">
+              <div>
+                <dt>Diesel for {Math.round(qty ?? 0)} {unit}</dt>
+                <dd>−{money(fuelCost.toFixed(2), currency)}</dd>
+              </div>
+              <div className="net-est-total">
+                <dt>Estimated net</dt>
+                <dd>{money(net.toFixed(2), currency)}</dd>
+              </div>
+            </dl>
+          ) : (
+            <p className="muted small" style={{ margin: '4px 0 0' }}>
+              Enter your fuel price to see the estimate. Your numbers stay on this device.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Copies a compact public share text for this load to the clipboard. */
+async function shareLoad(load: BoardLoad): Promise<'shared' | 'copied'> {
+  const rate = load.freightAmountTransaction ?? load.freightAmountBase;
+  const text = [
+    `${regionLabel(load.originRegion)} → ${regionLabel(load.destinationRegion)} — ${load.distanceKmEstimate ? km(load.distanceKmEstimate) : 'distance n/a'}`,
+    `${load.equipmentType ? equipmentLabel(load.equipmentType) + ' · ' : ''}${rate ? money(Number(rate), load.freightCurrency) : 'rate on request'}`,
+    `Pickup ${load.pickupDate ? shortDate(load.pickupDate) : 'flexible'} · Loadwave board`,
+  ].join('\n');
+  if (navigator.share) {
+    await navigator.share({ title: 'Load on Loadwave', text });
+    return 'shared';
+  }
+  await navigator.clipboard.writeText(text);
+  return 'copied';
+}
+
+/** Days × avg-rate sparkline for the load's lane (marketplace history). */
+function LaneTrend({ origin, destination }: { origin: string; destination: string }) {
+  const [points, setPoints] = useState<Array<{ statDate: string; avgRate: number | null }> | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api<{ lane: Array<{ statDate: string; avgRate: number | null }> }>(
+      `/api/market/lanes/${origin}/${destination}/trend?days=30`,
+    )
+      .then((res) => {
+        if (alive) setPoints(res.lane ?? []);
+      })
+      .catch(() => {
+        if (alive) setPoints([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [origin, destination]);
+
+  if (points === null) return null;
+  const samples = points.filter((p) => p.avgRate != null) as Array<{ statDate: string; avgRate: number }>;
+  if (samples.length < 2) return null; // not enough history to be meaningful
+
+  const w = 240;
+  const h = 44;
+  const vals = samples.map((s) => s.avgRate);
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const span = max - min || 1;
+  const step = w / (samples.length - 1);
+  const path = samples.map((s, i) => `${i === 0 ? 'M' : 'L'}${(i * step).toFixed(1)},${(h - 4 - ((s.avgRate - min) / span) * (h - 8)).toFixed(1)}`).join(' ');
+  const rising = vals[vals.length - 1] >= vals[0];
+
+  return (
+    <div className="lane-trend">
+      <div className="lane-trend-head">
+        <span className="muted small">30-day lane rate trend</span>
+        <span className={`lane-trend-dir ${rising ? 'up' : 'down'}`}>{rising ? '▲' : '▼'} {moneyShort(min) === moneyShort(max) ? moneyShort(min) : `${moneyShort(min)}–${moneyShort(max)}`}</span>
+      </div>
+      <svg viewBox={`0 0 ${w} ${h}`} className="lane-trend-svg" aria-hidden>
+        <path d={path} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    </div>
+  );
+}
+
 function DetailDrawer({ load, onClose, onBook }: { load: BoardLoad; onClose: () => void; onBook: () => void }) {
   const rate = load.freightAmountBase ?? load.freightAmountTransaction;
-  const verified = Boolean(load.postedByMcNumber || load.postedByUsdotNumber);
+  const verified = load.postedByVerified ?? Boolean(load.postedByMcNumber || load.postedByUsdotNumber);
+  const [copied, setCopied] = useState(false);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -617,10 +792,14 @@ function DetailDrawer({ load, onClose, onBook }: { load: BoardLoad; onClose: () 
       <aside className="drawer" onClick={(e) => e.stopPropagation()}>
         <div className="drawer-head">
           <h3>Load details</h3>
-          <button className="icon-btn" onClick={onClose}>✕</button>
+          <div className="drawer-head-actions">
+            <button className="icon-btn" title="Share this load" onClick={() => { void shareLoad(load).then((r) => { if (r === 'copied') { setCopied(true); window.setTimeout(() => setCopied(false), 1500); } }).catch(() => {}); }}>{copied ? '✓' : '📤'}</button>
+            <button className="icon-btn" onClick={onClose}>✕</button>
+          </div>
         </div>
         <div className="drawer-body">
           <LaneXL load={load} />
+          <LaneTrend origin={load.originRegion} destination={load.destinationRegion} />
           <dl className="detail-list">
             <DetailRow label="Rate" value={money(rate, load.freightCurrency)} strong />
             <DetailRow label="Rate per mile" value={perMile(rate, load.distanceKmEstimate) ?? '—'} />
@@ -631,12 +810,19 @@ function DetailDrawer({ load, onClose, onBook }: { load: BoardLoad; onClose: () 
             <DetailRow label="Cross-border" value={load.isInternational ? 'Yes' : 'No'} />
             <DetailRow label="Posted" value={timeAgo(load.createdAt)} />
           </dl>
+          <FuelNetEstimator rate={rate} currency={load.freightCurrency} distanceKm={load.distanceKmEstimate} />
+          {load.marketplaceStatus === 'PUBLIC' && <NegotiationPanel loadId={load.id} posterName={load.postedByTenantName} loadRate={rate ? Number(rate) : null} currency={load.freightCurrency} />}
           <div className="drawer-carrier">
             <div className="carrier-name">{load.postedByTenantName}</div>
             {verified ? (
               <Badge tone="green"><span className="badge-dot" /> Verified carrier · {[/^(MC|USDOT)/i.test(load.postedByMcNumber ?? '') ? load.postedByMcNumber : load.postedByMcNumber ? `MC ${load.postedByMcNumber}` : null, load.postedByUsdotNumber].filter(Boolean).join(' / ')}</Badge>
             ) : (
               <Badge tone="gray">New carrier</Badge>
+            )}
+            {(load.postedByRatingCount ?? 0) > 0 && load.postedByRatingAvg != null && (
+              <div className="rating-chip" style={{ marginTop: 6 }}>
+                ★ {Number(load.postedByRatingAvg).toFixed(1)} from {load.postedByRatingCount} carrier rating{load.postedByRatingCount === 1 ? '' : 's'}
+              </div>
             )}
           </div>
         </div>
@@ -713,4 +899,153 @@ export function BookingModal({
       )}
     </Modal>
   );
+}
+/** Rate negotiation: a compact thread between this carrier and the poster. */
+function NegotiationPanel({
+  loadId,
+  posterName,
+  loadRate,
+  currency,
+}: {
+  loadId: string;
+  posterName: string;
+  loadRate: number | null;
+  currency: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [thread, setThread] = useState<MessageRow[]>([]);
+  const [unread, setUnread] = useState(0);
+  const [draft, setDraft] = useState('');
+  const [amount, setAmount] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Opening the thread marks the poster's replies as read, so clear the badge.
+  useEffect(() => {
+    if (!open) return;
+    api<{ thread: MessageRow[] }>(`/api/board/loads/${loadId}/messages`)
+      .then((res) => {
+        setThread(res.thread ?? []);
+        setUnread(0);
+      })
+      .catch(() => setThread([]));
+  }, [open, loadId]);
+
+  // Unread replies from the poster on this load (carrier-side badge).
+  useEffect(() => {
+    let alive = true;
+    api<{ threads: Array<{ loadId: string; unread: number }> }>('/api/messages/unread')
+      .then((res) => {
+        if (!alive) return;
+        setUnread((res.threads ?? []).find((t) => t.loadId === loadId)?.unread ?? 0);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [loadId]);
+
+  const send = async () => {
+    if (busy) return;
+    const body = draft.trim();
+    const amt = amount.trim() ? Number(amount.trim()) : undefined;
+    if (!body && amt == null) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await api(`/api/board/loads/${loadId}/messages`, {
+        method: 'POST',
+        body: { body: body || undefined, proposedAmount: amt },
+      });
+      setDraft('');
+      setAmount('');
+      const res = await api<{ thread: MessageRow[] }>(`/api/board/loads/${loadId}/messages`);
+      setThread(res.thread ?? []);
+      setUnread(0);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'could not send');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="negotiation">
+      {!open ? (
+        <button type="button" className="btn-ghost btn-block" onClick={() => setOpen(true)}>
+          💬 Message {posterName} or offer a rate
+          {unread > 0 && <span className="msg-count">{unread}</span>}
+        </button>
+      ) : (
+        <div className="negotiation-open">
+          <div className="negotiation-head">
+            <span className="muted small">Rate negotiation — {posterName}</span>
+            <button type="button" className="icon-btn" onClick={() => setOpen(false)} aria-label="Close negotiation">✕</button>
+          </div>
+          <div className="negotiation-thread">
+            {thread.length === 0 && (
+              <p className="muted small" style={{ margin: '4px 0 8px' }}>
+                Ask about the lane, or offer your rate — the poster gets a notification.
+              </p>
+            )}
+            {thread.map((m) => (
+              <div key={m.id} className={`msg ${m.mine ? 'mine' : 'theirs'}`}>
+                {m.kind === 'RATE_PROPOSAL' && m.proposedAmount != null && (
+                  <div className={`msg-offer ${Number(m.proposedAmount) > (loadRate ?? 0) ? 'over' : 'under'}`}>
+                    {money(m.proposedAmount, m.currency ?? currency)}
+                    {loadRate != null && Number(m.proposedAmount) !== loadRate && (
+                      <span className="muted small"> {Number(m.proposedAmount) > loadRate ? 'above' : 'below'} asking {money(loadRate, currency)}</span>
+                    )}
+                  </div>
+                )}
+                {m.body && <div className="msg-body">{m.body}</div>}
+                <div className="msg-meta muted small">{m.authorLabel} · {timeAgo(m.createdAt)}</div>
+              </div>
+            ))}
+          </div>
+          {err && <p className="app-crash-msg" style={{ margin: '6px 0' }}>{err}</p>}
+          <div className="negotiation-compose">
+            <input
+              className="neg-amount"
+              type="number"
+              inputMode="decimal"
+              min="1"
+              step="1"
+              placeholder={loadRate != null ? `Offer (${currency})` : 'Offer amount'}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              aria-label="Proposed amount"
+            />
+            <input
+              className="neg-text"
+              type="text"
+              inputMode="text"
+              placeholder="Add a note…"
+              maxLength={2000}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void send();
+              }}
+              aria-label="Message"
+            />
+            <button type="button" className="btn-green" onClick={() => void send()} disabled={busy || (!draft.trim() && !amount.trim())}>
+              Send
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface MessageRow {
+  id: string;
+  mine: boolean;
+  authorLabel: string;
+  kind: 'MESSAGE' | 'RATE_PROPOSAL';
+  body: string | null;
+  proposedAmount: string | null;
+  currency: string | null;
+  createdAt: string;
 }

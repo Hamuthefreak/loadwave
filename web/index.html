@@ -6,12 +6,17 @@
     <script>
       // Apply the saved theme before first paint so neither mode flashes.
       // Always sets the attribute explicitly — the app stylesheet keys its
-      // light palette off html[data-theme='light'].
+      // light palette off html[data-theme='light']. Falls back to the OS
+      // preference for first-time visitors (default: the app's dark skin).
       (function () {
-        var t = 'light';
+        var t = 'dark';
         try {
-          if (localStorage.getItem('lb-theme') === 'dark') t = 'dark';
-        } catch (e) {}
+          var s = localStorage.getItem('lb-theme');
+          if (s === 'dark' || s === 'light') t = s;
+          else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) t = 'light';
+        } catch (e) {
+          if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) t = 'light';
+        }
         document.documentElement.dataset.theme = t;
       })();
     </script>

@@ -7,6 +7,27 @@ export const DOCUMENT_KINDS: DocumentKind[] = ['POD', 'BOL', 'DAMAGE', 'OTHER'];
 
 export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024; // 10 MB
 
+/**
+ * Types we are willing to serve back with their own Content-Type: POD photos
+ * and BOL paperwork. Everything else is stored (and served) as an opaque
+ * download — an uploaded `text/html` or `image/svg+xml` must never be able to
+ * execute in a browser, however it reaches the user.
+ */
+export const ALLOWED_DOCUMENT_MIME: readonly string[] = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+  'application/pdf',
+];
+
+/** Maps an uploaded/looked-up MIME type onto a safe one. */
+export function normalizeDocumentMime(raw: string | null | undefined): string {
+  const value = (raw ?? '').split(';')[0].trim().toLowerCase();
+  return ALLOWED_DOCUMENT_MIME.includes(value) ? value : 'application/octet-stream';
+}
+
 export interface LoadDocumentRow {
   id: string;
   tenantId: string;
@@ -100,7 +121,7 @@ export class PrismaLoadDocumentService implements LoadDocumentService {
         driverId: input.driverId ?? null,
         kind: input.kind,
         fileName: input.fileName.slice(0, 255),
-        mimeType: input.mimeType || 'application/octet-stream',
+        mimeType: normalizeDocumentMime(input.mimeType),
         sizeBytes: data.length,
         data,
         uploadedById: input.uploadedById ?? null,

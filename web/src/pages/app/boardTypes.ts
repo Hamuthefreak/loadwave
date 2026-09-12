@@ -25,6 +25,10 @@ export interface BoardLoad {
   /** Lane benchmark from the marketplace (rate-my-lane). */
   laneAvgPerMile?: number | null;
   laneSamples?: number;
+  /** Trust signals from the posting carrier. */
+  postedByRatingAvg?: number | null;
+  postedByRatingCount?: number;
+  postedByVerified?: boolean;
 }
 
 export interface TruckRow {

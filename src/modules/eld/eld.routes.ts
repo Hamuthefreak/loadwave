@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { unauthorized } from '../../utils/errors';
 import type { EldBatchInput, EldIngestService } from './eld.ingest.service';
@@ -49,13 +50,20 @@ interface WebhookBody {
   buildRouteSegments?: boolean;
 }
 
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
+
 function verifyWebhook(req: FastifyRequest, secret: string): void {
   const header = (req.headers['x-eld-webhook-secret'] ?? req.headers['webhook-secret']) as string | undefined;
   if (!secret) {
     // Secret not configured: endpoint disabled.
     throw unauthorized('ELD webhooks are not enabled on this instance');
   }
-  if (!header || header !== secret) throw unauthorized('invalid ELD webhook secret');
+  if (!header || !safeEqual(header, secret)) throw unauthorized('invalid ELD webhook secret');
 }
 
 export function registerEldRoutes(app: FastifyInstance, deps: EldModuleDeps): void {

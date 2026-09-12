@@ -31,27 +31,28 @@ model Tenant {
   requireTwoFactor Boolean  @default(false)
   createdAt        DateTime @default(now())
 
-  users          User[]
-  drivers       Driver[]
-  assets        Asset[]
-  hosLogs       HosLog[]
-  routePoints   RoutePoint[]
-  fuelTxs       FuelTransaction[]
-  invoices      Invoice[]
-  loads         Load[]
-  loadDocuments LoadDocument[]
-  bookings      Load[]               @relation("LoadBooking")
-  truckPosts    TruckPost[]
-  truckBookings TruckPost[]          @relation("TruckBooking")
-  routeSegments RouteSegment[]
-  iftaSummaries IftaQuarterSummary[]
-  fxRates       FxRate[]
-  savedSearches SavedSearch[]
-  notifications Notification[]
-  settings      TenantSetting[]
-  ratingsReceived CarrierRating[] @relation("RatedTenant")
-  ratingsGiven    CarrierRating[] @relation("RaterTenant")
-  teamInvites   TeamInvite[]
+  users           User[]
+  drivers         Driver[]
+  assets          Asset[]
+  hosLogs         HosLog[]
+  routePoints     RoutePoint[]
+  fuelTxs         FuelTransaction[]
+  invoices        Invoice[]
+  loads           Load[]
+  loadDocuments   LoadDocument[]
+  bookings        Load[]               @relation("LoadBooking")
+  truckPosts      TruckPost[]
+  truckBookings   TruckPost[]          @relation("TruckBooking")
+  routeSegments   RouteSegment[]
+  iftaSummaries   IftaQuarterSummary[]
+  fxRates         FxRate[]
+  savedSearches   SavedSearch[]
+  notifications   Notification[]
+  settings        TenantSetting[]
+  ratingsReceived CarrierRating[]      @relation("RatedTenant")
+  ratingsGiven    CarrierRating[]      @relation("RaterTenant")
+  loadMessages    LoadMessage[]        @relation("LoadMessageAuthor")
+  teamInvites     TeamInvite[]
 }
 
 enum UserRole {
@@ -78,12 +79,12 @@ model User {
   twoFactorRecoveryCodes String?
   // Hashed browser fingerprints of devices this account has signed in from;
   // a sign-in from an unknown fingerprint fires a "new device" alert.
-  knownDevices String[] @default([])
+  knownDevices           String[] @default([])
 
-  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  refreshTokens  RefreshToken[]
-  passwordResets PasswordResetToken[]
-  notifications  Notification[]
+  tenant            Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  refreshTokens     RefreshToken[]
+  passwordResets    PasswordResetToken[]
+  notifications     Notification[]
   pushSubscriptions PushSubscription[]
 
   @@index([tenantId])
@@ -176,13 +177,12 @@ model LoadDocument {
   uploadedById String?
   createdAt    DateTime @default(now())
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  load   Load   @relation(fields: [loadId], references: [id], onDelete: Cascade)
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  load   Load    @relation(fields: [loadId], references: [id], onDelete: Cascade)
   driver Driver? @relation(fields: [driverId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, loadId, createdAt])
 }
-
 
 // ---------------------------------------------------------------------------
 // Drivers & Assets
@@ -435,11 +435,15 @@ model Load {
   freightAmountBase        Decimal? @db.Decimal(18, 6)
   exchangeRateToBase       Decimal  @default(1) @db.Decimal(18, 8)
 
-  isInternational             Boolean @default(false)
-  isContinuousInboundOutbound Boolean @default(false)
+  isInternational             Boolean   @default(false)
+  isContinuousInboundOutbound Boolean   @default(false)
   interliningPartner          String?
-  status                      String  @default("OPEN") // OPEN | ASSIGNED | IN_TRANSIT | DELIVERED | INVOICED
+  status                      String    @default("OPEN") // OPEN | ASSIGNED | IN_TRANSIT | DELIVERED | INVOICED
   deliveredAt                 DateTime?
+
+  // Rate negotiation thread between the posting carrier and a booking
+  // carrier (DAT-style "call the broker", but in-app and auditable).
+  negotiationMessages LoadMessage[]
 
   // Dispatch / assignment.
   assigneeDriverId String?
@@ -456,13 +460,13 @@ model Load {
 
   // Recurring loads: ISO weekdays the load should repeat on ("1,4" = Mon/Thu).
   // The recurrence worker clones the load on each scheduled day.
-  recurringDays     String?
-  nextRecurrenceAt  DateTime?
+  recurringDays    String?
+  nextRecurrenceAt DateTime?
 
-  tenant         Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  bookedByTenant Tenant?    @relation("LoadBooking", fields: [bookedByTenantId], references: [id])
-  assigneeDriver Driver?    @relation("AssignedDriver", fields: [assigneeDriverId], references: [id], onDelete: SetNull)
-  assigneeAsset  Asset?     @relation("AssignedAsset", fields: [assigneeAssetId], references: [id], onDelete: SetNull)
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bookedByTenant Tenant?          @relation("LoadBooking", fields: [bookedByTenantId], references: [id])
+  assigneeDriver Driver?          @relation("AssignedDriver", fields: [assigneeDriverId], references: [id], onDelete: SetNull)
+  assigneeAsset  Asset?           @relation("AssignedAsset", fields: [assigneeAssetId], references: [id], onDelete: SetNull)
   invoices       Invoice[]
   documents      LoadDocument[]
   stops          LoadStop[]
@@ -585,9 +589,9 @@ model Invoice {
   taxExemptReason TaxExemptReason?
 
   // Payment state for AR tracking: null paidAt = outstanding (pending).
-  paidAt             DateTime?
-  paidAmountTransaction Decimal? @db.Decimal(18, 6)
-  paidAmountBase     Decimal? @db.Decimal(18, 6)
+  paidAt                DateTime?
+  paidAmountTransaction Decimal?  @db.Decimal(18, 6)
+  paidAmountBase        Decimal?  @db.Decimal(18, 6)
 
   createdAt DateTime @default(now())
 
@@ -621,6 +625,35 @@ model DetentionEntry {
 
   @@index([tenantId, loadId])
   @@index([loadId, endedAt])
+}
+
+// In-app rate negotiation: messages between the posting carrier and a
+// carrier interested in the load. Both sides see one thread per load;
+// authorTenantId is implied by the author's session tenant.
+model LoadMessage {
+  id             String   @id @default(uuid())
+  loadId         String
+  authorTenantId String
+  body           String
+  kind           String   @default("MESSAGE") // MESSAGE | RATE_PROPOSAL | SYSTEM
+  proposedAmount Decimal? @db.Decimal(18, 6) // set when kind = RATE_PROPOSAL
+  currency       String? // snapshot at proposal time
+  readByPoster   Boolean  @default(false)
+  readByOther    Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  // Conversation key. The poster is the hub of a load, so every thread is
+  // scoped to the carrier it belongs to: messages authored by a carrier
+  // carry their own tenant id, poster replies carry the addressed carrier.
+  // Without this, two carriers negotiating one load would read each other.
+  counterpartyTenantId String?
+
+  load         Load   @relation(fields: [loadId], references: [id], onDelete: Cascade)
+  authorTenant Tenant @relation("LoadMessageAuthor", fields: [authorTenantId], references: [id], onDelete: Cascade)
+
+  @@index([loadId, counterpartyTenantId, createdAt])
+  @@index([authorTenantId, readByOther])
+  @@index([counterpartyTenantId, readByPoster])
 }
 
 // ---------------------------------------------------------------------------

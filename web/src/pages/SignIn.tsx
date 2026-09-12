@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import QRCode from 'qrcode';
-import { api, setTokens } from '../api';
+import { api, purgeOfflineCache, setTokens } from '../api';
 
 interface AuthResponse {
   user: { email: string; roles: string[] };
@@ -93,7 +93,11 @@ export default function SignIn() {
 
   const finish = (res: AuthResponse) => {
     setTokens(res.tokens.accessToken, res.tokens.refreshToken, rememberMe);
-    navigate(state?.from ?? '/app/dashboard', { replace: true });
+    // Drop whoever was signed in before on this device — the offline cache
+    // holds their loads and trips.
+    void purgeOfflineCache().finally(() => {
+      navigate(state?.from ?? '/app/dashboard', { replace: true });
+    });
   };
 
   // Second half of a 2FA sign-in: the password already checked out, this
