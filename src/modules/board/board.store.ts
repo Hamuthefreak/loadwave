@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import type { BoardFilters, MarketplaceStatus } from './board.policy';
+import type { TrustSignals } from '../trust/trust.service';
 
 export interface BoardLoadRow {
   id: string;
@@ -48,6 +49,8 @@ export interface BoardLoadRow {
   postedByRatingAvg?: number | null;
   postedByRatingCount?: number;
   postedByVerified?: boolean;
+  /** Authority, insurance, payment record and reports — stamped by the service. */
+  postedByTrust?: TrustSignals | null;
 }
 
 export interface LaneRateAverage {

@@ -7,6 +7,7 @@ import {
 } from './truck.policy';
 import type { TruckCreateInput, TruckRow, TruckStore } from './truck.store';
 import type { GeoService } from '../geo/geo.service';
+import type { TrustService } from '../trust/trust.service';
 import { haversineKm } from '../geo/haversine';
 
 export interface ITruckService {
@@ -20,12 +21,29 @@ export class TruckService implements ITruckService {
   constructor(
     private readonly store: TruckStore,
     private readonly geo: GeoService,
+    /** Optional: without it, equipment listings simply carry no trust chips. */
+    private readonly trust?: TrustService,
   ) {}
 
   async listPublic(tenantId: string, filters: TruckFilters): Promise<TruckRow[]> {
     const rows = await this.store.findPublic(tenantId, filters);
     const radius = await this.buildRadius(filters);
-    return rows.filter((r) => matchesTruckFilters(r, filters, radius ?? undefined));
+    const filtered = rows.filter((r) => matchesTruckFilters(r, filters, radius ?? undefined));
+    return this.withTrustSignals(filtered);
+  }
+
+  /** Same signals the load board stamps, batched per page. */
+  private async withTrustSignals(rows: TruckRow[]): Promise<TruckRow[]> {
+    if (!this.trust || rows.length === 0) return rows;
+    try {
+      const signals = await this.trust.signalsFor(rows.map((r) => r.tenantId));
+      for (const row of rows) {
+        row.postedByTrust = signals.get(row.tenantId) ?? null;
+      }
+    } catch {
+      // Advisory data: never let it break the equipment board.
+    }
+    return rows;
   }
 
   async listOwn(tenantId: string): Promise<TruckRow[]> {

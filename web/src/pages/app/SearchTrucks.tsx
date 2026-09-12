@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { api } from '../../api';
 import { Badge, Modal, Spinner } from '../../components/ui';
+import { TrustLine } from '../../components/TrustBadges';
 import { money, regionLabel, shortDate, timeAgo } from '../../utils/format';
 import { EQUIPMENT_TYPES, equipmentLabel, REGION_OPTIONS } from './regions';
 import type { TruckRow } from './boardTypes';
@@ -171,6 +172,7 @@ export default function SearchTrucks() {
                   <span className="carrier-name">{t.postedByTenantName}</span>
                   <Badge tone="gray">Listed {shortDate(t.createdAt)}</Badge>
                 </div>
+                <TrustLine trust={t.postedByTrust} />
                 <div className="load-foot">
                   {taken ? (
                     <Badge tone="gray"><span className="badge-dot" /> Booked</Badge>

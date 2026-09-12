@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api';
 import { Badge, Spinner, Modal, lockScroll } from '../../components/ui';
 import { SaveSearchModal } from '../../components/SaveSearchModal';
+import { ReportModal } from '../../components/ReportModal';
+import { TrustLine, TrustPanel } from '../../components/TrustBadges';
 import { daysLabel, daysUntil, km, money, moneyShort, perMile, regionLabel, shortDate, timeAgo } from '../../utils/format';
 import {
   EQUIPMENT_TYPES,
@@ -441,6 +443,7 @@ export function LoadCard({
           <Badge tone="gray">New carrier</Badge>
         )}
       </div>
+      <TrustLine trust={load.postedByTrust} />
       <div className="load-foot">
         {taken ? (
           <Badge tone="gray"><span className="badge-dot" /> Booked</Badge>
@@ -776,6 +779,8 @@ function DetailDrawer({ load, onClose, onBook, onBooked }: { load: BoardLoad; on
   const rate = load.freightAmountBase ?? load.freightAmountTransaction;
   const verified = load.postedByVerified ?? Boolean(load.postedByMcNumber || load.postedByUsdotNumber);
   const [copied, setCopied] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [reportFiled, setReportFiled] = useState(false);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -825,7 +830,22 @@ function DetailDrawer({ load, onClose, onBook, onBooked }: { load: BoardLoad; on
               </div>
             )}
           </div>
+          <TrustPanel trust={load.postedByTrust} onReport={() => setReporting(true)} />
+          {reportFiled && (
+            <p className="muted small">⚑ Report filed — platform review has it. Only the count is public.</p>
+          )}
         </div>
+        <ReportModal
+          open={reporting}
+          subjectTenantId={load.tenantId}
+          subjectName={load.postedByTenantName}
+          loadId={load.id}
+          onClose={() => setReporting(false)}
+          onFiled={() => {
+            setReportFiled(true);
+            setReporting(false);
+          }}
+        />
         <div className="drawer-foot">
           {load.marketplaceStatus === 'BOOKED' ? (
             <Badge tone="gray"><span className="badge-dot" /> Already booked</Badge>

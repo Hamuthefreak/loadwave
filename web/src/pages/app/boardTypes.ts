@@ -1,3 +1,5 @@
+import type { TrustSignals } from '../../components/TrustBadges';
+
 export interface BoardLoad {
   id: string;
   tenantId: string;
@@ -29,6 +31,8 @@ export interface BoardLoad {
   postedByRatingAvg?: number | null;
   postedByRatingCount?: number;
   postedByVerified?: boolean;
+  /** Authority age, insurance on file, payment record and reports. */
+  postedByTrust?: TrustSignals | null;
 }
 
 export interface TruckRow {
@@ -48,6 +52,8 @@ export interface TruckRow {
   bookedByTenantId: string | null;
   bookedAt: string | null;
   createdAt: string;
+  /** Authority, insurance, payment record and reports. */
+  postedByTrust?: TrustSignals | null;
 }
 
 export type ClickedLoad = 'load' | 'truck';

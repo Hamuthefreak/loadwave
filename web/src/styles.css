@@ -5560,3 +5560,166 @@ tr.scorecard-tr > td {
   .neg-text { flex: 1 1 auto; }
   .negotiation-compose .btn-green { flex: 0 0 auto; }
 }
+
+/* ============================================================
+   Trust layer — authority, insurance, payment record, reports.
+   Chips stay short (a card that explains itself is a card nobody
+   reads); the drawer carries the detail and the caveat.
+   ============================================================ */
+.trust-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.trust-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* Plain rgba rather than color-mix(): cab tablets still run WebViews that
+   predate it, and an invisible border there reads as a broken badge. */
+.trust-chip.ok {
+  color: var(--green);
+  border-color: rgba(127, 201, 71, 0.25);
+  background: var(--green-soft);
+}
+
+.trust-chip.warn {
+  color: var(--amber);
+  border-color: rgba(217, 161, 60, 0.25);
+  background: var(--amber-soft);
+}
+
+.trust-chip.bad {
+  color: var(--red);
+  border-color: rgba(212, 103, 95, 0.25);
+  background: var(--red-soft);
+}
+
+.trust-chip.muted {
+  color: var(--muted);
+}
+
+.trust-panel {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+.trust-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.trust-level {
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.trust-level.ok { color: var(--green); }
+.trust-level.warn { color: var(--amber); }
+.trust-level.bad { color: var(--red); }
+.trust-level.muted { color: var(--muted); }
+
+.trust-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+
+.trust-rows > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.trust-rows dt {
+  flex: 0 0 116px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.trust-rows dd {
+  margin: 0;
+  flex: 1 1 180px;
+  font-size: 0.85rem;
+}
+
+.trust-flags {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.trust-flags li {
+  font-size: 0.8rem;
+  color: var(--amber);
+}
+
+.trust-flags li::before {
+  content: '•';
+  margin-right: 6px;
+}
+
+.trust-caveat {
+  margin: 10px 0 0;
+  line-height: 1.45;
+}
+
+.trust-report {
+  margin-top: 10px;
+}
+
+.compliance-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.compliance-preview .trust-panel {
+  margin-top: 0;
+}
+
+.compliance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+@media (max-width: 560px) {
+  .trust-rows dt {
+    flex: 0 0 100%;
+    margin-bottom: 2px;
+  }
+
+  .trust-chip {
+    font-size: 0.7rem;
+  }
+}

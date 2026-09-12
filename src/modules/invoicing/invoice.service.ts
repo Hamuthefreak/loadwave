@@ -22,6 +22,8 @@ export interface InvoiceRow {
   id: string;
   tenantId: string;
   customerId: string;
+  /** The counterparty tenant that owes this invoice, when it is one of ours. */
+  payerTenantId: string | null;
   loadId: string | null;
   issueDate: string;
   dueDate: string;
@@ -57,6 +59,7 @@ interface InvoiceDbRow {
   id: string;
   tenantId: string;
   customerId: string;
+  payerTenantId?: string | null;
   loadId: string | null;
   issueDate: Date;
   dueDate: Date;
@@ -90,6 +93,7 @@ export class PrismaInvoiceService implements InvoiceService {
       id: row.id,
       tenantId: row.tenantId,
       customerId: row.customerId,
+      payerTenantId: row.payerTenantId ?? null,
       loadId: row.loadId,
       issueDate: row.issueDate.toISOString(),
       dueDate: row.dueDate.toISOString(),
@@ -181,12 +185,19 @@ export class PrismaInvoiceService implements InvoiceService {
       ? new Date(input.dueDate)
       : new Date(issueDate.getTime() + 30 * 24 * 3_600_000);
 
+    // If the issuer booked this load from another tenant, that tenant is the
+    // payer — and this is the only place the platform learns who pays whom.
+    // It is what makes a real days-to-pay record possible later.
+    const payerTenantId =
+      load.bookedByTenantId === input.tenantId && load.tenantId !== input.tenantId ? load.tenantId : null;
+
     let row;
     try {
       row = await this.prisma.invoice.create({
         data: {
           tenantId: input.tenantId,
           customerId: input.customerId,
+          payerTenantId,
           loadId: input.loadId,
           issueDate,
           dueDate,

@@ -1,6 +1,8 @@
 import type { PrismaClient } from '@prisma/client';
 import type { TruckFilters } from './truck.policy';
 
+import type { TrustSignals } from '../trust/trust.service';
+
 export interface TruckRow {
   id: string;
   tenantId: string;
@@ -21,6 +23,8 @@ export interface TruckRow {
   bookedByTenantId: string | null;
   bookedAt: string | null;
   createdAt: string;
+  /** Authority, insurance, payment record and reports — stamped by the service. */
+  postedByTrust?: TrustSignals | null;
 }
 
 export interface TruckCreateInput {

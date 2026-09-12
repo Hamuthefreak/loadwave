@@ -62,6 +62,9 @@ import { registerIftaRoutes } from './modules/ifta/ifta.routes';
 
 import { PrismaLoadBoardStore } from './modules/board/board.store';
 import { LoadBoardService } from './modules/board/board.service';
+import { PrismaTrustRepo } from './modules/trust/trust.repo';
+import { PrismaTrustService } from './modules/trust/trust.service';
+import { registerTrustRoutes } from './modules/trust/trust.routes';
 import { registerBoardRoutes } from './modules/board/board.routes';
 import { registerMessageRoutes } from './modules/messages/messages.routes';
 import { PrismaMessageService } from './modules/messages/messages.service';
@@ -123,6 +126,7 @@ export interface AppDeps {
   ifta: IftaService;
   geometry: PostgisRouteGeometryService;
   board: LoadBoardService;
+  trust: PrismaTrustService;
   messages: PrismaMessageService;
   ratings: PrismaRatingService;
   trucks: TruckService;
@@ -159,12 +163,13 @@ function buildBaseServices(
   const fuel = overrides.fuel ?? new PrismaFuelService(prisma, bus, fx);
   const loads = overrides.loads ?? new PrismaLoadService(prisma, bus);
   const geo = overrides.geo ?? new PrismaGeoService(prisma);
+  const trust = overrides.trust ?? new PrismaTrustService(new PrismaTrustRepo(prisma));
   const board =
     overrides.board ??
-    new LoadBoardService(new PrismaLoadBoardStore(prisma), geo);
+    new LoadBoardService(new PrismaLoadBoardStore(prisma), geo, trust);
   const trucks =
     overrides.trucks ??
-    new TruckService(new PrismaTruckStore(prisma), geo);
+    new TruckService(new PrismaTruckStore(prisma), geo, trust);
   const email = overrides.email ?? new PrismaEmailService(prisma, env, logger);
   const notifications =
     overrides.notifications ??
@@ -213,6 +218,7 @@ function buildBaseServices(
         resolveRates(env.IFTA_JURISDICTION_RATES),
       ),
     board,
+    trust,
     trucks,
     geo,
     market,
@@ -354,6 +360,7 @@ function registerRoutes(app: FastifyInstance, deps: AppDeps, prisma: PrismaClien
   registerInvoicingRoutes(app, { loads: deps.loads, invoices: deps.invoices });
   registerIftaRoutes(app, { prisma, bus: deps.bus, fuel: deps.fuel, ifta: deps.ifta });
   registerBoardRoutes(app, { board: deps.board });
+  registerTrustRoutes(app, { trust: deps.trust });
   registerMessageRoutes(app, { messages: deps.messages });
   registerRatingRoutes(app, { ratings: deps.ratings });
   registerTruckRoutes(app, { trucks: deps.trucks });

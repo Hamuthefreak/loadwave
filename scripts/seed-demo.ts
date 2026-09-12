@@ -23,6 +23,15 @@ async function main() {
         baseJurisdiction: 'QC',
         mcNumber: `MC${stamp}`,
         usdotNumber: `USDOT${stamp}`,
+        // A complete trust file, so the board badges show a carrier that looks
+        // worth booking (authority age + insurance with time left on it).
+        authoritySince: new Date(Date.now() - 4 * 365 * 86_400_000),
+        authorityStatus: 'ACTIVE',
+        insuranceCarrier: 'Intact Insurance',
+        insurancePolicyNumber: `POL-${stamp}`,
+        cargoInsuranceLimit: '250000',
+        insuranceExpiresAt: new Date(Date.now() + 420 * 86_400_000),
+        complianceUpdatedAt: new Date(),
         users: {
           create: [
             { email, passwordHash, roles: 'ADMIN,DISPATCHER' },
@@ -355,6 +364,150 @@ async function main() {
         ? `  Partner:  Northline Partners — reused ${partnerBoardLoads} existing PUBLIC board loads`
         : `  Partner:  Northline Partners — 4 PUBLIC board loads (ratings + lane benchmarks live)`,
     );
+
+    // --- Trust layer fixtures -------------------------------------------------
+    // The partner declares a clean file so its posts carry real badges.
+    await prisma.tenant.update({
+      where: { id: partner.id },
+      data: {
+        authoritySince: new Date(Date.now() - 3 * 365 * 86_400_000),
+        authorityStatus: 'ACTIVE',
+        insuranceCarrier: 'Northbridge Commercial',
+        insurancePolicyNumber: 'NB-778201',
+        cargoInsuranceLimit: '500000',
+        insuranceExpiresAt: new Date(Date.now() + 300 * 86_400_000),
+        complianceUpdatedAt: new Date(),
+      },
+    });
+
+    // Demo tenants left behind by earlier seed runs get the same file, so the
+    // board does not read as a field of unknown carriers.
+    await prisma.tenant.updateMany({
+      where: { name: { startsWith: 'Demo Carrier' }, authoritySince: null },
+      data: {
+        authoritySince: new Date(Date.now() - 5 * 365 * 86_400_000),
+        authorityStatus: 'ACTIVE',
+        insuranceCarrier: 'Intact Insurance',
+        cargoInsuranceLimit: '250000',
+        insuranceExpiresAt: new Date(Date.now() + 365 * 86_400_000),
+        complianceUpdatedAt: new Date(),
+      },
+    });
+
+    // A newcomer with nothing on file, so the board shows the other end of the
+    // scale too — a demo of "why you would not book this one" sells as well as
+    // the good example.
+    const thinStamp = `${stamp}9`;
+    const existingThin = await prisma.tenant.findFirst({
+      where: { name: 'Riverside Freight' },
+      select: { id: true },
+    });
+    const thin =
+      existingThin ??
+      (await prisma.tenant.create({
+        data: {
+          name: 'Riverside Freight',
+          baseCurrency: 'CAD',
+          baseJurisdiction: 'ON',
+          mcNumber: `MC${thinStamp}`,
+          // Authority three weeks old and no insurance declared: the exact
+          // combination the trust layer exists to surface.
+          authoritySince: new Date(Date.now() - 21 * 86_400_000),
+          authorityStatus: 'ACTIVE',
+          users: { create: [{ email: `riverside${thinStamp}@loadboard.app`, passwordHash, roles: 'ADMIN,DISPATCHER' }] },
+        },
+        select: { id: true },
+      }));
+
+    const thinLoads = await prisma.load.count({ where: { tenantId: thin.id, marketplaceStatus: 'PUBLIC' } });
+    if (thinLoads === 0) {
+      await prisma.load.create({
+        data: {
+          tenantId: thin.id,
+          originCountry: 'CA',
+          originRegion: 'ON',
+          originLocality: 'Mississauga',
+          destinationCountry: 'CA',
+          destinationRegion: 'QC',
+          destinationLocality: 'Montréal',
+          equipmentType: 'DRY_VAN',
+          pickupDate: addDays(now, 1),
+          deliveryDate: addDays(now, 2),
+          distanceKmEstimate: 540,
+          commodity: 'Palletised goods',
+          weightKg: 12000,
+          freightCurrency: 'CAD',
+          freightAmountTransaction: 1250,
+          freightAmountBase: 1250,
+          status: 'OPEN',
+          marketplaceStatus: 'PUBLIC',
+        },
+      });
+    }
+
+    // --- Payment history: the part a bought credit score cannot fake --------
+    // Loads the partner posted that this demo carrier hauled and invoiced. The
+    // invoices settle, so the partner gets a real days-to-pay record on the
+    // board instead of an empty column.
+    // Counted platform-wide, not per demo tenant: re-seeding must not pile up
+    // another three years of history on the same partner every run.
+    const settledHistory = await prisma.invoice.count({ where: { payerTenantId: partner.id } });
+    if (settledHistory === 0) {
+      const past = [
+        { km: 420, amount: 1180, issuedDaysAgo: 120, paidAfterDays: 21 },
+        { km: 540, amount: 1420, issuedDaysAgo: 88, paidAfterDays: 16 },
+        { km: 400, amount: 1090, issuedDaysAgo: 55, paidAfterDays: 27 },
+      ];
+      for (const p of past) {
+        const issueDate = addDays(now, -p.issuedDaysAgo);
+        const paidAt = addDays(issueDate, p.paidAfterDays);
+        const load = await prisma.load.create({
+          data: {
+            tenantId: partner.id,
+            originCountry: 'CA',
+            originRegion: 'QC',
+            originLocality: 'Montréal',
+            destinationCountry: 'CA',
+            destinationRegion: 'ON',
+            destinationLocality: 'Toronto',
+            equipmentType: 'DRY_VAN',
+            distanceKmEstimate: p.km,
+            commodity: 'Retail goods',
+            weightKg: 14000,
+            freightCurrency: 'CAD',
+            freightAmountTransaction: p.amount,
+            freightAmountBase: p.amount,
+            status: 'DELIVERED',
+            marketplaceStatus: 'BOOKED',
+            bookedByTenantId: tenant.id,
+            bookedAt: issueDate,
+            deliveredAt: paidAt,
+            createdAt: issueDate,
+          },
+        });
+        await prisma.invoice.create({
+          data: {
+            tenantId: tenant.id,
+            customerId: 'Northline Partners',
+            payerTenantId: partner.id,
+            loadId: load.id,
+            issueDate,
+            dueDate: addDays(issueDate, 30),
+            currencyTransaction: 'CAD',
+            subtotalTransaction: p.amount,
+            subtotalBase: p.amount,
+            totalTransaction: p.amount,
+            totalBase: p.amount,
+            zeroRated: false,
+            paidAt,
+            paidAmountTransaction: p.amount,
+            paidAmountBase: p.amount,
+          },
+        });
+      }
+      console.log('  Trust:    Riverside Freight posts with no insurance + a 3-week-old authority (caution example)');
+      console.log('  Trust:    Northline Partners has 3 settled invoices — a real days-to-pay record');
+    }
   } finally {
     await prisma.$disconnect();
   }

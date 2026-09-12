@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import QRCode from 'qrcode';
 import { api, getRefreshToken } from '../../api';
 import { Modal, PageHeader, Spinner } from '../../components/ui';
+import { ComplianceCard } from '../../components/ComplianceCard';
 import { shortDate, timeAgo } from '../../utils/format';
 
 interface SessionRow {
@@ -250,6 +251,9 @@ export default function Settings() {
             </button>
           </form>
         </section>
+
+        {/* Compliance & trust — what counterparties see before booking */}
+        <ComplianceCard />
 
         {/* Two-factor authentication */}
         <section className="panel settings-card">

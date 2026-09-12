@@ -29,6 +29,18 @@ model Tenant {
   ratingAvg        Decimal? @db.Decimal(3, 2)
   // When on, ADMIN/DISPATCHER accounts cannot sign in until they enable 2FA.
   requireTwoFactor Boolean  @default(false)
+
+  // ---- Compliance & trust: what a counterparty sees before committing ----
+  // Authority age is a real filter on other boards (a brand-new MC is a fraud
+  // signal); insurance on file with an expiry is what brokers require before
+  // handing over freight. Both are self-declared here and shown as such.
+  authoritySince        DateTime? // when the MC/USDOT was granted
+  authorityStatus       String    @default("UNVERIFIED") // UNVERIFIED | ACTIVE | REVOKED | OUT_OF_SERVICE
+  insuranceCarrier      String?
+  insurancePolicyNumber String?
+  cargoInsuranceLimit   Decimal?  @db.Decimal(14, 2)
+  insuranceExpiresAt    DateTime?
+  complianceUpdatedAt   DateTime?
   createdAt        DateTime @default(now())
 
   users           User[]
@@ -52,6 +64,9 @@ model Tenant {
   ratingsReceived CarrierRating[]      @relation("RatedTenant")
   ratingsGiven    CarrierRating[]      @relation("RaterTenant")
   loadMessages    LoadMessage[]        @relation("LoadMessageAuthor")
+  reportsFiled    TenantReport[]       @relation("ReportReporter")
+  reportsReceived TenantReport[]       @relation("ReportSubject")
+  invoicesPaid    Invoice[]            @relation("InvoicePayer")
   teamInvites     TeamInvite[]
 }
 
@@ -472,6 +487,7 @@ model Load {
   stops          LoadStop[]
   ratings        CarrierRating[]
   detentions     DetentionEntry[]
+  reports        TenantReport[]
 
   @@unique([tenantId, externalLoadboardId])
   @@index([tenantId, status])
@@ -496,6 +512,29 @@ model CarrierRating {
 
   @@unique([loadId, raterTenantId])
   @@index([ratedTenantId])
+}
+
+// A counterparty complaint filed against another tenant.
+// Other boards sell this as broker credit and "report a broker"; here it is
+// deliberately narrow: you may only report someone you have actually traded
+// with (a shared load), the aggregate count is what shows publicly, and the
+// text stays between the reporter and platform review.
+model TenantReport {
+  id               String   @id @default(uuid())
+  reporterTenantId String
+  subjectTenantId  String
+  loadId           String?
+  category         String // DOUBLE_BROKERING | NON_PAYMENT | FRAUD | CARGO_DAMAGE | MISREPRESENTATION | OTHER
+  details          String?
+  status           String   @default("OPEN") // OPEN | REVIEWED | DISMISSED
+  createdAt        DateTime @default(now())
+
+  reporterTenant Tenant @relation("ReportReporter", fields: [reporterTenantId], references: [id], onDelete: Cascade)
+  subjectTenant  Tenant @relation("ReportSubject", fields: [subjectTenantId], references: [id], onDelete: Cascade)
+  load           Load?  @relation(fields: [loadId], references: [id], onDelete: SetNull)
+
+  @@index([subjectTenantId, createdAt])
+  @@index([reporterTenantId, createdAt])
 }
 
 // Stops on a load (origin + intermediate + delivery). Only used for detailed
@@ -593,10 +632,16 @@ model Invoice {
   paidAmountTransaction Decimal?  @db.Decimal(18, 6)
   paidAmountBase        Decimal?  @db.Decimal(18, 6)
 
+  // Who owes this invoice, when we know it is another tenant on the platform.
+  // Set automatically for a marketplace load the issuer booked, which is what
+  // makes a real "pays in ~N days" record possible instead of a bought score.
+  payerTenantId String?
+
   createdAt DateTime @default(now())
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  load   Load?  @relation(fields: [loadId], references: [id], onDelete: SetNull)
+  tenant      Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payerTenant Tenant? @relation("InvoicePayer", fields: [payerTenantId], references: [id], onDelete: SetNull)
+  load        Load?   @relation(fields: [loadId], references: [id], onDelete: SetNull)
 
   // One invoice per load: prevents double-billing from duplicate submissions.
   // Postgres allows multiple NULL loadId rows, so manual/unlinked invoices
@@ -604,6 +649,7 @@ model Invoice {
   @@unique([tenantId, loadId])
   @@index([tenantId, issueDate])
   @@index([tenantId, paidAt])
+  @@index([payerTenantId, paidAt])
 }
 
 // Waiting time logged by a driver against a load (detention). One open entry

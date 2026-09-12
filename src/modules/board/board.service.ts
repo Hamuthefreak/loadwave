@@ -7,6 +7,7 @@ import {
 } from './board.policy';
 import type { BoardLoadRow, LoadBoardStore } from './board.store';
 import type { GeoService } from '../geo/geo.service';
+import type { TrustService } from '../trust/trust.service';
 import { haversineKm } from '../geo/haversine';
 
 export interface ILoadBoardService {
@@ -20,13 +21,32 @@ export class LoadBoardService implements ILoadBoardService {
   constructor(
     private readonly store: LoadBoardStore,
     private readonly geo: GeoService,
+    /** Optional: without it the board simply shows no trust chips. */
+    private readonly trust?: TrustService,
   ) {}
 
   async listPublic(tenantId: string, filters: BoardFilters): Promise<BoardLoadRow[]> {
     const rows = await this.store.findPublic(tenantId, filters);
     const radius = await this.buildRadius(filters);
     const filtered = rows.filter((r) => matchesFilters(r, filters, radius ?? undefined));
-    return this.withLaneAverages(filtered);
+    return this.withTrustSignals(await this.withLaneAverages(filtered));
+  }
+
+  /**
+   * Stamp each row with the posting tenant's trust signals. Batched per page
+   * so a board of 500 loads costs a handful of queries, never 500.
+   */
+  private async withTrustSignals(rows: BoardLoadRow[]): Promise<BoardLoadRow[]> {
+    if (!this.trust || rows.length === 0) return rows;
+    try {
+      const signals = await this.trust.signalsFor(rows.map((r) => r.tenantId));
+      for (const row of rows) {
+        row.postedByTrust = signals.get(row.tenantId) ?? null;
+      }
+    } catch {
+      // Trust signals are advisory — a failure must never blank the board.
+    }
+    return rows;
   }
 
   /** Stamp each row with the marketplace lane benchmark (rate-my-lane). */
