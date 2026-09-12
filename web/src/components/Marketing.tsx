@@ -125,9 +125,9 @@ export function MarketingFooter() {
             Live loads, one-tap booking and the paperwork that runs itself — one board for the
             whole trucking business.
           </p>
-          <div className="ld-cert-row" aria-label="Certifications">
+          <div className="ld-cert-row" aria-label="Standards and integrations">
             <span>MC/USDOT</span>
-            <span>FMCSA</span>
+            <span>FMCSA lookup</span>
             <span>IFTA ready</span>
           </div>
         </div>

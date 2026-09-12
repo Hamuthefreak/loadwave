@@ -5713,6 +5713,94 @@ tr.scorecard-tr > td {
   gap: 10px;
 }
 
+/* Plan & trial card (Billing page). */
+.plan-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 10px 0 14px;
+}
+
+.plan-summary .detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
+}
+
+.plan-locked {
+  margin: 0 0 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+
+.plan-locked ul {
+  margin: 8px 0 0;
+  padding-left: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+
+.plan-locked li {
+  font-size: 0.85rem;
+}
+
+.plan-lock-icon {
+  opacity: 0.7;
+}
+
+.plan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 560px) {
+  .plan-actions {
+    flex-direction: column;
+  }
+
+  .plan-actions .btn-primary,
+  .plan-actions .btn-ghost {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* FMCSA authority check panel in Settings. */
+.verify-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 12px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+
+.verify-box.ok {
+  border-color: rgba(103, 176, 47, 0.35);
+}
+
+.verify-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.verify-box .alert {
+  margin: 0;
+  width: 100%;
+}
+
 @media (max-width: 560px) {
   .trust-rows dt {
     flex: 0 0 100%;

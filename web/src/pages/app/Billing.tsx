@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../../api';
 import { Badge, Empty, Modal, PageHeader, Spinner, Stat } from '../../components/ui';
+import { PlanCard } from '../../components/PlanCard';
+import { PlanLock } from '../../components/PlanLock';
 import { money, shortDate } from '../../utils/format';
+import { usePlan } from '../../utils/plan';
+import { featureLocked } from '../../utils/planLock';
 
 interface Invoice {
   id: string;
@@ -89,9 +93,15 @@ export default function Billing() {
     }
   }, []);
 
+  const { plan } = usePlan();
+  const invoicingLocked = featureLocked(plan, 'invoicing');
+
   useEffect(() => {
+    // Invoicing is a paid tool. A locked account sees the upgrade wall instead,
+    // so it must not keep firing calls the API is built to refuse.
+    if (invoicingLocked) return;
     void load();
-  }, [load]);
+  }, [load, invoicingLocked]);
 
   const filtered = useMemo(() => {
     const rows = invoices ?? [];
@@ -152,6 +162,9 @@ export default function Billing() {
         actions={<button className="btn-ghost" onClick={() => void load()}>↻ Refresh</button>}
       />
 
+      <PlanCard />
+
+      <PlanLock feature="invoicing">
       {flash && <div className="alert alert-success">{flash}</div>}
       {error && <div className="alert alert-error">{error}</div>}
 
@@ -339,6 +352,7 @@ export default function Billing() {
           </Modal>
         </>
       )}
+      </PlanLock>
     </div>
   );
 }

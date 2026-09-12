@@ -16,6 +16,8 @@ interface Tenant {
   mcNumber: string | null;
   usdotNumber: string | null;
   verified: boolean;
+  verification: 'VERIFIED' | 'DECLARED' | 'NONE' | 'FAILED';
+  fmcsaCheckedAt: string | null;
 }
 
 interface NotifRow {
@@ -511,8 +513,13 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
               {roleBadges.map((r) => (
                 <span className="badge badge-gray" key={r}>{r}</span>
               ))}
-              {tenant?.verified ? (
-                <span className="badge badge-green badge-dot">Verified carrier</span>
+              {tenant?.verification === 'VERIFIED' ? (
+                <span className="badge badge-green badge-dot">FMCSA checked</span>
+              ) : tenant?.verification === 'FAILED' ? (
+                <span className="badge badge-red">Authority not active</span>
+              ) : tenant?.mcNumber || tenant?.usdotNumber ? (
+                // Honest middle ground: the number is on file but unchecked.
+                <span className="badge badge-gray">Self-declared</span>
               ) : (
                 <span className="badge badge-gray">Unverified</span>
               )}

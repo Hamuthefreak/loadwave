@@ -7,9 +7,11 @@
  *   TrustPanel — the full picture in the load drawer, with the same facts and
  *                an explicit note that these are self-declared.
  *
- * Nothing here is presented as external verification: authority and insurance
- * are declared by the carrier, the payment record is observed from invoices
- * issued on Loadwave, and reports are complaints from real counterparties.
+ * Exactly one signal is externally checked: FMCSA operating status, and only
+ * when that check has actually run. Everything else — insurance, authority age,
+ * payment record, reports — stays labelled for what it is. A badge that
+ * overstates itself is worse than no badge, so the wording is driven by
+ * `verification` rather than assumed.
  */
 export interface TrustPayment {
   avgDaysToPay: number;
@@ -35,7 +37,13 @@ export interface TrustSignals {
   ratingCount: number;
   mcNumber: string | null;
   usdotNumber: string | null;
+  /** true only when FMCSA confirmed the carrier may operate. */
   verified: boolean;
+  verification: 'VERIFIED' | 'DECLARED' | 'NONE' | 'FAILED';
+  verificationNote: string;
+  fmcsaStatus: string | null;
+  fmcsaLegalName: string | null;
+  fmcsaCheckedAt: string | null;
   flags: string[];
   declaredAt: string | null;
 }
@@ -77,6 +85,18 @@ export function insuranceChip(trust: TrustSignals): { tone: Tone; text: string }
   return { tone: 'bad', text: 'No insurance on file' };
 }
 
+/**
+ * The authority check, stated for exactly what happened. "Self-declared" is
+ * shown just as plainly as "checked" because a carrier reading this is deciding
+ * whether to hand over freight.
+ */
+export function verificationChip(trust: TrustSignals): { tone: Tone; text: string } {
+  if (trust.verification === 'VERIFIED') return { tone: 'ok', text: 'FMCSA checked' };
+  if (trust.verification === 'FAILED') return { tone: 'bad', text: 'Not cleared to operate' };
+  if (trust.verification === 'DECLARED') return { tone: 'muted', text: 'Self-declared authority' };
+  return { tone: 'muted', text: 'No authority on file' };
+}
+
 export function paymentChip(payment: TrustPayment): { tone: Tone; text: string } {
   const label = `Pays in ~${payment.avgDaysToPay} days`;
   const suffix = payment.earlyData ? ` · ${payment.samples} invoice${payment.samples === 1 ? '' : 's'}` : '';
@@ -97,10 +117,14 @@ function Chip({ tone, text, title }: { tone: Tone; text: string; title?: string 
 export function TrustLine({ trust }: { trust: TrustSignals | null | undefined }) {
   if (!trust) return null;
   const insurance = insuranceChip(trust);
+  const verification = verificationChip(trust);
   const payment = trust.payment ? paymentChip(trust.payment) : null;
 
   return (
     <div className="trust-chips">
+      {trust.verification !== 'NONE' && (
+        <Chip tone={verification.tone} text={verification.text} title={trust.verificationNote} />
+      )}
       <Chip tone={insurance.tone} text={insurance.text} title="Declared by the carrier; not independently verified" />
       {payment && <Chip tone={payment.tone} text={payment.text} title="Average from invoices issued on Loadwave" />}
       {trust.openReports > 0 && (
@@ -148,6 +172,7 @@ export function TrustPanel({
   const level = LEVEL_COPY[trust.level];
   const authority = authorityChip(trust);
   const insurance = insuranceChip(trust);
+  const verification = verificationChip(trust);
   const payment = trust.payment ? paymentChip(trust.payment) : null;
 
   return (
@@ -158,6 +183,16 @@ export function TrustPanel({
       </div>
 
       <dl className="trust-rows">
+        <div>
+          <dt>Authority check</dt>
+          <dd>
+            <Chip tone={verification.tone} text={verification.text} />
+            <span className="muted small"> {trust.verificationNote}</span>
+            {trust.fmcsaLegalName && (
+              <span className="muted small"> · registered as {trust.fmcsaLegalName}</span>
+            )}
+          </dd>
+        </div>
         <div>
           <dt>Authority</dt>
           <dd>
@@ -241,8 +276,11 @@ export function TrustPanel({
       )}
 
       <p className="muted small trust-caveat">
-        Authority and insurance are declared by the carrier, not independently verified. Payment record comes from
-        invoices settled on Loadwave.
+        {trust.verification === 'VERIFIED'
+          ? 'Authority status was checked against FMCSA records. Insurance and the authority start date are declared by the carrier. Payment record comes from invoices settled on Loadwave.'
+          : trust.verification === 'FAILED'
+            ? 'FMCSA records do not show this carrier as allowed to operate. Treat any booking with them with caution.'
+            : 'Authority and insurance are declared by the carrier and have not been independently verified. Payment record comes from invoices settled on Loadwave.'}
       </p>
 
       {onReport && (

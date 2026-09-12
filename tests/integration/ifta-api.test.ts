@@ -9,6 +9,7 @@ import type {
 } from '../../src/modules/ifta/ifta.service';
 import type { IftaSummaryView } from '../../src/modules/ifta/ifta.repo';
 import type { Quarter } from '../../src/utils/quarters';
+import { FEATURES } from '../../src/modules/billing/plan.policy';
 
 const ENV = {
   DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/loadwave_test?schema=public',
@@ -67,6 +68,12 @@ async function buildWithFakes(): Promise<{ app: Awaited<ReturnType<typeof buildA
       prisma: fakes.prisma as unknown as PrismaClient,
       fuel: fakes.fuel as never,
       ifta: fakes.ifta as unknown as IftaService,
+      // The IFTA routes are behind a plan gate, which would otherwise read the
+      // tenant plan through the fake prisma (which has no tenant delegate).
+      // Granting every feature keeps these tests about IFTA, not billing.
+      billing: {
+        state: jest.fn(async () => ({ features: [...FEATURES], effectivePlan: 'PRO' })),
+      } as never,
     },
   });
   return { app, fakes };

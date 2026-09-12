@@ -298,7 +298,7 @@ function ManagerDashboard() {
           </dl>
           {!tenant.verified && (
             <p className="muted small">
-              Add your MC or USDOT number to earn the Verified badge on the board.
+              Add your USDOT number, then have it checked against FMCSA records to earn the checked badge on the board.
             </p>
           )}
         </div>

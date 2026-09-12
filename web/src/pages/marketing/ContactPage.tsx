@@ -10,7 +10,7 @@ const CHANNELS = [
   },
   {
     title: 'Carrier network',
-    desc: 'Get your fleet verified, post trucks, or ask about carrier requirements.',
+    desc: 'Get your USDOT checked against FMCSA records, post trucks, or ask about carrier requirements.',
     email: 'carriers@loadwave.app',
     hours: 'Mon–Sat, 7am–7pm CT',
   },

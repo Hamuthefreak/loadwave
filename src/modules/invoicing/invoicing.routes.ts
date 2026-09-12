@@ -1,12 +1,27 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { LoadCreateInput, LoadService } from './load.service';
 import type { InvoiceCreateInput, InvoiceService } from './invoice.service';
 import type { Quarter } from '../../utils/quarters';
 import type { UserRole } from '../auth/auth.types';
+import type { Feature } from '../billing/plan.policy';
+
+/** A Fastify preHandler that refuses the request when the plan lacks a feature. */
+export type FeaturePreHandler = (
+  feature: Feature,
+) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
 
 export interface InvoicingModuleDeps {
   loads: LoadService;
   invoices: InvoiceService;
+  /**
+   * Plan gate for the invoice half of this module. Optional so the module can
+   * be registered without a billing service; the app always supplies it.
+   *
+   * Deliberately NOT applied to the /api/loads routes below: dispatch and trip
+   * management are core, and locking them after a trial expiry would take the
+   * whole product hostage to a billing question.
+   */
+  requireFeature?: FeaturePreHandler;
 }
 
 const loadSchema = {
@@ -50,6 +65,8 @@ const invoiceSchema = {
 } as const;
 
 export function registerInvoicingRoutes(app: FastifyInstance, deps: InvoicingModuleDeps): void {
+  const invoiceGate = deps.requireFeature ? [deps.requireFeature('invoicing')] : [];
+
   app.patch<{ Params: { invoiceId: string }; Body: { paid?: boolean; paidAt?: string } }>(
     '/api/invoices/:invoiceId/pay',
     {
@@ -63,9 +80,12 @@ export function registerInvoicingRoutes(app: FastifyInstance, deps: InvoicingMod
           },
         },
       },
-      preHandler: async (request, reply) => {
-        await app.requireRoles(['ADMIN', 'DISPATCHER'] as UserRole[])(request, reply);
-      },
+      preHandler: [
+        async (request, reply) => {
+          await app.requireRoles(['ADMIN', 'DISPATCHER'] as UserRole[])(request, reply);
+        },
+        ...invoiceGate,
+      ],
     },
     async (request, reply) => {
       const row = await deps.invoices.setPaid(request.user.tenantId, request.params.invoiceId, {
@@ -79,9 +99,12 @@ export function registerInvoicingRoutes(app: FastifyInstance, deps: InvoicingMod
   app.get(
     '/api/ar/aging',
     {
-      preHandler: async (request, reply) => {
-        await app.requireRoles(['ADMIN', 'DISPATCHER'] as UserRole[])(request, reply);
-      },
+      preHandler: [
+        async (request, reply) => {
+          await app.requireRoles(['ADMIN', 'DISPATCHER'] as UserRole[])(request, reply);
+        },
+        ...invoiceGate,
+      ],
     },
     async (request, reply) => {
       const report = await deps.invoices.aging(request.user.tenantId);
@@ -122,9 +145,12 @@ export function registerInvoicingRoutes(app: FastifyInstance, deps: InvoicingMod
     '/api/invoices',
     {
       schema: { body: invoiceSchema },
-      preHandler: async (request, reply) => {
-        await app.requireRoles(['ADMIN', 'DISPATCHER'] as UserRole[])(request, reply);
-      },
+      preHandler: [
+        async (request, reply) => {
+          await app.requireRoles(['ADMIN', 'DISPATCHER'] as UserRole[])(request, reply);
+        },
+        ...invoiceGate,
+      ],
     },
     async (request, reply) => {
       const row = await deps.invoices.createForLoad({
@@ -144,9 +170,12 @@ export function registerInvoicingRoutes(app: FastifyInstance, deps: InvoicingMod
   app.get<{ Querystring: { quarter?: string } }>(
     '/api/invoices',
     {
-      preHandler: async (request, reply) => {
-        await app.requireRoles(['ADMIN', 'DISPATCHER'] as UserRole[])(request, reply);
-      },
+      preHandler: [
+        async (request, reply) => {
+          await app.requireRoles(['ADMIN', 'DISPATCHER'] as UserRole[])(request, reply);
+        },
+        ...invoiceGate,
+      ],
     },
     async (request, reply) => {
       const rows = await deps.invoices.list(request.user.tenantId, {

@@ -12,6 +12,13 @@ import type { PrismaClient } from '@prisma/client';
 import type { JwtUser } from '../../src/modules/auth/auth.types';
 import { PrismaTrustRepo } from '../../src/modules/trust/trust.repo';
 import { PrismaTrustService } from '../../src/modules/trust/trust.service';
+import type { FmcsaClient } from '../../src/modules/trust/fmcsa.client';
+import type { FmcsaLookupResult } from '../../src/modules/trust/fmcsa.policy';
+
+/** A stand-in FMCSA client that answers with whatever the test wants. */
+function fakeFmcsa(result: FmcsaLookupResult): FmcsaClient {
+  return { enabled: true, lookupByDot: jest.fn(async () => result) };
+}
 
 const ENV = {
   DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/loadwave_test?schema=public',
@@ -26,7 +33,15 @@ const ENV = {
 const ME = 'tenant-me';
 const OTHER = 'tenant-other';
 
-async function buildWithFakes(opts: { related?: boolean; lastReportAt?: Date | null; tenants?: Record<string, unknown> } = {}) {
+async function buildWithFakes(
+  opts: {
+    related?: boolean;
+    lastReportAt?: Date | null;
+    tenants?: Record<string, unknown>;
+    /** Injected FMCSA client; omit it to simulate a deployment with checks off. */
+    fmcsa?: FmcsaClient;
+  } = {},
+) {
   const tenants = new Map<string, Record<string, unknown>>([
     [
       ME,
@@ -109,7 +124,7 @@ async function buildWithFakes(opts: { related?: boolean; lastReportAt?: Date | n
   ];
   const reportCounts = [{ subjectTenantId: OTHER, _count: { _all: 1 } }];
 
-  const trust = new PrismaTrustService(new PrismaTrustRepo(prisma));
+  const trust = new PrismaTrustService(new PrismaTrustRepo(prisma), opts.fmcsa);
   const app = await buildApp({
     env: ENV,
     deps: { bus: new EventBus(), prisma, trust, notifications: { notify: jest.fn() } as never, email: { send: jest.fn() } as never },
@@ -291,6 +306,131 @@ describe('reporting a counterparty (HTTP)', () => {
 
     expect(res.statusCode).toBe(409);
     expect(reports).toHaveLength(0);
+    await app.close();
+  });
+});
+
+/**
+ * The FMCSA check. These are the tests that keep the badge honest: a lookup
+ * that fails, or that never ran, must leave the number labelled self-declared.
+ */
+describe('authority verification (HTTP)', () => {
+  const withDot = { [ME]: { usdotNumber: '1234567', mcNumber: 'MC100' } };
+
+  it('says self-declared, and writes nothing, when checks are not configured', async () => {
+    const { app, updates } = await buildWithFakes({ tenants: withDot });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/trust/me/verify',
+      headers: { authorization: `Bearer ${token(app, ME)}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.checked).toBe(false);
+    expect(body.reason).toMatch(/not configured/i);
+    expect(body.signals.verification).toBe('DECLARED');
+    expect(body.signals.verified).toBe(false);
+    expect(body.signals.fmcsaCheckedAt).toBeNull();
+    // Nothing that looks like a check was persisted.
+    expect(updates.some((u) => 'fmcsaCheckedAt' in u)).toBe(false);
+    await app.close();
+  });
+
+  it('asks for a USDOT before looking anything up', async () => {
+    const { app } = await buildWithFakes();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/trust/me/verify',
+      headers: { authorization: `Bearer ${token(app, ME)}` },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().message).toMatch(/USDOT/i);
+    await app.close();
+  });
+
+  it('records a successful check and flips the badge to FMCSA checked', async () => {
+    const { app, updates } = await buildWithFakes({
+      tenants: withDot,
+      fmcsa: fakeFmcsa({
+        ok: true,
+        carrier: {
+          dotNumber: '1234567',
+          legalName: 'ME CARRIER LTD',
+          dbaName: null,
+          mcNumber: 'MC100',
+          status: 'ACTIVE',
+          allowedToOperate: 'Y',
+          statusCode: 'A',
+        },
+      }),
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/trust/me/verify',
+      headers: { authorization: `Bearer ${token(app, ME)}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.checked).toBe(true);
+    expect(body.signals.verification).toBe('VERIFIED');
+    expect(body.signals.verified).toBe(true);
+    expect(body.signals.fmcsaLegalName).toBe('ME CARRIER LTD');
+    expect(updates.some((u) => u.fmcsaStatus === 'ACTIVE')).toBe(true);
+    await app.close();
+  });
+
+  it('marks a carrier FMCSA does not permit as a failed check, not a silent pass', async () => {
+    const { app } = await buildWithFakes({
+      tenants: withDot,
+      fmcsa: fakeFmcsa({
+        ok: true,
+        carrier: {
+          dotNumber: '1234567',
+          legalName: 'ME CARRIER LTD',
+          dbaName: null,
+          mcNumber: 'MC100',
+          status: 'NOT_ALLOWED',
+          allowedToOperate: 'N',
+          statusCode: 'A',
+        },
+      }),
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/trust/me/verify',
+      headers: { authorization: `Bearer ${token(app, ME)}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.signals.verification).toBe('FAILED');
+    expect(body.signals.verified).toBe(false);
+    expect(body.signals.flags).toContain('FMCSA records do not allow this carrier to operate');
+    await app.close();
+  });
+
+  it('does not record anything when FMCSA cannot be reached', async () => {
+    const { app, updates } = await buildWithFakes({
+      tenants: withDot,
+      fmcsa: fakeFmcsa({ ok: false, reason: 'UPSTREAM_ERROR', detail: 'boom' }),
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/trust/me/verify',
+      headers: { authorization: `Bearer ${token(app, ME)}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.checked).toBe(false);
+    expect(body.reason).toMatch(/could not be reached/i);
+    expect(body.signals.verification).toBe('DECLARED');
+    expect(updates.some((u) => 'fmcsaCheckedAt' in u)).toBe(false);
     await app.close();
   });
 });

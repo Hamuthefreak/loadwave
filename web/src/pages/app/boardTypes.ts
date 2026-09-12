@@ -6,6 +6,8 @@ export interface BoardLoad {
   postedByTenantName: string;
   postedByMcNumber: string | null;
   postedByUsdotNumber: string | null;
+  // Note: there is no `postedByVerified`. Authority state lives in
+  // postedByTrust below, so the badge and the trust chips cannot disagree.
   externalLoadboardId: string | null;
   originCountry: string;
   originRegion: string;
@@ -30,7 +32,6 @@ export interface BoardLoad {
   /** Trust signals from the posting carrier. */
   postedByRatingAvg?: number | null;
   postedByRatingCount?: number;
-  postedByVerified?: boolean;
   /** Authority age, insurance on file, payment record and reports. */
   postedByTrust?: TrustSignals | null;
 }

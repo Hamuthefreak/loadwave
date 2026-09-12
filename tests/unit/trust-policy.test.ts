@@ -17,6 +17,7 @@ import {
   withinCooldown,
   REPORT_CATEGORIES,
   type SettledInvoice,
+  type TrustInput,
 } from '../../src/modules/trust/trust.policy';
 
 const NOW = new Date('2026-09-12T12:00:00Z');
@@ -125,6 +126,9 @@ describe('trust summary', () => {
     openReports: 0,
     ratingAvg: 4.5,
     ratingCount: 3,
+    // Authority confirmed by FMCSA. Left out of a variant below on purpose:
+    // without it the signal is self-declared and the summary must say so.
+    verification: 'VERIFIED' as const,
   };
 
   it('is STRONG only with an established authority, current insurance, on-time payers and no reports', () => {
@@ -134,6 +138,34 @@ describe('trust summary', () => {
     );
     expect(summary.level).toBe('STRONG');
     expect(summary.flags).toEqual([]);
+  });
+
+  it('says out loud when authority is self-declared rather than checked', () => {
+    // Built without a verification field on purpose: that is the state every
+    // tenant is in until an FMCSA check actually runs.
+    const selfDeclared: TrustInput = {
+      insuranceExpiresAt: base.insuranceExpiresAt,
+      authorityStatus: base.authorityStatus,
+      authoritySince: base.authoritySince,
+      payment: null,
+      openReports: 0,
+      ratingAvg: base.ratingAvg,
+      ratingCount: base.ratingCount,
+    };
+    const summary = trustSummary(selfDeclared, NOW);
+    expect(summary.verification).toBe('DECLARED');
+    expect(summary.flags).toContain('Authority status is declared, not checked against FMCSA');
+    // An unchecked authority must not read as strong just because it is old.
+    expect(summary.level).not.toBe('STRONG');
+  });
+
+  it('treats an FMCSA failure as RISKY even when the carrier declared itself active', () => {
+    const summary = trustSummary(
+      { ...base, verification: 'FAILED', payment: { avgDaysToPay: 12, avgDaysPastDue: -3, samples: 8, band: 'ON_TIME', earlyData: false } },
+      NOW,
+    );
+    expect(summary.level).toBe('RISKY');
+    expect(summary.flags).toContain('FMCSA records do not allow this carrier to operate');
   });
 
   it('is ESTABLISHED when the payment record is missing — an unknown file is not a bad one', () => {

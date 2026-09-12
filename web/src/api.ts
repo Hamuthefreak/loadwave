@@ -4,6 +4,7 @@
 // Vite proxies those calls to http://localhost:4000 (see vite.config.ts).
 
 import { purgeOfflineCache } from './offline-cache';
+import { clearPlanCache } from './utils/planCache';
 
 export { purgeOfflineCache };
 
@@ -66,6 +67,8 @@ function clearTokens(): void {
   sessionStorage.removeItem(TOKEN_KEY);
   sessionStorage.removeItem(REFRESH_KEY);
   localStorage.removeItem(REMEMBER_KEY);
+  // Entitlements must not outlive the session that earned them.
+  clearPlanCache();
 }
 
 /**
@@ -227,6 +230,7 @@ function fallbackMessage(status: number): string {
   if (status === 403) return "You don't have permission to do that.";
   if (status === 404) return 'That wasn’t found — it may have been removed.';
   if (status === 409) return 'That already exists — check for duplicates and try again.';
+  if (status === 402) return 'That tool is not included in your current plan — upgrade to unlock it.';
   if (status === 429) return 'Too many attempts — wait a moment, then try again.';
   return `Something went wrong on our end (${status}). Please try again.`;
 }

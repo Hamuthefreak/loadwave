@@ -5,6 +5,9 @@ import { SaveSearchModal } from '../../components/SaveSearchModal';
 import { ReportModal } from '../../components/ReportModal';
 import { TrustLine, TrustPanel } from '../../components/TrustBadges';
 import { daysLabel, daysUntil, km, money, moneyShort, perMile, regionLabel, shortDate, timeAgo } from '../../utils/format';
+import { authorityBadge } from '../../utils/authority';
+import { usePlan } from '../../utils/plan';
+import { featureLocked } from '../../utils/planLock';
 import {
   EQUIPMENT_TYPES,
   equipmentLabel,
@@ -42,6 +45,11 @@ export default function SearchLoads() {
 
   const [view, setView] = useState<View>('list');
   const [compare, setCompare] = useState<BoardLoad[]>([]);
+  // Route view and the comparison tool are the paid half of the board. Fails
+  // open while the plan is loading, so a paying customer is never locked out.
+  const { plan } = usePlan();
+  const routeLocked = featureLocked(plan, 'route');
+  const compareLocked = featureLocked(plan, 'compare');
   const [selected, setSelected] = useState<BoardLoad | null>(null);
   const [booking, setBooking] = useState<BoardLoad | null>(null);
   const [busy, setBusy] = useState(false);
@@ -170,7 +178,7 @@ export default function SearchLoads() {
         <div>
           <h1>Search loads</h1>
           <p className="muted">
-            Live loads from verified partner carriers{' '}
+            Live loads from partner carriers{' '}
             {syncedAt && (
               <span className="freshness">
                 <span className="live-dot" aria-hidden /> synced {timeAgo(syncedAt.toISOString())}
@@ -181,18 +189,26 @@ export default function SearchLoads() {
         </div>
         <div className="page-actions">
           <div className="view-toggle" role="tablist">
-            {(['list', 'route', 'compare'] as View[]).map((v) => (
-              <button
-                key={v}
-                className={view === v ? 'active' : ''}
-                onClick={() => {
-                  setView(v);
-                  if (v !== 'compare') setCompare([]);
-                }}
-              >
-                {v === 'list' ? 'List' : v === 'route' ? 'Route view' : `Compare${compare.length ? ` (${compare.length})` : ''}`}
-              </button>
-            ))}
+            {(['list', 'route', 'compare'] as View[]).map((v) => {
+              const locked = (v === 'route' && routeLocked) || (v === 'compare' && compareLocked);
+              const name = v === 'list' ? 'List' : v === 'route' ? 'Route view' : 'Compare';
+              return (
+                <button
+                  key={v}
+                  className={view === v ? 'active' : ''}
+                  disabled={locked}
+                  title={locked ? `${name} is part of Pro — see plans on Billing` : undefined}
+                  onClick={() => {
+                    if (locked) return;
+                    setView(v);
+                    if (v !== 'compare') setCompare([]);
+                  }}
+                >
+                  {v === 'compare' && compare.length ? `${name} (${compare.length})` : name}
+                  {locked && <span className="muted small"> · Pro</span>}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -357,6 +373,15 @@ function EmptyState({ title, sub, action }: { title: string; sub: string; action
   );
 }
 
+/** The badge for a card, from the load's trust signals. See utils/authority.ts. */
+function cardAuthority(load: BoardLoad) {
+  return authorityBadge({
+    verification: load.postedByTrust?.verification,
+    mcNumber: load.postedByMcNumber,
+    usdotNumber: load.postedByUsdotNumber,
+  });
+}
+
 export function LoadCard({
   load,
   compareMode,
@@ -372,7 +397,7 @@ export function LoadCard({
 }) {
   const rate = load.freightAmountBase ?? load.freightAmountTransaction;
   const taken = load.marketplaceStatus === 'BOOKED';
-  const verified = load.postedByVerified ?? Boolean(load.postedByMcNumber || load.postedByUsdotNumber);
+  const authority = cardAuthority(load);
   const perMileVal = perMile(rate, load.distanceKmEstimate);
   // Rate-my-lane: how this load's $/mile compares to the marketplace average
   // for the same lane over the last 90 days.
@@ -435,9 +460,9 @@ export function LoadCard({
             <small>({load.postedByRatingCount})</small>
           </span>
         )}
-        {verified ? (
-          <Badge tone="green">
-            <span className="badge-dot" /> Verified{load.postedByMcNumber ? ` · ${/^(MC|USDOT)/i.test(load.postedByMcNumber) ? load.postedByMcNumber : `MC ${load.postedByMcNumber}`}` : ''}
+        {authority ? (
+          <Badge tone={authority.tone}>
+            <span className="badge-dot" /> {authority.text}
           </Badge>
         ) : (
           <Badge tone="gray">New carrier</Badge>
@@ -731,8 +756,13 @@ async function shareLoad(load: BoardLoad): Promise<'shared' | 'copied'> {
 /** Days × avg-rate sparkline for the load's lane (marketplace history). */
 function LaneTrend({ origin, destination }: { origin: string; destination: string }) {
   const [points, setPoints] = useState<Array<{ statDate: string; avgRate: number | null }> | null>(null);
+  // Lane rate history is the Pro half of rate insights; skip the call entirely
+  // rather than firing one the API answers with 402.
+  const { plan } = usePlan();
+  const trendLocked = featureLocked(plan, 'rates');
 
   useEffect(() => {
+    if (trendLocked) return;
     let alive = true;
     api<{ lane: Array<{ statDate: string; avgRate: number | null }> }>(
       `/api/market/lanes/${origin}/${destination}/trend?days=30`,
@@ -746,7 +776,7 @@ function LaneTrend({ origin, destination }: { origin: string; destination: strin
     return () => {
       alive = false;
     };
-  }, [origin, destination]);
+  }, [origin, destination, trendLocked]);
 
   if (points === null) return null;
   const samples = points.filter((p) => p.avgRate != null) as Array<{ statDate: string; avgRate: number }>;
@@ -777,7 +807,7 @@ function LaneTrend({ origin, destination }: { origin: string; destination: strin
 
 function DetailDrawer({ load, onClose, onBook, onBooked }: { load: BoardLoad; onClose: () => void; onBook: () => void; onBooked?: () => void }) {
   const rate = load.freightAmountBase ?? load.freightAmountTransaction;
-  const verified = load.postedByVerified ?? Boolean(load.postedByMcNumber || load.postedByUsdotNumber);
+  const authority = cardAuthority(load);
   const [copied, setCopied] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [reportFiled, setReportFiled] = useState(false);
@@ -819,10 +849,13 @@ function DetailDrawer({ load, onClose, onBook, onBooked }: { load: BoardLoad; on
           {load.marketplaceStatus === 'PUBLIC' && <NegotiationPanel loadId={load.id} posterName={load.postedByTenantName} loadRate={rate ? Number(rate) : null} currency={load.freightCurrency} onBooked={onBooked} />}
           <div className="drawer-carrier">
             <div className="carrier-name">{load.postedByTenantName}</div>
-            {verified ? (
-              <Badge tone="green"><span className="badge-dot" /> Verified carrier · {[/^(MC|USDOT)/i.test(load.postedByMcNumber ?? '') ? load.postedByMcNumber : load.postedByMcNumber ? `MC ${load.postedByMcNumber}` : null, load.postedByUsdotNumber].filter(Boolean).join(' / ')}</Badge>
+            {authority ? (
+              <Badge tone={authority.tone}><span className="badge-dot" /> {authority.text}</Badge>
             ) : (
               <Badge tone="gray">New carrier</Badge>
+            )}
+            {(load.postedByTrust?.verificationNote ?? '') && (
+              <div className="muted small" style={{ marginTop: 4 }}>{load.postedByTrust?.verificationNote}</div>
             )}
             {(load.postedByRatingCount ?? 0) > 0 && load.postedByRatingAvg != null && (
               <div className="rating-chip" style={{ marginTop: 6 }}>

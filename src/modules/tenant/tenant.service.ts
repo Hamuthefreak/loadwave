@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { notFound } from '../../utils/errors';
+import { verificationState, type VerificationState } from '../trust/fmcsa.policy';
 
 export interface TenantRow {
   id: string;
@@ -8,7 +9,14 @@ export interface TenantRow {
   baseJurisdiction: string;
   mcNumber: string | null;
   usdotNumber: string | null;
+  /**
+   * true only when FMCSA confirmed the carrier may operate. An MC number on
+   * file is not verification, so this is no longer derived from its presence.
+   */
   verified: boolean;
+  /** Lets the UI say "FMCSA checked" vs "self-declared" instead of guessing. */
+  verification: VerificationState;
+  fmcsaCheckedAt: string | null;
   createdAt: string;
 }
 
@@ -36,8 +44,19 @@ export class PrismaTenantService implements TenantService {
     baseJurisdiction: string;
     mcNumber?: string | null;
     usdotNumber?: string | null;
+    fmcsaStatus?: string | null;
+    fmcsaCheckedAt?: Date | null;
     createdAt: Date;
   }): TenantRow {
+    const verification = verificationState({
+      mcNumber: row.mcNumber ?? null,
+      usdotNumber: row.usdotNumber ?? null,
+      checkedAt: row.fmcsaCheckedAt ?? null,
+      checkStatus: row.fmcsaStatus ?? null,
+      now: new Date(),
+      // Only affects the wording of the note; the state is the same either way.
+      enabled: true,
+    });
     return {
       id: row.id,
       name: row.name,
@@ -45,7 +64,9 @@ export class PrismaTenantService implements TenantService {
       baseJurisdiction: row.baseJurisdiction,
       mcNumber: row.mcNumber ?? null,
       usdotNumber: row.usdotNumber ?? null,
-      verified: Boolean(row.mcNumber || row.usdotNumber),
+      verified: verification.verified,
+      verification: verification.state,
+      fmcsaCheckedAt: row.fmcsaCheckedAt ? row.fmcsaCheckedAt.toISOString() : null,
       createdAt: row.createdAt.toISOString(),
     };
   }

@@ -16,6 +16,11 @@ export interface ComplianceRow {
   complianceUpdatedAt: Date | null;
   ratingAvg: number | null;
   ratingCount: number;
+  /** Outcome of the last FMCSA check, if one has ever run. */
+  fmcsaDotNumber: string | null;
+  fmcsaStatus: string | null;
+  fmcsaLegalName: string | null;
+  fmcsaCheckedAt: Date | null;
 }
 
 export interface ReportRow {
@@ -42,6 +47,15 @@ export interface CompliancePatch {
 export interface TrustRepo {
   compliance(tenantIds: string[]): Promise<ComplianceRow[]>;
   updateCompliance(tenantId: string, patch: CompliancePatch): Promise<void>;
+  /**
+   * Persist the result of an FMCSA lookup. Only ever called with a real
+   * response: recording a check that did not happen is exactly the lie this
+   * whole feature exists to remove.
+   */
+  recordFmcsaCheck(
+    tenantId: string,
+    input: { dotNumber: string; status: string; legalName: string | null; checkedAt: Date },
+  ): Promise<void>;
   /** Settled invoices these tenants owed, for the days-to-pay record. */
   settledInvoices(payerTenantIds: string[], since: Date): Promise<{ payerTenantId: string; rows: SettledInvoice[] }[]>;
   /** Non-dismissed complaints per subject inside the window. */
@@ -81,6 +95,10 @@ export class PrismaTrustRepo implements TrustRepo {
         complianceUpdatedAt: true,
         ratingAvg: true,
         ratingCount: true,
+        fmcsaDotNumber: true,
+        fmcsaStatus: true,
+        fmcsaLegalName: true,
+        fmcsaCheckedAt: true,
       },
     });
     return rows.map((r) => ({
@@ -97,11 +115,30 @@ export class PrismaTrustRepo implements TrustRepo {
       complianceUpdatedAt: r.complianceUpdatedAt,
       ratingAvg: r.ratingAvg != null ? Number(r.ratingAvg) : null,
       ratingCount: r.ratingCount,
+      fmcsaDotNumber: r.fmcsaDotNumber,
+      fmcsaStatus: r.fmcsaStatus,
+      fmcsaLegalName: r.fmcsaLegalName,
+      fmcsaCheckedAt: r.fmcsaCheckedAt,
     }));
   }
 
   async updateCompliance(tenantId: string, patch: CompliancePatch): Promise<void> {
     await this.prisma.tenant.update({ where: { id: tenantId }, data: patch });
+  }
+
+  async recordFmcsaCheck(
+    tenantId: string,
+    input: { dotNumber: string; status: string; legalName: string | null; checkedAt: Date },
+  ): Promise<void> {
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        fmcsaDotNumber: input.dotNumber,
+        fmcsaStatus: input.status,
+        fmcsaLegalName: input.legalName,
+        fmcsaCheckedAt: input.checkedAt,
+      },
+    });
   }
 
   async settledInvoices(payerTenantIds: string[], since: Date): Promise<{ payerTenantId: string; rows: SettledInvoice[] }[]> {

@@ -29,6 +29,15 @@ export function conflict(msg: string): AppError {
   return new AppError(409, 'CONFLICT', msg);
 }
 
+/**
+ * The account is fine, the plan is not. 402 lets the client distinguish "this
+ * needs an upgrade" from "you may not do this at all", which is the difference
+ * between showing an upgrade prompt and showing an error.
+ */
+export function paymentRequired(msg: string): AppError {
+  return new AppError(402, 'PLAN_UPGRADE_REQUIRED', msg);
+}
+
 export function unprocessable(msg: string): AppError {
   return new AppError(422, 'UNPROCESSABLE_ENTITY', msg);
 }

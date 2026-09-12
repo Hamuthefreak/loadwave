@@ -42,8 +42,28 @@ const tenantParamSchema = {
 export function registerTrustRoutes(app: FastifyInstance, deps: TrustModuleDeps): void {
   /** My own signals, exactly as a counterparty sees them, plus what's missing. */
   app.get('/api/trust/me', { preHandler: app.authenticate }, async (request) => {
-    return { signals: await deps.trust.signals(request.user.tenantId), reports: await deps.trust.myReports(request.user.tenantId) };
+    return {
+      signals: await deps.trust.signals(request.user.tenantId),
+      reports: await deps.trust.myReports(request.user.tenantId),
+      // The UI needs to know whether a check is even possible here, so it can
+      // offer "check now" instead of a button that always fails.
+      checksEnabled: deps.trust.checksEnabled,
+    };
   });
+
+  /**
+   * Check this tenant's authority against FMCSA records. Only a successful
+   * lookup is stored — see PrismaTrustService.verifyAuthority.
+   */
+  app.post(
+    '/api/trust/me/verify',
+    {
+      preHandler: async (request, reply) => {
+        await app.requireRoles(['ADMIN', 'DISPATCHER'] as UserRole[])(request, reply);
+      },
+    },
+    async (request) => deps.trust.verifyAuthority(request.user.tenantId),
+  );
 
   /** Declare authority and insurance details (self-declared, shown as such). */
   app.patch<{

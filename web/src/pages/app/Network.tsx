@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api';
 import { Badge, Empty, Lane, PageHeader } from '../../components/ui';
+import { PlanLock } from '../../components/PlanLock';
+import { usePlan } from '../../utils/plan';
+import { featureLocked } from '../../utils/planLock';
 import { money, shortDate } from '../../utils/format';
 import { equipmentLabel } from './regions';
 import type { BoardLoad } from './boardTypes';
@@ -22,9 +25,15 @@ export default function Network() {
     }
   }, []);
 
+  const { plan } = usePlan();
+  const networkLocked = featureLocked(plan, 'network');
+
   useEffect(() => {
+    // Private network sharing is a paid tool; a locked account gets the upgrade
+    // wall rather than a request the API would refuse.
+    if (networkLocked) return;
     void load();
-  }, [load]);
+  }, [load, networkLocked]);
 
   const privateLoads = loads.filter((l) => l.marketplaceStatus === 'PRIVATE');
   const onBoard = loads.filter((l) => l.marketplaceStatus !== 'PRIVATE').length;
@@ -36,11 +45,12 @@ export default function Network() {
         sub="Loads shared only with the carriers and brokers you trust — not the open board."
       />
 
+      <PlanLock feature="network">
       <div className="card" style={{ marginBottom: 20 }}>
         <h3>Your private loads</h3>
         <p className="muted small">
           Loads you keep private are visible only to you and the partners you share them with.
-          When you post a load to the open board it becomes visible to every verified carrier.
+          When you post a load to the open board it becomes visible to every carrier on Loadwave.
         </p>
         <div className="board-metrics" style={{ marginTop: 10 }}>
           <span><b>{privateLoads.length}</b> private loads</span>
@@ -90,7 +100,7 @@ export default function Network() {
       <div className="card" style={{ opacity: 0.85 }}>
         <div className="detail-list">
           <div className="detail-row">
-            <dt>Verified partners you can share with</dt>
+            <dt>Partners you can share with</dt>
             <dd>Invite-only</dd>
           </div>
           <div className="detail-row">
@@ -103,6 +113,7 @@ export default function Network() {
           roadmap. Today, your private loads stay locked to your tenant.
         </p>
       </div>
+      </PlanLock>
     </div>
   );
 }

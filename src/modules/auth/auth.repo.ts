@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { TRIAL_DAYS, trialEndsAtFrom } from '../billing/plan.policy';
 import type { PrismaTx } from '../../db/prisma';
 import type { UserRole } from './auth.types';
 
@@ -167,6 +168,11 @@ export class PrismaAuthRepository implements AuthRepository {
           baseJurisdiction: input.tenantBaseJurisdiction,
           mcNumber: input.mcNumber ?? null,
           usdotNumber: input.usdotNumber ?? null,
+          // Every new account starts on a time-boxed trial of the full
+          // product; when it lapses, entitlements fall back to the free tier
+          // rather than the account being locked out.
+          plan: 'TRIAL',
+          trialEndsAt: trialEndsAtFrom(new Date(), TRIAL_DAYS),
         },
       });
       const user = await tx.user.create({

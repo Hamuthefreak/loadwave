@@ -7,9 +7,14 @@
  * authority age, whether insurance is on file, how they have actually paid
  * invoices on this platform, and whether anyone has complained about them.
  *
- * Every signal is self-declared or platform-observed, and each one is labelled
- * as such — nothing is presented as an external verification.
+ * Almost every signal is self-declared or platform-observed, and each one is
+ * labelled as such. The single exception is the FMCSA operating-status check:
+ * when that has actually run, the badge says so, and when it has not, the
+ * signals stay labelled self-declared. The distinction is carried in
+ * VerificationState, not left to the UI to imply.
  */
+
+import type { VerificationState } from './fmcsa.policy';
 
 export const INSURANCE_EXPIRING_DAYS = 45;
 export const NEW_AUTHORITY_DAYS = 365;
@@ -127,12 +132,16 @@ export interface TrustInput {
   openReports: number;
   ratingAvg: number | null;
   ratingCount: number;
+  /** Outcome of the FMCSA check, when one has run. Absent means self-declared. */
+  verification?: VerificationState;
 }
 
 export interface TrustSummary {
   level: TrustLevel;
   insurance: InsuranceState;
   authority: AuthorityState;
+  /** VERIFIED only when FMCSA confirmed the carrier may operate. */
+  verification: VerificationState;
   authorityAgeYears: number | null;
   payment: PaymentRecord | null;
   openReports: number;
@@ -148,7 +157,15 @@ export function trustSummary(input: TrustInput, now: Date): TrustSummary {
   const insurance = insuranceState(input.insuranceExpiresAt, now);
   const authority = authorityState(input.authorityStatus, input.authoritySince, now);
   const authorityAgeYears = authorityAgeYearsOf(input.authoritySince, now);
+  const verification = input.verification ?? 'DECLARED';
   const flags: string[] = [];
+
+  // A confirmed FMCSA failure outranks anything the tenant declared about itself.
+  if (verification === 'FAILED') {
+    flags.push('FMCSA records do not allow this carrier to operate');
+  } else if (verification === 'DECLARED') {
+    flags.push('Authority status is declared, not checked against FMCSA');
+  }
 
   if (authority === 'REVOKED') flags.push('Authority is not active');
   else if (authority === 'NEW') flags.push('Authority is under a year old');
@@ -162,7 +179,12 @@ export function trustSummary(input: TrustInput, now: Date): TrustSummary {
   if (input.openReports > 0) flags.push(`${input.openReports} report${input.openReports === 1 ? '' : 's'} in the last year`);
 
   let level: TrustLevel;
-  if (authority === 'REVOKED' || input.openReports >= 2 || input.payment?.band === 'SLOW') {
+  if (
+    verification === 'FAILED' ||
+    authority === 'REVOKED' ||
+    input.openReports >= 2 ||
+    input.payment?.band === 'SLOW'
+  ) {
     level = 'RISKY';
   } else if (authority === 'ESTABLISHED' && (insurance === 'VALID' || insurance === 'EXPIRING')) {
     // Established authority plus current insurance is the real bar; a good
@@ -176,6 +198,7 @@ export function trustSummary(input: TrustInput, now: Date): TrustSummary {
     level,
     insurance,
     authority,
+    verification,
     authorityAgeYears,
     payment: input.payment,
     openReports: input.openReports,

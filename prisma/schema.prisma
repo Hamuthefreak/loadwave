@@ -41,7 +41,24 @@ model Tenant {
   cargoInsuranceLimit   Decimal?  @db.Decimal(14, 2)
   insuranceExpiresAt    DateTime?
   complianceUpdatedAt   DateTime?
-  createdAt        DateTime @default(now())
+
+  // ---- FMCSA check: the one externally verified signal we carry ----
+  // Authority AGE stays self-declared (FMCSA's public lookup does not return
+  // a grant date), but operating status is checked against their records.
+  // A number is only ever badged "checked" when fmcsaCheckedAt is set.
+  fmcsaDotNumber String?
+  fmcsaStatus    String? // ACTIVE | NOT_ALLOWED | INACTIVE | UNKNOWN
+  fmcsaLegalName String?
+  fmcsaCheckedAt DateTime?
+
+  // ---- Subscription ----
+  // New tenants start on a time-boxed trial of the full product; when it ends
+  // they fall back to the free Solo feature set rather than being locked out.
+  plan          String    @default("TRIAL") // TRIAL | SOLO | PRO | FLEET
+  trialEndsAt   DateTime?
+  planChangedAt DateTime?
+
+  createdAt DateTime @default(now())
 
   users           User[]
   drivers         Driver[]
@@ -68,6 +85,27 @@ model Tenant {
   reportsReceived TenantReport[]       @relation("ReportSubject")
   invoicesPaid    Invoice[]            @relation("InvoicePayer")
   teamInvites     TeamInvite[]
+  planRequests    PlanRequest[]
+}
+
+/// A tenant asking to move onto a paid plan. Until a payment provider is
+/// wired up, Loadwave activates plans out-of-band, so the request is a durable
+/// record rather than a lost email — and a tenant can only have one open at a
+/// time, which is what makes the "pending" state in the UI meaningful.
+model PlanRequest {
+  id            String    @id @default(uuid())
+  tenantId      String
+  requestedPlan String // SOLO | PRO | FLEET
+  requestedById String?
+  status        String    @default("PENDING") // PENDING | APPROVED | DECLINED
+  note          String?
+  createdAt     DateTime  @default(now())
+  decidedAt     DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([status, createdAt])
 }
 
 enum UserRole {

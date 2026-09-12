@@ -215,7 +215,7 @@ export default function SignIn() {
             <span><i>✓</i> Live load board with $/mile</span>
             <span><i>✓</i> Post a load or truck to partner carriers</span>
             <span><i>✓</i> Invoices, fuel and IFTA in one place</span>
-            <span><i>✓</i> Verified carrier badges on every card</span>
+            <span><i>✓</i> Carrier authority status on every card</span>
           </div>
         </div>
 
@@ -329,7 +329,7 @@ export default function SignIn() {
                   </label>
                 </div>
                 <p className="ld-muted small" style={{ margin: 0 }}>
-                  Adding your MC or USDOT earns the <strong>Verified carrier</strong> badge on the
+                  Adding your USDOT lets us check your authority against FMCSA records for an <strong>FMCSA-checked</strong> badge on the
                   load board.
                 </p>
               </>

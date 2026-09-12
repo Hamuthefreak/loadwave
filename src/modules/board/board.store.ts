@@ -48,7 +48,6 @@ export interface BoardLoadRow {
   /** Trust signals from the posting carrier (rating aggregates + verification). */
   postedByRatingAvg?: number | null;
   postedByRatingCount?: number;
-  postedByVerified?: boolean;
   /** Authority, insurance, payment record and reports — stamped by the service. */
   postedByTrust?: TrustSignals | null;
 }
@@ -130,8 +129,10 @@ export class PrismaLoadBoardStore implements LoadBoardStore {
       postedByUsdotNumber: row.tenant.usdotNumber ?? null,
       postedByRatingAvg: row.tenant.ratingAvg != null ? Number(row.tenant.ratingAvg) : null,
       postedByRatingCount: row.tenant.ratingCount ?? 0,
-      // Same derivation the tenants service uses for /api/tenants/me.
-      postedByVerified: Boolean(row.tenant.mcNumber || row.tenant.usdotNumber),
+      // Deliberately no `postedByVerified` here. It used to be
+      // `Boolean(mcNumber || usdotNumber)`, which badged every carrier that had
+      // typed a number in as verified. Authority status comes from the FMCSA
+      // check, and only from there — see postedByTrust below.
       externalLoadboardId: row.externalLoadboardId,
       originCountry: row.originCountry,
       originRegion: row.originRegion,

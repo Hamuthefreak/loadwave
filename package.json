@@ -1,6 +1,6 @@
 {
   "name": "loadwave",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "LoadWave TMS backend - Canadian/US cross-border carrier platform with IFTA, HOS and GST/HST/QST compliance.",
   "license": "UNLICENSED",

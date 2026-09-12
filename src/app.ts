@@ -65,6 +65,12 @@ import { LoadBoardService } from './modules/board/board.service';
 import { PrismaTrustRepo } from './modules/trust/trust.repo';
 import { PrismaTrustService } from './modules/trust/trust.service';
 import { registerTrustRoutes } from './modules/trust/trust.routes';
+import { createFmcsaClient } from './modules/trust/fmcsa.client';
+import { PrismaBillingRepo } from './modules/billing/billing.repo';
+import { PrismaBillingService } from './modules/billing/billing.service';
+import { registerBillingRoutes } from './modules/billing/billing.routes';
+import { featureGuard } from './modules/billing/entitlements.guard';
+import type { Feature } from './modules/billing/plan.policy';
 import { registerBoardRoutes } from './modules/board/board.routes';
 import { registerMessageRoutes } from './modules/messages/messages.routes';
 import { PrismaMessageService } from './modules/messages/messages.service';
@@ -127,6 +133,7 @@ export interface AppDeps {
   geometry: PostgisRouteGeometryService;
   board: LoadBoardService;
   trust: PrismaTrustService;
+  billing: PrismaBillingService;
   messages: PrismaMessageService;
   ratings: PrismaRatingService;
   trucks: TruckService;
@@ -163,7 +170,16 @@ function buildBaseServices(
   const fuel = overrides.fuel ?? new PrismaFuelService(prisma, bus, fx);
   const loads = overrides.loads ?? new PrismaLoadService(prisma, bus);
   const geo = overrides.geo ?? new PrismaGeoService(prisma);
-  const trust = overrides.trust ?? new PrismaTrustService(new PrismaTrustRepo(prisma));
+  // Without FMCSA_WEBKEY the client is simply disabled, which keeps authority
+  // status labelled self-declared rather than silently unverified.
+  const fmcsa = createFmcsaClient({
+    webKey: env.FMCSA_WEBKEY,
+    ...(env.FMCSA_BASE_URL ? { baseUrl: env.FMCSA_BASE_URL } : {}),
+  });
+  const trust = overrides.trust ?? new PrismaTrustService(new PrismaTrustRepo(prisma), fmcsa);
+  // Activation stays MANUAL until a payment provider is wired up, so nobody
+  // can grant themselves the paid tiers. See billing.service.ts.
+  const billing = overrides.billing ?? new PrismaBillingService(new PrismaBillingRepo(prisma));
   const board =
     overrides.board ??
     new LoadBoardService(new PrismaLoadBoardStore(prisma), geo, trust);
@@ -219,6 +235,7 @@ function buildBaseServices(
       ),
     board,
     trust,
+    billing,
     trucks,
     geo,
     market,
@@ -356,17 +373,36 @@ function registerRoutes(app: FastifyInstance, deps: AppDeps, prisma: PrismaClien
     hos: deps.hos,
     eldWebhookSecret: env.ELD_WEBHOOK_SECRET,
   });
-  registerFuelRoutes(app, { fuel: deps.fuel, fx: deps.fx });
-  registerInvoicingRoutes(app, { loads: deps.loads, invoices: deps.invoices });
-  registerIftaRoutes(app, { prisma, bus: deps.bus, fuel: deps.fuel, ifta: deps.ifta });
-  registerBoardRoutes(app, { board: deps.board });
+  const requireFeature = (feature: Feature) =>
+    featureGuard({ billing: deps.billing, feature, authenticate: app.authenticate });
+
+  /**
+   * Registers a route group behind a plan gate. The guard is a scope-level
+   * preHandler, and it authenticates itself when it runs before the route's own
+   * preHandler — so an unauthenticated caller still gets a 401, and only a
+   * known tenant is ever told to upgrade.
+   */
+  const gatedFeature = (feature: Feature, register: (scope: FastifyInstance) => void): void => {
+    void app.register(async (scope) => {
+      scope.addHook('preHandler', requireFeature(feature));
+      register(scope);
+    });
+  };
+
+  gatedFeature('fuel', (scope) => registerFuelRoutes(scope, { fuel: deps.fuel, fx: deps.fx }));
+  registerInvoicingRoutes(app, { loads: deps.loads, invoices: deps.invoices, requireFeature });
+  gatedFeature('ifta', (scope) =>
+    registerIftaRoutes(scope, { prisma, bus: deps.bus, fuel: deps.fuel, ifta: deps.ifta }),
+  );
+  gatedFeature('board', (scope) => registerBoardRoutes(scope, { board: deps.board }));
   registerTrustRoutes(app, { trust: deps.trust });
+  registerBillingRoutes(app, { billing: deps.billing, adminKey: env.BILLING_ADMIN_KEY });
   registerMessageRoutes(app, { messages: deps.messages });
   registerRatingRoutes(app, { ratings: deps.ratings });
-  registerTruckRoutes(app, { trucks: deps.trucks });
+  gatedFeature('trucks', (scope) => registerTruckRoutes(scope, { trucks: deps.trucks }));
   registerGeoRoutes(app, { geo: deps.geo });
-  registerMarketRoutes(app, { market: deps.market });
-  registerSearchRoutes(app, { searches: deps.searches });
+  gatedFeature('rates', (scope) => registerMarketRoutes(scope, { market: deps.market }));
+  gatedFeature('board', (scope) => registerSearchRoutes(scope, { searches: deps.searches }));
   registerNotificationRoutes(app, { notifications: deps.notifications, email: deps.email });
   registerPushRoutes(app, { push: deps.push });
   registerDispatchRoutes(app, { loads: deps.loads, detention: deps.detention });
@@ -374,7 +410,7 @@ function registerRoutes(app: FastifyInstance, deps: AppDeps, prisma: PrismaClien
   registerDocumentRoutes(app, { documents: deps.documents });
   registerImportRoutes(app, { importService: deps.importService });
   registerDiagnosticsRoutes(app, { prisma, env });
-  registerHealthRoutes(app, { prisma });
+  registerHealthRoutes(app, { prisma, version: env.APP_VERSION });
 }
 
 function startSchedule(deps: AppDeps, logger: Logger): void {

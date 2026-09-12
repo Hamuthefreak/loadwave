@@ -30,6 +30,21 @@ export interface AppEnv {
   VAPID_PRIVATE_KEY: string;
   /** Contact for the push service (mailto: preferred). */
   VAPID_SUBJECT: string;
+  /**
+   * Free FMCSA web key for the public carrier lookup. Empty disables the check
+   * entirely and the UI labels authority status as self-declared — which is the
+   * honest fallback, not a failure.
+   */
+  FMCSA_WEBKEY: string;
+  FMCSA_BASE_URL: string;
+  /** Release marker reported by /api/health. Kept in step with package.json. */
+  APP_VERSION: string;
+  /**
+   * Operator key for activating paid plans out-of-band. Until a payment
+   * provider is wired up, plan activation is performed by Loadwave staff with
+   * this key rather than being self-serve, so the feature locks mean something.
+   */
+  BILLING_ADMIN_KEY: string;
 }
 
 const schema = {
@@ -58,6 +73,10 @@ const schema = {
     VAPID_PUBLIC_KEY: { type: 'string', default: '' },
     VAPID_PRIVATE_KEY: { type: 'string', default: '' },
     VAPID_SUBJECT: { type: 'string', default: 'mailto:ops@loadwave.app' },
+    FMCSA_WEBKEY: { type: 'string', default: '' },
+    FMCSA_BASE_URL: { type: 'string', default: '' },
+    APP_VERSION: { type: 'string', default: '1.0.0' },
+    BILLING_ADMIN_KEY: { type: 'string', default: '' },
     LNG: { type: 'string', enum: ['en', 'fr'], default: 'en' },
     LNG_COUNTRY: { type: 'string', default: 'CA' },
   },

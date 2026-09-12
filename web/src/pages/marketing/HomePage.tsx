@@ -36,8 +36,8 @@ export default function HomePage() {
             Loads that <span className="accent">pay</span>. Trucks that move.
           </h1>
           <p className="ld-hero-sub">
-            Live loads from verified carriers across the US and Canada. Filter by lane,
-            equipment and rate — then book in one tap, with $/mile on every card.
+            Live loads across the US and Canada. Filter by lane, equipment and rate — then
+            book in one tap, with $/mile and the carrier's authority status on every card.
           </p>
 
           <form className="ld-searchbar" onSubmit={(e) => e.preventDefault()}>
@@ -55,7 +55,7 @@ export default function HomePage() {
             </Link>
           </form>
           <p className="ld-hero-note">
-            <CheckIcon /> <b>No credit card</b> · trusted by 12,000+ carriers · live loads below
+            <CheckIcon /> <b>No credit card</b> · 30 days of the full product, free · live loads below
           </p>
 
           <div className="ld-hero-visual">
@@ -147,9 +147,9 @@ export default function HomePage() {
               fleets on both sides of the border.
             </p>
             <ul className="ld-feature-list">
-              <FeatureBullet title="Verified carrier network">
-                MC/USDOT numbers and star ratings on every card — know who you're hauling for
-                before you book.
+              <FeatureBullet title="Carrier records on every card">
+                Authority status, insurance on file, star ratings and how a carrier has
+                actually paid on Loadwave — before you book.
               </FeatureBullet>
               <FeatureBullet title="One app for the back office">
                 Loads, trucks, rates, invoices and IFTA summaries in one live workspace — no
@@ -167,7 +167,7 @@ export default function HomePage() {
             <span className="ld-photo-glow" aria-hidden />
             <img src={IMGS.split} alt="Freight trucks on the road" className="ld-photo ld-photo-dark" loading="lazy" decoding="async" />
             <span className="ld-photo-chip">
-              <span className="ld-photo-chip-tag">Live</span> 14,208 loads posted
+              <span className="ld-photo-chip-tag">Live</span> loads as partners post them
             </span>
           </div>
         </div>
@@ -196,16 +196,21 @@ export default function HomePage() {
                 North America's <span className="accent-grad">Freight Marketplace</span>
               </h2>
               <p className="ld-muted ld-muted-light">
-                Built by truckers for truckers: thousands of carriers post and book freight on
-                Loadwave every day. Live market data, verified partners and one-tap booking —
-                rated best-in-class dispatch software six years running by the North American
-                Freight Association.
+                Built by truckers for truckers. Live market data, carrier records you can
+                check, and one-tap booking — with invoicing, fuel and IFTA in the same place
+                as the freight, so the back office stops being a Saturday job.
               </p>
+              {/*
+                These were invented traction numbers ("2,400+ carriers", "14K loads
+                weekly", "6× Award winner"). A pre-launch marketplace cannot claim
+                network effects it does not have, so they are replaced with the offer
+                itself — every figure here is backed by the product.
+              */}
               <div className="ld-metrics">
-                <Metric value="2,400+" label="Active carriers" />
-                <Metric value="14K" label="Loads posted weekly" />
-                <Metric value="92%" label="Booked same day" />
-                <Metric value="6×" label="Award winner" />
+                <Metric value="30 days" label="Full product, free" />
+                <Metric value="$0" label="Solo plan after that" />
+                <Metric value="1 tap" label="Book a load or start a trip" />
+                <Metric value="Both ways" label="Ratings after every load" />
               </div>
               <Link to="/signin?mode=signup" className="ld-pill ld-pill-light">
                 Join the board <ArrowIcon />

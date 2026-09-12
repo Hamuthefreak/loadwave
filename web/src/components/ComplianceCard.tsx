@@ -25,6 +25,10 @@ export function ComplianceCard() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [checksEnabled, setChecksEnabled] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyMsg, setVerifyMsg] = useState<string | null>(null);
+  const [verifyOk, setVerifyOk] = useState(false);
 
   const [authoritySince, setAuthoritySince] = useState('');
   const [authorityStatus, setAuthorityStatus] = useState('UNVERIFIED');
@@ -37,8 +41,9 @@ export function ComplianceCard() {
     setLoading(true);
     setError(null);
     try {
-      const res = await api<{ signals: TrustSignals }>('/api/trust/me');
+      const res = await api<{ signals: TrustSignals; checksEnabled: boolean }>('/api/trust/me');
       setSignals(res.signals);
+      setChecksEnabled(Boolean(res.checksEnabled));
       setAuthoritySince(dateInput(res.signals.authoritySince));
       setAuthorityStatus(res.signals.authorityStatus || 'UNVERIFIED');
       setExpires(dateInput(res.signals.insuranceExpiresAt));
@@ -48,6 +53,36 @@ export function ComplianceCard() {
       setLoading(false);
     }
   }, []);
+
+  /**
+   * Run the FMCSA authority check. A lookup that cannot be completed leaves the
+   * badge exactly as it was — the message says so rather than implying a pass.
+   */
+  const verify = async () => {
+    if (verifying) return;
+    setVerifying(true);
+    setVerifyMsg(null);
+    try {
+      const res = await api<{ checked: boolean; reason?: string; signals: TrustSignals }>(
+        '/api/trust/me/verify',
+        { method: 'POST' },
+      );
+      setSignals(res.signals);
+      setVerifyOk(res.checked);
+      setVerifyMsg(
+        res.checked
+          ? res.signals.verification === 'FAILED'
+            ? 'FMCSA records do not show your authority as active — contact support before posting.'
+            : 'Checked against FMCSA records.'
+          : (res.reason ?? 'That check could not be completed.'),
+      );
+    } catch (err) {
+      setVerifyOk(false);
+      setVerifyMsg(err instanceof Error ? err.message : 'that check could not be completed');
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   useEffect(() => {
     void load();
@@ -112,14 +147,58 @@ export function ComplianceCard() {
           ))}
       </h3>
       <p className="muted small">
-        Carriers see these facts before they commit to your freight. They are shown as self-declared — a complete file
-        is what makes a load worth booking.
+        Carriers see these facts before they commit to your freight. Everything here is shown for exactly what it is:
+        your MC/USDOT operating status can be checked against FMCSA public records, while insurance and the authority
+        start date stay labelled as self-declared.
       </p>
 
       {loading ? (
         <Spinner />
       ) : (
         <>
+          {signals && (
+            <div className={`verify-box ${signals.verification === 'VERIFIED' ? 'ok' : ''}`}>
+              <div className="verify-head">
+                {signals.verification === 'VERIFIED' ? (
+                  <span className="badge badge-green">FMCSA checked</span>
+                ) : signals.verification === 'FAILED' ? (
+                  <span className="badge badge-red">Not cleared to operate</span>
+                ) : signals.verification === 'DECLARED' ? (
+                  <span className="badge badge-muted">Self-declared</span>
+                ) : (
+                  <span className="badge badge-muted">No authority on file</span>
+                )}
+                <span className="muted small">{signals.verificationNote}</span>
+              </div>
+              {signals.fmcsaCheckedAt && (
+                <span className="muted small">
+                  Last checked {new Date(signals.fmcsaCheckedAt).toLocaleDateString()}
+                  {signals.fmcsaLegalName ? ` · registered as ${signals.fmcsaLegalName}` : ''}
+                </span>
+              )}
+              {checksEnabled ? (
+                <button
+                  type="button"
+                  className="btn-ghost btn-sm"
+                  disabled={verifying || signals.verification === 'NONE'}
+                  onClick={() => void verify()}
+                >
+                  {verifying ? 'Checking…' : signals.verification === 'VERIFIED' ? 'Re-check with FMCSA' : 'Check with FMCSA'}
+                </button>
+              ) : signals.verification === 'NONE' ? (
+                <span className="muted small">
+                  Add your USDOT number below and it can be checked against FMCSA records.
+                </span>
+              ) : (
+                <span className="muted small">
+                  FMCSA checks are not switched on for this deployment, so your number stays self-declared.
+                </span>
+              )}
+              {verifyMsg && (
+                <div className={verifyOk ? 'alert alert-success' : 'alert alert-warn'}>{verifyMsg}</div>
+              )}
+            </div>
+          )}
           {signals && (
             <div className="compliance-preview">
               <span className="muted small">What counterparties see on your posts</span>

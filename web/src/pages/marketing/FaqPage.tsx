@@ -13,15 +13,15 @@ const FAQS: Array<{ q: string; a: string }> = [
   },
   {
     q: 'How does booking a load work?',
-    a: 'Posts from verified carriers appear on the board. Tap Book load, confirm the rate and distance, and the load is marked taken for everyone instantly — no double booking.',
+    a: 'Posts from carriers on the platform appear on the board, each showing its authority status and rate. Tap Book load, confirm the rate and distance, and the load is claimed atomically — two carriers can never take the same freight.',
   },
   {
     q: 'How does IFTA get calculated?',
     a: 'Log fuel at the pump with jurisdiction and litres. Your quarterly summaries compute per-jurisdiction net litres and net tax due automatically using current rates.',
   },
   {
-    q: 'What does a verified carrier badge mean?',
-    a: 'Companies that add their MC or USDOT number earn a Verified carrier badge on every load and truck they post — so you know who you are hauling for before you book.',
+    q: 'What does the authority badge mean?',
+    a: 'Companies that add their USDOT number have it looked up in FMCSA public records. When the record comes back active they carry an FMCSA-checked badge on every load and truck they post. When we cannot check — no USDOT, or the lookup is unavailable — the profile is labelled self-declared, so a checked badge always means a check happened.',
   },
   {
     q: 'Can I use it on my phone in the cab?',

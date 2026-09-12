@@ -71,9 +71,10 @@ const PRIVACY_SECTIONS: Section[] = [
       <p>
         Loads you keep <strong>private</strong> are visible only to you and your company. Only
         loads and trucks you choose to <strong>post</strong> become visible to partner carriers
-        and brokers on the board. If you add an MC or USDOT number, we show a{' '}
-        <strong>Verified carrier</strong> badge on your posts so the other side knows who
-        they're dealing with — that identifier is public by design.
+        and brokers on the board. If you add an MC or USDOT number, we show it on your posts,
+        and where we can we check the operating status against FMCSA public records and label
+        the result either <strong>FMCSA checked</strong> or <strong>self-declared</strong> so the
+        other side knows exactly what has been verified — that identifier is public by design.
       </p>
     ),
   },

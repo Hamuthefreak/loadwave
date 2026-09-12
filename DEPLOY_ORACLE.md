@@ -292,6 +292,31 @@ credentials either in `/opt/loadboard/.env` (SMTP_URL / MAIL_FROM) or through th
 **Settings → SMTP** form (stored per-tenant). Free Render deployments can't send SMTP, but
 your Oracle VM can — outbound 587/465 are fine there.
 
+### FMCSA authority verification (optional — this is what makes the badge real)
+A profile is only marked **Verified** when the API has actually queried FMCSA. Get a free
+web key at `https://mobile.fmcsa.dot.gov/QCDevsite/`, set `FMCSA_WEBKEY` in
+`/opt/loadboard/.env`, and restart the service. With the key left empty nothing pretends
+to be checked: authority status renders as *self-declared* and the badge stays dark.
+The lookup calls the public QC Mobile service over HTTPS with a 6s timeout, and any
+failure (timeout, outage, unknown number) degrades to self-declared rather than
+recording a check that did not happen.
+
+### Activating paid plans (billing is enforced, payment is manual)
+The tiers on the pricing page are enforced server-side: a trial has the full product for
+30 days, then falls back to the free **Solo** feature set (the board, booking, trucks,
+fuel/IFTA and the mobile app keep working — invoicing and rate insights stop). Locked
+endpoints answer **402** naming the plan that unlocks them. There is no payment provider
+wired up, so activation is deliberately manual: set `BILLING_ADMIN_KEY` to a long random
+string in `/opt/loadboard/.env`, then
+
+| Action | Command |
+|---|---|
+| See pending upgrade requests | `curl -H "x-billing-key: $KEY" https://<host>/api/billing/requests` |
+| Approve (moves the tenant onto the plan) | `curl -X POST -H "x-billing-key: $KEY" -H 'content-type: application/json' -d '{"approve":true}' https://<host>/api/billing/requests/<id>/decide` |
+
+Leave the key empty to disable activation completely — an unconfigured deployment can
+never let anyone grant themselves a paid tier.
+
 ---
 
 ## Troubleshooting quick reference
@@ -340,4 +365,12 @@ errors out and I'll walk you through the exact fix.---
 7. **CI gate.** The deploy workflow now runs typecheck + lint + tests + web build before shipping;
    a red build never reaches the VM.
 8. **Demo data.** The demo tenant + board loads are seeded for sales demos. Before public launch,
-   drop the demo rows (`scripts/seed-demo.ts` can be deleted) and rotate `demo-credentials.txt`.
+   drop the demo rows (`scripts/seed-demo.ts` can be deleted) and rotate `/opt/loadboard/demo-credentials.txt`
+   (generated on the server by the deploy script, never committed to the repo).
+9. **FMCSA key.** Set `FMCSA_WEBKEY` so the Verified badge reflects a real authority check
+   instead of reading *self-declared*. Free, instant, no contract.
+10. **Billing key.** Set `BILLING_ADMIN_KEY` to a long random value, or leave it empty to keep
+    plan activation switched off entirely.
+11. **Trial clock.** Every existing tenant was backfilled with a 30-day full-product trial when
+    entitlements shipped; after that they drop to the free Solo tier. Decide the date you want
+    that to bite and tell customers before it does.

@@ -49,7 +49,7 @@ const CONTENT: Record<Role, RoleContent> = {
       { t: 'Live load board', d: 'Real loads from your network \u2014 filter by origin, destination, equipment and minimum rate.' },
       { t: 'One-tap booking', d: 'Rate, distance and $/mile on every card. Book it now, no phone games.' },
       { t: 'Post your truck', d: 'Tell the market where your equipment is and let brokers book you directly.' },
-      { t: 'Verified badge', d: 'Your MC/USDOT verified once \u2014 brokers see it and book you with confidence.' },
+      { t: 'Authority badge', d: 'Your USDOT checked against FMCSA public records. An FMCSA-checked badge when it comes back active, or a clearly-labelled self-declared profile while we can\u2019t check \u2014 never a claim we didn\u2019t earn.' },
       { t: 'Revenue that adds up', d: 'Auto-invoices with GST/HST/QST. Track monthly revenue, miles and true $/mile.' },
       { t: 'IFTA on autopilot', d: 'Log fuel at the pump; quarterly summaries compute themselves.' },
     ],
@@ -64,13 +64,13 @@ const CONTENT: Record<Role, RoleContent> = {
     ],
     faq: [
       { q: 'Do I still need a dispatcher?', a: 'That\u2019s your call. Many owner-operators use Loadwave instead of paying 5\u201310% \u2014 the board shows rates upfront so you can book your own freight. Others run both: dispatcher finds, Loadwave keeps the books straight.' },
-      { q: 'What does verification actually do?', a: 'We check your MC/USDOT against FMCSA records and put a Verified badge on everything you post. Brokers and shippers book verified carriers faster, which means you get the load before the unverified guy.' },
+      { q: 'What does verification actually do?', a: 'We look your USDOT up in FMCSA\u2019s public records and show you the operating status we get back. When it comes back active you get an FMCSA-checked badge on your posts, which brokers look for. When we can\u2019t check \u2014 no USDOT on file, or the lookup is unavailable \u2014 your profile is clearly marked self-declared instead. We never show a check we didn\u2019t run, and insurance and authority age always stay labelled as declared by you.' },
       { q: 'How fast do I get paid?', a: 'Invoices generate the moment a load completes. Payment terms are between you and the party that booked you \u2014 the platform keeps the record straight so nobody can claim confusion.' },
       { q: 'I run one truck. Is this overkill?', a: 'It\u2019s built for you, actually. One-truck operations lose the most time to paperwork \u2014 Loadwave turns a Saturday of invoicing and IFTA into a few taps at the pump.' },
       { q: 'Can I post my truck when I\u2019m empty?', a: 'Yes \u2014 post your equipment, current position and where you\u2019re headed. Brokers searching that lane see you first. It\u2019s the difference between deadheading home and deadheading to a load.' },
     ],
     others: [
-      { role: 'broker', label: 'For brokers', note: 'Post loads to verified carriers' },
+      { role: 'broker', label: 'For brokers', note: 'Post loads, vet carrier authority' },
       { role: 'shipper', label: 'For shippers', note: 'Tender freight with tracking' },
     ],
   },
@@ -94,13 +94,13 @@ const CONTENT: Record<Role, RoleContent> = {
     ),
     steps: [
       { t: 'Post the load', d: 'Lane, equipment, dates, rate. It hits the live board instantly and saved-search alerts push it to carriers who run that lane.' },
-      { t: 'Booked by verified trucks', d: 'Carriers with FMCSA-verified MC/USDOT profiles book instantly \u2014 you see their verification before you accept, not after.' },
+      { t: 'Know who\u2019s hauling', d: 'Every carrier shows their authority status before you accept \u2014 checked against FMCSA records where we can, clearly marked self-declared where we can\u2019t, plus insurance on file and how they\u2019ve actually paid on Loadwave.' },
       { t: 'Track it without calling', d: 'The load\u2019s status updates as the carrier works it. No check calls, no \u201cwhere\u2019s my truck\u201d threads.' },
       { t: 'Invoice clean', d: 'Customer invoices generate from the load record with GST/HST/QST computed \u2014 your margin, your rate con, your books, all consistent.' },
     ],
     features: [
       { t: 'Post loads in minutes', d: 'Set lane, equipment, dates and rate. Approved carriers can book instantly.' },
-      { t: 'Verified carrier network', d: 'MC/USDOT verified profiles \u2014 know who you\u2019re dispatching before you book.' },
+      { t: 'Carrier authority at a glance', d: 'Authority status checked against FMCSA records where possible, marked self-declared where not \u2014 so you know who you\u2019re dispatching before you book.' },
       { t: 'Rate comparisons', d: 'See the rate range on your lanes so every quote is defensible.' },
       { t: 'Carrier relationships', d: 'Your network is yours \u2014 build a list of carriers who show up, and route loads to them first.' },
       { t: 'Invoices & taxes', d: 'Generate customer invoices with Canadian sales tax handled automatically.' },
@@ -108,8 +108,8 @@ const CONTENT: Record<Role, RoleContent> = {
     ],
     compareTitle: 'The old way vs. Loadwave',
     compare: [
-      ['Covering a load', 'Call 10 carriers, take the first yes', 'Post once, verified carriers book in'],
-      ['Vetting a carrier', 'Google the MC, hope', 'FMCSA-verified badge on every profile'],
+      ['Covering a load', 'Call 10 carriers, take the first yes', 'Post once, carriers on the board book in'],
+      ['Vetting a carrier', 'Google the MC, hope', 'Authority checked against FMCSA records, or labelled self-declared'],
       ['Quoting a lane', 'Gut feel plus last week\u2019s memory', 'Lane rate ranges on the board'],
       ['Check calls', 'Every 2 hours, every load', 'Status updates on the platform'],
       ['Back office', 'Broker sheets, spreadsheets, invoices', 'Invoices generated from the load record'],
@@ -117,9 +117,9 @@ const CONTENT: Record<Role, RoleContent> = {
     ],
     faq: [
       { q: 'Do carriers see my customer\u2019s rates?', a: 'Carriers see the rate you post for the load \u2014 that\u2019s the deal. Your customer relationships and rate history stay on your side of the ledger.' },
-      { q: 'What stops a carrier from double-booking?', a: 'Bookings are instant and final on the platform \u2014 a load that\u2019s booked comes off the board. Repeated no-shows hurt a carrier\u2019s record, and you can see that history before you hand over freight.' },
+      { q: 'What stops a carrier from double-booking?', a: 'Booking is atomic and final: the first carrier to claim a load gets it, and it comes off the board immediately, so two carriers can\u2019t take the same freight. Before you hand it over you can see the carrier\u2019s authority status, insurance on file, payment record on Loadwave and any complaints from other carriers.' },
       { q: 'Can I keep my core carriers?', a: 'Yes. Your network is yours \u2014 build a preferred list and post loads to them first, with the open board as overflow when your regulars are full.' },
-      { q: 'How does verification work?', a: 'MC/USDOT numbers are checked against FMCSA records when a carrier signs up. The Verified badge means the number is real, active, and belongs to the company you\u2019re about to book.' },
+      { q: 'How does verification work?', a: 'We look the carrier\u2019s USDOT up in FMCSA\u2019s public records and show the operating status that comes back. If a carrier has no USDOT on file, or the lookup can\u2019t be completed, their profile is labelled self-declared rather than badged \u2014 so a checked badge always means a check actually happened.' },
       { q: 'What about factoring and payment?', a: 'Invoices generate from the load record the moment it completes \u2014 clean paperwork that factors fast. Payment terms stay between you and the carrier.' },
     ],
     others: [
@@ -130,7 +130,7 @@ const CONTENT: Record<Role, RoleContent> = {
   shipper: {
     eyebrow: 'For shippers & 3PLs',
     title: 'Ship with a carrier you can actually trust.',
-    sub: 'Verified capacity, live pricing and clean documentation \u2014 from tender to invoice.',
+    sub: 'Capacity you can vet, live pricing and clean documentation \u2014 from tender to invoice.',
     cta: 'Start shipping',
     painKicker: 'The problem',
     pains: [
@@ -145,13 +145,13 @@ const CONTENT: Record<Role, RoleContent> = {
       </>
     ),
     steps: [
-      { t: 'Post your freight', d: 'Lane, equipment, window, rate. Verified carriers see it on the live board immediately.' },
-      { t: 'Get booked by a real carrier', d: 'Every booking shows the carrier\u2019s FMCSA-verified identity \u2014 company, MC/USDOT \u2014 before the truck is yours.' },
+      { t: 'Post your freight', d: 'Lane, equipment, window, rate. Carriers on the live board see it immediately, each with their authority status shown.' },
+      { t: 'Get booked by a real carrier', d: 'Every booking shows the carrier\u2019s company and MC/USDOT, plus whether their authority has been checked against FMCSA records or is self-declared \u2014 before the truck is yours.' },
       { t: 'Watch it move', d: 'Status updates live as the load is worked. Your team sees the same data the carrier does.' },
       { t: 'One clean invoice', d: 'Documentation generates from the load record \u2014 no mismatches, no tax surprises, no reconciliation emails.' },
     ],
     features: [
-      { t: 'Verified carriers', d: 'Every capacity posting shows MC/USDOT verification before you commit.' },
+      { t: 'Carrier records upfront', d: 'Every capacity posting shows the carrier\u2019s authority status before you commit \u2014 FMCSA-checked where we can check it, clearly marked self-declared where we can\u2019t.' },
       { t: 'Live tracking data', d: 'Load status keeps your shipment current without phone calls.' },
       { t: 'Market rates', d: 'Rate insights on your lanes keep your freight spend honest.' },
       { t: 'Clean invoicing', d: 'Accurate customer-facing invoices with tax computed for CA/US lanes.' },
@@ -160,23 +160,23 @@ const CONTENT: Record<Role, RoleContent> = {
     ],
     compareTitle: 'The old way vs. Loadwave',
     compare: [
-      ['Finding capacity', 'Tender to a broker, wait', 'Post to the board, verified carriers book in'],
+      ['Finding capacity', 'Tender to a broker, wait', 'Post to the board, carriers book in'],
       ['Knowing the price', 'Whatever the quote says', 'Lane rate ranges on the board'],
-      ['Vetting the truck', 'Trust the broker\u2019s word', 'FMCSA-verified carrier on every booking'],
+      ['Vetting the truck', 'Trust the broker\u2019s word', 'Authority checked against FMCSA records, or labelled self-declared'],
       ['Status updates', 'Phone tag at 2 PM', 'Live status on the platform'],
       ['Paperwork', 'Email chains and PDFs', 'Generated from the load record'],
       ['Audit trail', 'Inboxes and memory', 'One record: load, carrier, rate, status'],
     ],
     faq: [
       { q: 'Do I need a contract to start?', a: 'No. Post your first load today \u2014 verification and booking are immediate. Volume agreements and API access are available when you\u2019re ready.' },
-      { q: 'What if a carrier cancels?', a: 'Bookings are firm on both sides, and a carrier\u2019s history is visible before you book. If something goes wrong, the record is on the platform \u2014 not lost in a text thread.' },
+      { q: 'What if a carrier cancels?', a: 'Bookings are atomic, so two carriers can never take the same load. Before you commit you can see the carrier\u2019s authority status, insurance on file, payment record and any complaints from other carriers, and the record of what actually happened stays on the platform instead of a text thread.' },
       { q: 'Can my team all use it?', a: 'Yes \u2014 your company account supports your whole logistics team. Everyone sees the same loads, statuses and documents.' },
       { q: 'Is my freight data private?', a: 'Your loads are visible only to carriers on the board \u2014 and only the details you post. Rate history and volumes stay yours. See the Privacy Policy for the details.' },
       { q: 'How are rates set?', a: 'You set the rate when you post. Lane rate insights show you the market range, so the number you pick is informed, not hopeful.' },
     ],
     others: [
       { role: 'carrier', label: 'For carriers', note: 'Find freight, book in a tap' },
-      { role: 'broker', label: 'For brokers', note: 'Post loads to verified carriers' },
+      { role: 'broker', label: 'For brokers', note: 'Post loads to carriers on the board' },
     ],
   },
 };

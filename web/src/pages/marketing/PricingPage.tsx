@@ -23,7 +23,6 @@ const FEATURE_ROWS: Array<{ label: string; key: string }> = [
   { label: 'Invoicing with GST/HST/QST', key: 'invoicing' },
   { label: 'Fuel logging', key: 'fuel' },
   { label: 'IFTA quarterly summaries', key: 'ifta' },
-  { label: 'Company / broker directory', key: 'directory' },
   { label: 'Mobile app (phone + tablet)', key: 'mobile' },
 ];
 
@@ -36,7 +35,7 @@ const PLANS: Plan[] = [
     topFeatures: ['Live load board', 'Post your truck', 'Fuel & IFTA', 'Phone + tablet'],
     full: {
       board: true, book: true, trucks: true, network: false, rates: false, compare: false,
-      route: false, invoicing: false, fuel: true, ifta: true, directory: false, mobile: true,
+      route: false, invoicing: false, fuel: true, ifta: true, mobile: true,
     },
   },
   {
@@ -48,7 +47,7 @@ const PLANS: Plan[] = [
     topFeatures: ['Everything in Solo', 'Invoicing & taxes', 'Load comparison', 'Rate insights'],
     full: {
       board: true, book: true, trucks: true, network: true, rates: true, compare: true,
-      route: true, invoicing: true, fuel: true, ifta: true, directory: true, mobile: true,
+      route: true, invoicing: true, fuel: true, ifta: true, mobile: true,
     },
   },
   {
@@ -59,7 +58,7 @@ const PLANS: Plan[] = [
     topFeatures: ['Everything in Pro', 'Multi-driver HOS', 'Route & trip planning', 'Priority support'],
     full: {
       board: true, book: true, trucks: true, network: true, rates: true, compare: true,
-      route: true, invoicing: true, fuel: true, ifta: true, directory: true, mobile: true,
+      route: true, invoicing: true, fuel: true, ifta: true, mobile: true,
     },
   },
 ];
@@ -75,8 +74,8 @@ export default function PricingPage() {
             Pick your plan. Swap <span className="accent">anytime</span>.
           </h1>
           <p className="ld-hero-sub center">
-            Every plan includes the live load board and IFTA. Upgrade for invoicing, rate
-            insights and the network tools.
+            Every plan includes the live load board, booking and fuel logging. Upgrade for
+            invoicing, rate insights and the network tools.
           </p>
         </div>
       </section>
@@ -106,6 +105,10 @@ export default function PricingPage() {
               </div>
             ))}
           </div>
+          <p className="ld-muted small center" style={{ marginTop: 22 }}>
+            Card payment isn’t live yet: paid plans are activated by Loadwave once billing is
+            arranged. Your 30-day trial needs nothing from you.
+          </p>
         </div>
       </section>
 
@@ -157,8 +160,8 @@ export default function PricingPage() {
           </div>
           <p className="ld-muted small center" style={{ marginTop: 22 }}>
             {showFull
-              ? 'Locked features grey out on lower tiers — upgrade in one click when you need them.'
-              : 'Tiered access is applied live in the app: locked tools stay visible but dormant.'}
+              ? 'These tiers are enforced in the app: when a plan does not include a tool, the API refuses it and the screen says which plan unlocks it.'
+              : 'Tiered access is applied live in the app: locked tools stay visible and tell you what unlocks them.'}
           </p>
         </div>
       </section>
@@ -167,8 +170,11 @@ export default function PricingPage() {
         <div className="ld-wrap ld-callout" data-reveal>
           <div>
             <span className="ld-kicker ld-kicker-light">Not sure yet?</span>
-            <h2 className="ld-h2 ld-h2-light">30-day free trial on every plan.</h2>
-            <p className="ld-muted ld-muted-light">No credit card required.</p>
+            <h2 className="ld-h2 ld-h2-light">30 days of the full product, free.</h2>
+            <p className="ld-muted ld-muted-light">
+              No credit card required — the trial runs from the moment you sign up. When it ends the
+              board, booking and fuel logging stay free; paid tools switch off until a plan is active.
+            </p>
           </div>
           <Link to="/signin?mode=signup" className="ld-pill ld-pill-orange">
             Start free <ArrowIcon />

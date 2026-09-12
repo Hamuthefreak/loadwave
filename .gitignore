@@ -7,3 +7,8 @@ coverage/
 !.env.example
 .prisma/
 .freebuff/
+# TypeScript incremental build artifacts (from `tsc -b`)
+*.tsbuildinfo
+# Written by the deploy script on the server (see DEPLOY_ORACLE.md); it holds
+# live demo logins and must never be committed.
+demo-credentials.txt

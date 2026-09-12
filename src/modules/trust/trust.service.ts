@@ -13,6 +13,8 @@ import {
   type TrustLevel,
 } from './trust.policy';
 import type { ReportRow, TrustRepo } from './trust.repo';
+import { normalizeDot, verificationState, type VerificationState } from './fmcsa.policy';
+import type { FmcsaClient } from './fmcsa.client';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PAYMENT_WINDOW_DAYS = 730;
@@ -40,10 +42,25 @@ export interface TrustSignals {
   ratingCount: number;
   mcNumber: string | null;
   usdotNumber: string | null;
+  /**
+   * true ONLY when FMCSA confirmed the carrier may operate. A filled-in MC
+   * number is not verification, and this field no longer pretends otherwise.
+   */
   verified: boolean;
+  verification: VerificationState;
+  verificationNote: string;
+  fmcsaStatus: string | null;
+  fmcsaLegalName: string | null;
+  fmcsaCheckedAt: string | null;
   flags: string[];
   /** When the tenant last updated its compliance details, if ever. */
   declaredAt: string | null;
+}
+
+export interface VerifyResult {
+  checked: boolean;
+  reason?: string;
+  signals: TrustSignals;
 }
 
 export interface ComplianceInput {
@@ -64,10 +81,14 @@ export interface ReportInput {
 }
 
 export interface TrustService {
+  /** Whether FMCSA checks can run at all on this deployment. */
+  readonly checksEnabled: boolean;
   /** Batch lookup so a board page costs three queries, not three per row. */
   signalsFor(tenantIds: string[], now?: Date): Promise<Map<string, TrustSignals>>;
   signals(tenantId: string, now?: Date): Promise<TrustSignals>;
   setCompliance(tenantId: string, input: ComplianceInput): Promise<TrustSignals>;
+  /** Run (and record) an FMCSA authority check for this tenant. */
+  verifyAuthority(tenantId: string): Promise<VerifyResult>;
   report(input: ReportInput): Promise<ReportRow>;
   /** Reports this tenant filed (their own view; never the platform's case file). */
   myReports(tenantId: string): Promise<ReportRow[]>;
@@ -89,7 +110,15 @@ function cleanText(value: string | null | undefined, max: number, field: string)
 }
 
 export class PrismaTrustService implements TrustService {
-  constructor(private readonly repo: TrustRepo) {}
+  constructor(
+    private readonly repo: TrustRepo,
+    /** Optional: without it, authority status stays labelled self-declared. */
+    private readonly fmcsa?: FmcsaClient,
+  ) {}
+
+  get checksEnabled(): boolean {
+    return Boolean(this.fmcsa?.enabled);
+  }
 
   async signalsFor(tenantIds: string[], now: Date = new Date()): Promise<Map<string, TrustSignals>> {
     const ids = Array.from(new Set(tenantIds.filter(Boolean)));
@@ -107,6 +136,14 @@ export class PrismaTrustService implements TrustService {
     for (const row of compliance) {
       const payment = paymentRecord(paidBy.get(row.tenantId) ?? [], now, { windowDays: PAYMENT_WINDOW_DAYS });
       const openReports = reportCounts.get(row.tenantId) ?? 0;
+      const verification = verificationState({
+        mcNumber: row.mcNumber,
+        usdotNumber: row.usdotNumber,
+        checkedAt: row.fmcsaCheckedAt,
+        checkStatus: row.fmcsaStatus,
+        now,
+        enabled: this.checksEnabled,
+      });
       const summary = trustSummary(
         {
           insuranceExpiresAt: row.insuranceExpiresAt,
@@ -116,6 +153,7 @@ export class PrismaTrustService implements TrustService {
           openReports,
           ratingAvg: row.ratingAvg,
           ratingCount: row.ratingCount,
+          verification: verification.state,
         },
         now,
       );
@@ -136,7 +174,12 @@ export class PrismaTrustService implements TrustService {
         ratingCount: row.ratingCount,
         mcNumber: row.mcNumber,
         usdotNumber: row.usdotNumber,
-        verified: Boolean(row.mcNumber || row.usdotNumber),
+        verified: verification.verified,
+        verification: verification.state,
+        verificationNote: verification.note,
+        fmcsaStatus: row.fmcsaStatus,
+        fmcsaLegalName: row.fmcsaLegalName,
+        fmcsaCheckedAt: row.fmcsaCheckedAt ? row.fmcsaCheckedAt.toISOString() : null,
         flags: summary.flags,
         declaredAt: row.complianceUpdatedAt ? row.complianceUpdatedAt.toISOString() : null,
       });
@@ -194,6 +237,49 @@ export class PrismaTrustService implements TrustService {
     });
 
     return this.signals(tenantId);
+  }
+
+  /**
+   * Ask FMCSA whether this carrier may operate, and store the answer.
+   *
+   * Every outcome that is not a successful check leaves fmcsaCheckedAt alone,
+   * so the badge can never show "verified" on the strength of a failed or
+   * skipped lookup.
+   */
+  async verifyAuthority(tenantId: string): Promise<VerifyResult> {
+    const row = (await this.repo.compliance([tenantId]))[0];
+    if (!row) throw notFound('tenant not found');
+
+    const dot = normalizeDot(row.usdotNumber);
+    if (!dot) {
+      throw badRequest('Add your USDOT number first — FMCSA looks carriers up by USDOT');
+    }
+
+    if (!this.fmcsa?.enabled) {
+      return {
+        checked: false,
+        reason: 'Authority checks are not configured on this deployment, so your number stays self-declared',
+        signals: await this.signals(tenantId),
+      };
+    }
+
+    const result = await this.fmcsa.lookupByDot(dot);
+    if (!result.ok) {
+      const reason =
+        result.reason === 'NOT_FOUND'
+          ? 'FMCSA has no carrier record for that USDOT number'
+          : 'FMCSA could not be reached — try again in a moment';
+      return { checked: false, reason, signals: await this.signals(tenantId) };
+    }
+
+    await this.repo.recordFmcsaCheck(tenantId, {
+      dotNumber: result.carrier.dotNumber,
+      status: result.carrier.status,
+      legalName: result.carrier.legalName ?? result.carrier.dbaName,
+      checkedAt: new Date(),
+    });
+
+    return { checked: true, signals: await this.signals(tenantId) };
   }
 
   async report(input: ReportInput): Promise<ReportRow> {

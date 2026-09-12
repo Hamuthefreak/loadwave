@@ -175,18 +175,35 @@ export default function Tools() {
             </table>
           </div>
 
-          <h2>Gated insights</h2>
+          {/*
+            Split honestly: what a paid plan actually unlocks today, and what is
+            still only planned. A "Pro" badge on an unbuilt feature reads as
+            "it exists behind a paywall", which is the kind of claim this
+            product can't afford to make.
+          */}
+          <h2>Unlocked by a paid plan</h2>
           <div className="grid">
             <div className="card gated">
-              <div className="detail-row"><dt>Rate insights & trend maps</dt><dd><Badge tone="gray">Pro</Badge></dd></div>
-              <p className="muted small">Historical lane rates, seasonal trends and projected rates.</p>
+              <div className="detail-row"><dt>30-day lane rate trend</dt><dd><Badge tone="blue">Pro</Badge></dd></div>
+              <p className="muted small">
+                Rate history for a load's lane, charted on every load detail. The free plan still
+                shows the lane benchmark against your own past loads.
+              </p>
             </div>
-            <div className="card gated">
-              <div className="detail-row"><dt>Broker credit & directory</dt><dd><Badge tone="gray">Pro</Badge></dd></div>
-              <p className="muted small">Company lookup, credit scores and onboarding status.</p>
+          </div>
+
+          <h2>On the roadmap</h2>
+          <div className="grid">
+            <div className="card">
+              <div className="detail-row"><dt>Broker credit & directory</dt><dd><Badge tone="gray">Planned</Badge></dd></div>
+              <p className="muted small">
+                Credit scores need a real data source, and we won't print a number we can't stand
+                behind. Authority status, insurance on file and our own days-to-pay record are
+                live on every profile today.
+              </p>
             </div>
-            <div className="card gated">
-              <div className="detail-row"><dt>Tri-haul & backhaul routing</dt><dd><Badge tone="gray">Fleet</Badge></dd></div>
+            <div className="card">
+              <div className="detail-row"><dt>Tri-haul & backhaul routing</dt><dd><Badge tone="gray">Planned</Badge></dd></div>
               <p className="muted small">Plan triangles so you never run empty.</p>
             </div>
           </div>

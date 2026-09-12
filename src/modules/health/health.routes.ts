@@ -3,6 +3,8 @@ import type { PrismaClient } from '../../db/prisma';
 
 export interface HealthModuleDeps {
   prisma: PrismaClient;
+  /** Release marker, so a deploy can be confirmed from outside the box. */
+  version?: string;
 }
 
 /**
@@ -18,9 +20,12 @@ export function registerHealthRoutes(app: FastifyInstance, deps: HealthModuleDep
     } catch {
       db = false;
     }
+    const version = deps.version ?? 'unknown';
     if (!db) {
-      return reply.code(503).send({ status: 'degraded', db: false, uptimeSec: Math.round(process.uptime()) });
+      return reply
+        .code(503)
+        .send({ status: 'degraded', db: false, version, uptimeSec: Math.round(process.uptime()) });
     }
-    return reply.send({ status: 'ok', db: true, uptimeSec: Math.round(process.uptime()) });
+    return reply.send({ status: 'ok', db: true, version, uptimeSec: Math.round(process.uptime()) });
   });
 }
