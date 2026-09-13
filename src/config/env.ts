@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import envSchema from 'env-schema';
 
 export interface AppEnv {
@@ -37,7 +39,10 @@ export interface AppEnv {
    */
   FMCSA_WEBKEY: string;
   FMCSA_BASE_URL: string;
-  /** Release marker reported by /api/health. Kept in step with package.json. */
+  /**
+   * Release marker reported by /api/health. Defaults to the version in
+   * package.json; set it only to override that.
+   */
   APP_VERSION: string;
   /**
    * Operator key for activating paid plans out-of-band. Until a payment
@@ -45,6 +50,31 @@ export interface AppEnv {
    * this key rather than being self-serve, so the feature locks mean something.
    */
   BILLING_ADMIN_KEY: string;
+}
+
+/**
+ * The release marker /api/health reports.
+ *
+ * This exists so a deploy can be confirmed from outside the box, which means it
+ * must not be a number somebody has to remember to edit. It was exactly that,
+ * and it drifted on the first release that used it: the server answered
+ * `version: "1.0.0"` while v1.1.0 was live, because the schema default was a
+ * hardcoded literal and .env never sets APP_VERSION.
+ *
+ * So package.json is the source of truth. The service runs with its working
+ * directory at the repo root (see deploy/loadboard.service), and package.json
+ * ships beside dist/ — but reading it must never stop the API booting, so every
+ * failure falls back to 'unknown' rather than throwing.
+ */
+function resolveAppVersion(): string {
+  try {
+    const pkg: unknown = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8'));
+    const version = (pkg as { version?: unknown }).version;
+    if (typeof version === 'string' && version.length > 0) return version;
+  } catch {
+    /* fall through to the unknown marker */
+  }
+  return 'unknown';
 }
 
 const schema = {
@@ -75,7 +105,7 @@ const schema = {
     VAPID_SUBJECT: { type: 'string', default: 'mailto:ops@loadwave.app' },
     FMCSA_WEBKEY: { type: 'string', default: '' },
     FMCSA_BASE_URL: { type: 'string', default: '' },
-    APP_VERSION: { type: 'string', default: '1.0.0' },
+    APP_VERSION: { type: 'string', default: resolveAppVersion() },
     BILLING_ADMIN_KEY: { type: 'string', default: '' },
     LNG: { type: 'string', enum: ['en', 'fr'], default: 'en' },
     LNG_COUNTRY: { type: 'string', default: 'CA' },
