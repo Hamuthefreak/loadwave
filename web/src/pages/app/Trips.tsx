@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api';
 import { Badge, Empty, Lane, Modal, PageHeader, Spinner } from '../../components/ui';
 import { FuelLogButton } from '../../components/FuelLogger';
+import { SignaturePad } from '../../components/SignaturePad';
 import { daysLabel, daysUntil, km, money, perMile, regionLabel, shortDate } from '../../utils/format';
 import { equipmentLabel } from './regions';
 
@@ -64,6 +65,7 @@ export default function Trips() {
   const [start, setStart] = useState<Trip | null>(null);
   const [deliver, setDeliver] = useState<Trip | null>(null);
   const [deliverBusy, setDeliverBusy] = useState(false);
+  const [signFor, setSignFor] = useState<Trip | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -181,6 +183,7 @@ export default function Trips() {
               onDeliver={() => setDeliver(t)}
               onLogFuel={() => setFlash('Fuel stop logged — it’s saved to your fleet fuel records & IFTA.')}
               onShare={(trip) => void shareTrip(trip)}
+              onSign={(trip) => setSignFor(trip)}
               onDetentionToggle={(trip) => void toggleDetention(trip)}
             />
           ))}
@@ -285,6 +288,17 @@ export default function Trips() {
           </div>
         )}
       </Modal>
+
+      <SignaturePad
+        open={signFor !== null}
+        loadId={signFor?.id ?? null}
+        laneLabel={signFor ? `${regionLabel(signFor.originRegion)} → ${regionLabel(signFor.destinationRegion)}` : undefined}
+        onClose={() => setSignFor(null)}
+        onSigned={() => {
+          setFlash('Signature captured — it is on the delivery packet now.');
+          void load();
+        }}
+      />
     </div>
   );
 }
@@ -370,6 +384,7 @@ function TripCard({
   onDeliver,
   onLogFuel,
   onShare,
+  onSign,
   onDetentionToggle,
 }: {
   trip: Trip;
@@ -378,6 +393,7 @@ function TripCard({
   onDeliver: () => void;
   onLogFuel: () => void;
   onShare: (trip: Trip) => void;
+  onSign: (trip: Trip) => void;
   onDetentionToggle: (trip: Trip) => void;
 }) {
   const rate = trip.freightAmountBase ?? trip.freightAmountTransaction;
@@ -443,11 +459,18 @@ function TripCard({
         <DetentionBox trip={trip} busy={busy} onToggle={onDetentionToggle} />
       )}
 
-      {(trip.status === 'ASSIGNED' || trip.status === 'IN_TRANSIT') && (
+      {(trip.status === 'ASSIGNED' || trip.status === 'IN_TRANSIT' || trip.status === 'DELIVERED') && (
         <div className="trip-actions">
-          <FuelLogButton label="Log fuel" onLogged={onLogFuel} />
+          {trip.status !== 'DELIVERED' && <FuelLogButton label="Log fuel" onLogged={onLogFuel} />}
           <button className="btn-ghost" onClick={() => onShare(trip)} aria-label="Share trip status">
             Share status
+          </button>
+          <button
+            className="btn-ghost"
+            onClick={() => onSign(trip)}
+            title="Capture the receiver's signature for the delivery packet"
+          >
+            Get signature
           </button>
           {trip.status === 'ASSIGNED' && (
             <button className="btn-green" onClick={onStart} disabled={busy}>

@@ -83,9 +83,37 @@ model Tenant {
   loadMessages    LoadMessage[]        @relation("LoadMessageAuthor")
   reportsFiled    TenantReport[]       @relation("ReportReporter")
   reportsReceived TenantReport[]       @relation("ReportSubject")
+  loadSignatures  LoadSignature[]
   invoicesPaid    Invoice[]            @relation("InvoicePayer")
   teamInvites     TeamInvite[]
   planRequests    PlanRequest[]
+}
+
+/// A signature captured against a load: the receiver signing at the dock, the
+/// driver accepting the trip, or a broker accepting the rate.
+///
+/// Stored as the drawn image itself (JPEG from the capture canvas) because the
+/// delivery packet embeds it directly — and an unreadable scan is worse than no
+/// signature at all when a factoring company is deciding whether to advance.
+model LoadSignature {
+  id           String   @id @default(uuid())
+  tenantId     String
+  loadId       String
+  driverId     String?
+  role         String   @default("RECEIVER") // CARRIER | RECEIVER | BROKER
+  signerName   String
+  signedAt     DateTime @default(now())
+  mimeType     String   @default("image/jpeg")
+  sizeBytes    Int
+  data         Bytes
+  capturedById String?
+  createdAt    DateTime @default(now())
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  load   Load    @relation(fields: [loadId], references: [id], onDelete: Cascade)
+  driver Driver? @relation(fields: [driverId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, loadId, signedAt])
 }
 
 /// A tenant asking to move onto a paid plan. Until a payment provider is
@@ -266,6 +294,7 @@ model Driver {
   teamInvites   TeamInvite[]
   loadDocuments LoadDocument[]
   detentions    DetentionEntry[]  @relation("DetentionDriver")
+  signatures    LoadSignature[]
 
   @@unique([tenantId, externalEldId])
   @@index([tenantId])
@@ -525,6 +554,7 @@ model Load {
   stops          LoadStop[]
   ratings        CarrierRating[]
   detentions     DetentionEntry[]
+  signatures     LoadSignature[]
   reports        TenantReport[]
 
   @@unique([tenantId, externalLoadboardId])

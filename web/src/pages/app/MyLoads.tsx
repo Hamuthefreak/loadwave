@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { api } from '../../api';
+import { api, fetchFile, saveBlob } from '../../api';
 import { Badge, Empty, Lane, PageHeader } from '../../components/ui';
+import { SignaturePad } from '../../components/SignaturePad';
 import DispatchModal, { type DispatchLoad } from '../../components/DispatchModal';
 import { LoadDocumentsModal } from '../../components/LoadDocumentsModal';
 import { InvoiceLoadModal } from '../../components/InvoiceLoadModal';
@@ -57,6 +58,8 @@ function MyLoadsTab() {
   const [invoiceFor, setInvoiceFor] = useState<OwnLoad | null>(null);
   const [msgFor, setMsgFor] = useState<string | null>(null);
   const [rateFor, setRateFor] = useState<OwnLoad | null>(null);
+  const [signFor, setSignFor] = useState<OwnLoad | null>(null);
+  const [pdfBusy, setPdfBusy] = useState<string | null>(null);
   const [unread, setUnread] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -74,6 +77,31 @@ function MyLoadsTab() {
   // Recurring: ISO weekdays (1=Mon … 7=Sun) the load should auto-clone on.
   const [recurDays, setRecurDays] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
+
+  /**
+   * Generate a PDF and hand it to the browser as a download. It is generated
+   * on demand from the live record rather than stored, so the rate con always
+   * shows the rate that is actually on the load.
+   */
+  const downloadPdf = async (load: OwnLoad, kind: 'rate-confirmation' | 'packet') => {
+    const key = `${load.id}:${kind === 'packet' ? 'packet' : 'rc'}`;
+    if (pdfBusy) return;
+    setPdfBusy(key);
+    setError(null);
+    try {
+      const { blob, fileName } = await fetchFile(`/api/loads/${load.id}/${kind}.pdf`);
+      saveBlob(blob, fileName);
+      setSuccess(
+        kind === 'packet'
+          ? 'Delivery packet downloaded — rate con, signature and attachments in one file.'
+          : 'Rate confirmation downloaded.',
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not build that document.');
+    } finally {
+      setPdfBusy(null);
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -274,7 +302,7 @@ function MyLoadsTab() {
                 <th>Status</th>
                 <th>Dispatch</th>
                 <th>Action</th>
-                <th>Wrap-up</th>
+                <th>Paperwork</th>
               </tr>
             </thead>
             <tbody>
@@ -326,22 +354,48 @@ function MyLoadsTab() {
                     )}
                   </td>
                   <td>
-                    {l.status === 'DELIVERED' ? (
-                      <span className="row-actions">
-                        <button className="btn-sm" onClick={() => setPodFor(l)}>Add POD</button>
-                        <button className="btn-sm" onClick={() => setInvoiceFor(l)}>Create invoice</button>
-                        {l.marketplaceStatus === 'BOOKED' && (
-                          <button className="btn-sm" title="Rate the carrier that booked this load" onClick={() => setRateFor(l)}>★ Rate</button>
-                        )}
-                      </span>
-                    ) : l.status === 'INVOICED' ? (
-                      <span className="row-actions">
-                        <button className="btn-sm" onClick={() => setPodFor(l)}>Add POD</button>
-                        <Badge tone="green">Invoiced</Badge>
-                      </span>
-                    ) : (
-                      <span className="muted small">—</span>
-                    )}
+                    <span className="row-actions">
+                      <button
+                        className="btn-sm"
+                        disabled={pdfBusy === `${l.id}:rc`}
+                        title="Download the rate confirmation to send to the broker"
+                        onClick={() => void downloadPdf(l, 'rate-confirmation')}
+                      >
+                        {pdfBusy === `${l.id}:rc` ? 'Building…' : 'Rate con'}
+                      </button>
+                      {l.status === 'DELIVERED' && (
+                        <>
+                          <button className="btn-sm" onClick={() => setPodFor(l)}>Add POD</button>
+                          <button className="btn-sm" title="Capture the receiver's signature" onClick={() => setSignFor(l)}>Signature</button>
+                          <button
+                            className="btn-sm"
+                            disabled={pdfBusy === `${l.id}:packet`}
+                            title="Rate confirmation, signed POD and attachments as one PDF"
+                            onClick={() => void downloadPdf(l, 'packet')}
+                          >
+                            {pdfBusy === `${l.id}:packet` ? 'Building…' : 'Delivery packet'}
+                          </button>
+                          <button className="btn-sm" onClick={() => setInvoiceFor(l)}>Create invoice</button>
+                          {l.marketplaceStatus === 'BOOKED' && (
+                            <button className="btn-sm" title="Rate the carrier that booked this load" onClick={() => setRateFor(l)}>★ Rate</button>
+                          )}
+                        </>
+                      )}
+                      {l.status === 'INVOICED' && (
+                        <>
+                          <button className="btn-sm" onClick={() => setPodFor(l)}>Add POD</button>
+                          <button
+                            className="btn-sm"
+                            disabled={pdfBusy === `${l.id}:packet`}
+                            title="Rate confirmation, signed POD and attachments as one PDF"
+                            onClick={() => void downloadPdf(l, 'packet')}
+                          >
+                            {pdfBusy === `${l.id}:packet` ? 'Building…' : 'Delivery packet'}
+                          </button>
+                          <Badge tone="green">Invoiced</Badge>
+                        </>
+                      )}
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -392,6 +446,17 @@ function MyLoadsTab() {
         loadId={rateFor?.id ?? null}
         laneLabel={rateFor ? laneText(rateFor) : ''}
         onClose={() => setRateFor(null)}
+      />
+
+      <SignaturePad
+        open={signFor !== null}
+        loadId={signFor?.id ?? null}
+        laneLabel={signFor ? laneText(signFor) : undefined}
+        onClose={() => setSignFor(null)}
+        onSigned={() => {
+          setSuccess('Signature captured — it is embedded in the delivery packet.');
+          void load();
+        }}
       />
     </div>
   );

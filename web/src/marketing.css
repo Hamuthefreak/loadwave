@@ -67,6 +67,14 @@
   background: linear-gradient(120deg, var(--orange-deep), var(--orange));
 }
 
+/* The primary "Get started" pill is white on --orange, which is only 4.2:1 —
+   just under AA for 14px text, and it is the one button the whole landing page
+   funnels into. --orange-deep clears it at 5.3:1. Scoped to light so the dark
+   marketing palette keeps the green it already had. */
+html[data-theme='light'] .ld-pill-orange {
+  background: var(--orange-deep);
+}
+
 .ld-pill-light {
   background: #fff;
   color: var(--ink);

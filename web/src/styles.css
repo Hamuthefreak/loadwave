@@ -14,6 +14,10 @@
   --accent-strong: #67b02f;
   --accent-ink: #0e1506;
   --accent-soft: rgba(127, 201, 71, 0.12);
+  /* The accent used as *ink* — a label, an active nav item, badge text. It is
+     the same green as --accent here, but on white it has to travel darker to
+     stay legible, so light mode overrides it. */
+  --accent-text: #7fc947;
 
   /* Status colors — muted, used only where meaning lives */
   --green: #7fc947;
@@ -33,33 +37,128 @@
   color-scheme: dark;
 }
 
-/* App in light mode — same structure, daylight surfaces */
+/* App in light mode — same structure, daylight surfaces.
+
+   The dark theme reads as depth (a raised surface is *lighter* than the panel
+   it sits on). On white that inverts, so two things have to be re-tuned rather
+   than swapped:
+     1. surface steps are held much closer to white, otherwise a secondary fill
+        becomes a heavy grey slab next to a pure-white panel;
+     2. elevation comes from the shadow, not from the border, so the border can
+        stay soft instead of drawing a grid of dark boxes. */
 html[data-theme='light'] {
-  --bg: #f4f4f2;
+  --bg: #f5f5f3;
   --panel: #ffffff;
-  --panel-2: #ececea;
-  --panel-3: #e0e0dd;
-  --border: #d7d7d2;
+  --panel-2: #f1f1ee;
+  --panel-3: #e7e7e3;
+  --border: #e0e0da;
   --text: #1b1e1a;
   --muted: #5f675f;
-  --faint: #8b938b;
+  /* --faint carries the smallest type in the app (10px uppercase group labels,
+     load references). At #8b938b it was only 3.2:1 on white — the least legible
+     text in the product was the metadata people scan most. #6f776f clears 4.6:1
+     while staying a clear step behind --muted (5.8:1). */
+  --faint: #686f68;
   /* Slightly deeper accent on daylight surfaces — keeps chips, arrows and
      live-dots visible on white. Buttons keep their dark ink (see below). */
   --accent: #67b02f;
   --accent-ink: #0e1506;
   --accent-soft: rgba(103, 176, 47, 0.14);
   --green-soft: rgba(103, 176, 47, 0.14);
-  --shadow: 0 1px 2px rgba(20, 24, 18, 0.06);
+  --amber-soft: rgba(168, 117, 23, 0.12);
+  --red-soft: rgba(184, 80, 72, 0.12);
+  /*
+     --accent-strong is a *surface*: it is the hover fill for a green button, so
+     it has to keep dark ink readable on top. One step down from --accent is
+     enough — #5a9a28 still gives near-black ink ~5.4:1. Leaving this token
+     undefined is also what made every button hover a no-op in light mode:
+     `button:hover` simply re-applied the resting colour.
+  */
+  --accent-strong: #5a9a28;
+  /* --accent-text is accent used as *ink*. #67b02f on a pale green pill is only
+     ~2.5:1 and reads washed out; #4d7a24 lands at ~4.5:1 against --accent-soft. */
+  --accent-text: #4a7522;
+  /* Layered so a white card lifts off the page the way a dark card does. */
+  --shadow: 0 1px 2px rgba(16, 20, 16, 0.05), 0 4px 14px rgba(16, 20, 16, 0.07);
   --backdrop: rgba(15, 18, 15, 0.42);
   --grid-line: rgba(27, 30, 26, 0.1);
-  /* Status text must stay readable on white panels — same hues, darker
-     lightness. Accent keeps its dark ink in BOTH modes: white on this
-     mid-green fails contrast, so --accent-ink is never overridden. */
-  --green: #4d7a24;
-  --amber: #a87517;
-  --red: #b85048;
+  /* Status hues, used as ink — hints, warnings, deltas, star ratings. Each
+     clears 4.5:1 against its own soft tint as well as white (green 4.5/5.1,
+     amber 4.6/5.4, red 5.0/6.0). The dark-mode hues only reach ~3.5:1 on white,
+     which is why they are re-tuned rather than reused. --accent-ink is not
+     overridden in either mode: white on this mid-green would fail contrast. */
+  --green: #4a7522;
+  --amber: #8a5d0d;
+  --red: #a9423a;
   color-scheme: light;
 }
+
+/*
+   Light-only corrections that a token swap cannot express, because the correct
+   answer differs in *direction* rather than in value:
+
+   - A segmented control marks its active segment by lifting it one step
+     (--panel-3 on a --panel-2 track). On white that is a grey chip on a grey
+     track, which reads as mud rather than as a selection, so the active segment
+     becomes a white pill on the track instead — the same "raise the selected
+     thing" idea, just expressed the other way round.
+   - The lane-swap button is a full-width control. --panel-3 fills it into a
+     slab that reads as a disabled field, so on white it is a bordered button.
+   - Accent text (badge labels) needs the darker accent to stay legible on a
+     pale tint, and the chip borders are re-hued so they are not lighter than
+     the text they frame. Dark mode already has both right.
+*/
+html[data-theme='light'] .view-toggle button.active {
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--border), 0 1px 2px rgba(16, 20, 16, 0.05);
+}
+
+html[data-theme='light'] .swap-btn {
+  background: var(--panel);
+  color: var(--accent-text);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+html[data-theme='light'] .swap-btn:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+html[data-theme='light'] .mobile-bottom-nav a.active {
+  color: var(--accent-text);
+}
+
+html[data-theme='light'] .badge-blue,
+html[data-theme='light'] .badge-cyan {
+  border-color: rgba(103, 176, 47, 0.35);
+}
+
+/*
+   Elevation on daylight surfaces. The dark theme separates a card from the page
+   with a border AND a lift; in light mode every one of these card containers
+   carries a border but no shadow, so white cards sat flat on a near-white page
+   with nothing to read them apart. The shadow is what says "this is a card".
+   Scoped to light so the dark theme is untouched. .demo-card already had its own
+   shadow, and .load-card on compare keeps its selection ring via :not().
+*/
+html[data-theme='light'] .card,
+html[data-theme='light'] .stat,
+html[data-theme='light'] .board-search,
+html[data-theme='light'] .compare-col,
+html[data-theme='light'] .trust-panel,
+html[data-theme='light'] .plan-card,
+html[data-theme='light'] .load-card:not(.compare-on) {
+  box-shadow: var(--shadow);
+}
+
+/* A load card is the one card you can act on, so it lifts a little further under
+   the cursor — the same affordance the border-colour change gives in the dark. */
+html[data-theme='light'] .load-card:hover:not(.compare-on) {
+  box-shadow: 0 2px 4px rgba(16, 20, 16, 0.06), 0 10px 24px rgba(16, 20, 16, 0.1);
+}
+
+html[data-theme='light'] .badge-green { border-color: rgba(103, 176, 47, 0.35); }
+html[data-theme='light'] .badge-amber { border-color: rgba(168, 117, 23, 0.3); }
+html[data-theme='light'] .badge-red { border-color: rgba(169, 66, 58, 0.3); }
 
 * {
   box-sizing: border-box;
@@ -339,8 +438,8 @@ p {
 .badge-green { background: var(--green-soft); color: var(--green); border-color: rgba(127, 201, 71, 0.25); }
 .badge-amber { background: var(--amber-soft); color: var(--amber); border-color: rgba(217, 161, 60, 0.25); }
 .badge-red { background: var(--red-soft); color: var(--red); border-color: rgba(212, 103, 95, 0.25); }
-.badge-blue { background: var(--accent-soft); color: var(--accent); border-color: rgba(127, 201, 71, 0.25); }
-.badge-cyan { background: var(--accent-soft); color: var(--accent); border-color: rgba(127, 201, 71, 0.25); }
+.badge-blue { background: var(--accent-soft); color: var(--accent-text); border-color: rgba(127, 201, 71, 0.25); }
+.badge-cyan { background: var(--accent-soft); color: var(--accent-text); border-color: rgba(127, 201, 71, 0.25); }
 .badge-gray { background: var(--panel-2); color: var(--muted); border-color: var(--border); }
 .badge-purple { background: var(--panel-2); color: var(--muted); border-color: var(--border); }
 
@@ -602,7 +701,7 @@ tfoot td {
 .chip.active {
   background: var(--accent-soft);
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .load-grid {
@@ -651,7 +750,7 @@ tfoot td {
 }
 
 .lane-arrow {
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 1.05em;
 }
 
@@ -720,7 +819,7 @@ tfoot td {
 .alert-info {
   background: var(--accent-soft);
   border: 1px solid var(--accent);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .alert-success {
@@ -1372,7 +1471,7 @@ tfoot td {
 }
 
 .side-link.active .side-mark {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .sidebar-foot {
@@ -2092,7 +2191,7 @@ textarea:focus {
 }
 
 .demo-lane b {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .demo-rate {
@@ -2165,7 +2264,7 @@ textarea:focus {
   height: 38px;
   border-radius: 11px;
   background: var(--panel-3);
-  color: var(--accent);
+  color: var(--accent-text);
   display: grid;
   place-items: center;
   font-weight: 800;
@@ -2298,7 +2397,11 @@ textarea:focus {
   top: -12px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--green);
+  /* A brand-green *surface* carrying --accent-ink, not a status colour: light
+     mode darkens --green for legibility as text, which would leave near-black
+     ink on a dark pill. --accent is identical to --green in dark mode, so this
+     only ever changes light mode. */
+  background: var(--accent);
   color: var(--accent-ink);
   font-size: 0.7rem;
   font-weight: 800;
@@ -3228,7 +3331,7 @@ button.onboarding-step:hover {
 
 .diag-badge {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -3843,6 +3946,46 @@ html.theme-fading * {
   word-break: break-word;
 }
 
+/* ---------- Signature capture ---------- */
+
+.signature-pad {
+  margin-top: 10px;
+}
+
+.signature-canvas {
+  display: block;
+  width: 100%;
+  border: 1.5px dashed var(--border);
+  border-radius: 12px;
+  background: #fff;
+  cursor: crosshair;
+  /* A finger must draw, not scroll the sheet. */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.signature-canvas:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.signature-hint {
+  margin: 6px 0 0;
+}
+
+@media (max-width: 640px) {
+  /* On a phone the pad is the tallest thing in the sheet — give it room to
+     breathe and a bigger target, since thumbs are less precise than mice. */
+  .signature-canvas {
+    min-height: 190px;
+  }
+
+  .signature-pad {
+    margin-top: 14px;
+  }
+}
+
 /* ---------- Billing & AR ---------- */
 
 .billing-toolbar {
@@ -3903,7 +4046,7 @@ html.theme-fading * {
   font-weight: 400;
 }
 .pickup-hint.pickup-soon { color: var(--amber); }
-.pickup-hint.pickup-today { color: var(--accent); }
+.pickup-hint.pickup-today { color: var(--accent-text); }
 .pickup-hint.pickup-overdue { color: var(--red, #c0392b); }
 
 /* Board: sort control */
@@ -3964,7 +4107,7 @@ html.theme-fading * {
   padding: 4px 8px;
   border-radius: 6px;
 }
-.pw-toggle:hover { color: var(--accent); }
+.pw-toggle:hover { color: var(--accent-text); }
 
 /* ---------- Settings & security ---------- */
 .settings-grid {
@@ -3987,7 +4130,7 @@ html.theme-fading * {
 .btn-danger-outline:hover { background: rgba(212, 103, 95, 0.12); }
 .badge-muted { background: var(--panel-3); color: var(--muted); border: 1px solid var(--border); }
 .link-btn {
-  background: none; border: none; color: var(--accent); cursor: pointer; padding: 0;
+  background: none; border: none; color: var(--accent-text); cursor: pointer; padding: 0;
   text-decoration: underline; text-underline-offset: 2px;
 }
 .link-btn:hover { opacity: 0.85; }
@@ -4007,7 +4150,7 @@ html.theme-fading * {
 
 /* Two-factor setup */
 .twofactor-steps { padding-left: 18px; margin: 0 0 14px; display: flex; flex-direction: column; gap: 8px; }
-.twofactor-steps li::marker { color: var(--accent); font-weight: 700; }
+.twofactor-steps li::marker { color: var(--accent-text); font-weight: 700; }
 .twofactor-secret {
   font-family: var(--mono, ui-monospace, monospace); background: var(--panel-2);
   padding: 2px 6px; border-radius: 6px; user-select: all;
@@ -4477,7 +4620,10 @@ a {
     border: none;
     border-radius: 999px;
     padding: 13px 20px;
-    background: var(--green);
+    /* Brand-green surface + dark ink (see .plan-tag): --green is a text colour
+       in light mode, so the button uses --accent, which is the same green in
+       dark mode. */
+    background: var(--accent);
     color: var(--accent-ink);
     font-family: inherit;
     font-size: 1rem;
@@ -4573,7 +4719,7 @@ a {
   align-items: center;
   justify-content: center;
   background: var(--panel-2);
-  color: var(--accent);
+  color: var(--accent-text);
   margin-bottom: 4px;
 }
 
@@ -4886,7 +5032,7 @@ a {
   }
 
   .fuel-pad-label b {
-    color: var(--accent);
+    color: var(--accent-text);
     font-size: 0.66rem;
     background: var(--accent-soft);
     border-radius: 999px;
@@ -5509,7 +5655,7 @@ tr.scorecard-tr > td {
   width: 100%;
   height: 44px;
   display: block;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 /* ---------- Rate carrier modal ---------- */

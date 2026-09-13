@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api } from '../../api';
+import { api, fetchFile, saveBlob } from '../../api';
 import { Badge, Empty, Modal, PageHeader, Spinner, Stat } from '../../components/ui';
 import { PlanCard } from '../../components/PlanCard';
 import { PlanLock } from '../../components/PlanLock';
@@ -95,6 +95,22 @@ export default function Billing() {
 
   const { plan } = usePlan();
   const invoicingLocked = featureLocked(plan, 'invoicing');
+  const [pdfBusy, setPdfBusy] = useState<string | null>(null);
+
+  const downloadInvoicePdf = async (invoice: Invoice) => {
+    if (pdfBusy) return;
+    setPdfBusy(invoice.id);
+    setError(null);
+    try {
+      const { blob, fileName } = await fetchFile(`/api/invoices/${invoice.id}/pdf`);
+      saveBlob(blob, fileName);
+      setFlash('Invoice PDF downloaded — ready to send or factor.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not build that invoice PDF.');
+    } finally {
+      setPdfBusy(null);
+    }
+  };
 
   useEffect(() => {
     // Invoicing is a paid tool. A locked account sees the upgrade wall instead,
@@ -310,11 +326,21 @@ export default function Billing() {
                             )}
                           </td>
                           <td>
-                            {inv.paidAt ? (
-                              <button className="btn-sm" disabled={busy} onClick={() => void reopen(inv)}>Reopen</button>
-                            ) : (
-                              <button className="btn-sm" disabled={busy} onClick={() => { setPaidDate(todayIso); setPayFor(inv); }}>Mark paid</button>
-                            )}
+                            <span className="row-actions">
+                              {inv.paidAt ? (
+                                <button className="btn-sm" disabled={busy} onClick={() => void reopen(inv)}>Reopen</button>
+                              ) : (
+                                <button className="btn-sm" disabled={busy} onClick={() => { setPaidDate(todayIso); setPayFor(inv); }}>Mark paid</button>
+                              )}
+                              <button
+                                className="btn-sm"
+                                disabled={pdfBusy === inv.id}
+                                title="Download this invoice as a PDF"
+                                onClick={() => void downloadInvoicePdf(inv)}
+                              >
+                                {pdfBusy === inv.id ? 'Building…' : 'PDF'}
+                              </button>
+                            </span>
                           </td>
                         </tr>
                       );

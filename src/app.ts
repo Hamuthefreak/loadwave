@@ -100,6 +100,7 @@ import { createPushService, type PushService } from './modules/notification/push
 import { registerPushRoutes } from './modules/notification/push.routes';
 import { onSessionIssued } from './modules/notification/auth-notifier';
 import { PrismaLoadDocumentService } from './modules/documents/document.service';
+import { PrismaLoadPaperworkService } from './modules/documents/paperwork.service';
 import { registerDocumentRoutes } from './modules/documents/document.routes';
 import { PrismaEmailService, tenantEmail } from './modules/notification/email.service';
 import { registerNotificationRoutes } from './modules/notification/notification.routes';
@@ -143,6 +144,7 @@ export interface AppDeps {
   notifications: PrismaNotificationService;
   email: PrismaEmailService;
   documents: PrismaLoadDocumentService;
+  paperwork: PrismaLoadPaperworkService;
   importService: PrismaImportService;
   push: PushService;
   detention: PrismaDetentionService;
@@ -242,6 +244,7 @@ function buildBaseServices(
     searches,
     notifications,
     documents: overrides.documents ?? new PrismaLoadDocumentService(prisma),
+    paperwork: overrides.paperwork ?? new PrismaLoadPaperworkService(prisma),
     email,
     importService,
     push,
@@ -407,7 +410,7 @@ function registerRoutes(app: FastifyInstance, deps: AppDeps, prisma: PrismaClien
   registerPushRoutes(app, { push: deps.push });
   registerDispatchRoutes(app, { loads: deps.loads, detention: deps.detention });
   registerDetentionRoutes(app, { detention: deps.detention });
-  registerDocumentRoutes(app, { documents: deps.documents });
+  registerDocumentRoutes(app, { documents: deps.documents, paperwork: deps.paperwork });
   registerImportRoutes(app, { importService: deps.importService });
   registerDiagnosticsRoutes(app, { prisma, env });
   registerHealthRoutes(app, { prisma, version: env.APP_VERSION });

@@ -242,3 +242,56 @@ function safeJson(text: string): unknown {
     return text;
   }
 }
+
+/**
+ * Fetch a binary document (a generated PDF) with the same auth and refresh
+ * handling as `api`, and hand back the filename the server chose so the saved
+ * file is `rate-confirmation_RC-3F9A21.pdf` rather than "document.pdf".
+ */
+export async function fetchFile(path: string): Promise<{ blob: Blob; fileName: string }> {
+  const send = async (): Promise<Response> => {
+    const headers: Record<string, string> = {};
+    const token = getToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return fetch(path, { headers });
+  };
+
+  let res = await send();
+  if (res.status === 401) {
+    const refreshed = await tryRefresh();
+    if (refreshed) res = await send();
+    else clearTokens();
+  }
+
+  if (!res.ok) {
+    const text = await res.text();
+    const data = text ? safeJson(text) : null;
+    const message = (data as { message?: string } | null)?.message ?? fallbackMessage(res.status);
+    throw new ApiError(message, res.status, data);
+  }
+
+  const disposition = res.headers.get('content-disposition') ?? '';
+  const named = /filename="?([^";]+)"?/.exec(disposition);
+  return {
+    blob: await res.blob(),
+    fileName: named?.[1] ?? 'loadwave-document.pdf',
+  };
+}
+
+/**
+ * Save a fetched file to disk. A download is the honest interaction for
+ * paperwork — it ends up in the carrier's files so they can forward it to a
+ * broker or a factor, rather than in a tab they have to remember to save.
+ */
+export function saveBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.rel = 'noopener';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  // Revoking immediately can cancel the download in some browsers.
+  window.setTimeout(() => URL.revokeObjectURL(url), 20_000);
+}
