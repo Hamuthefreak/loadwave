@@ -4,8 +4,13 @@ import { nextRecurrenceDate, parseRecurringDays } from '../../utils/recurring';
 
 /**
  * Recurring loads: clone any load whose recurrence is due into a fresh
- * OPEN/PRIVATE load (same lane, freight and schedule; no assignment, no
- * history), then push its next fire date to the following scheduled weekday.
+ * OPEN/PRIVATE load (same lane and freight; no assignment, no history), then
+ * push the *source's* next fire date to the following scheduled weekday.
+ *
+ * The clone is a single occurrence, never a new recurring series — it must not
+ * carry `recurringDays`/`nextRecurrenceAt`. Copying the schedule onto it made
+ * every clone recur on its own, so each weekly occurrence spawned another and
+ * the tenant's board doubled every week.
  */
 export async function runRecurrenceSweep(prisma: PrismaClient, logger: Logger, now: Date = new Date()): Promise<number> {
   const due = await prisma.load.findMany({
@@ -55,8 +60,9 @@ export async function runRecurrenceSweep(prisma: PrismaClient, logger: Logger, n
           isInternational: src.isInternational,
           isContinuousInboundOutbound: src.isContinuousInboundOutbound,
           interliningPartner: src.interliningPartner,
-          recurringDays: src.recurringDays,
-          nextRecurrenceAt: nextRecurrenceDate(parseRecurringDays(src.recurringDays), fireAt),
+          // One-off: only the original load stays on the schedule.
+          recurringDays: null,
+          nextRecurrenceAt: null,
         },
       });
 

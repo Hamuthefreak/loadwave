@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, getTokenUser } from '../api';
 import { setDuty, useDuty } from '../duty-store';
 import { Modal } from './ui';
+import { watchTouchShortcuts } from '../utils/device';
 import { km, money, regionLabel } from '../utils/format';
 
 interface MiniTrip {
@@ -77,6 +78,21 @@ export default function DriverQuickAction() {
     // A duty flip can surface an assigned load that was fetched before it.
     if (duty === 'ACTIVE') void loadTrips();
   }, [duty, loadTrips]);
+
+  // The FAB floats over the page, so the shell needs a taller bottom gutter
+  // while it's up — otherwise the last card on the dashboard sits under it.
+  // Driven off the same media query that shows the FAB, because `:has()` isn't
+  // available on the older cab tablets this app targets.
+  useEffect(() => {
+    const stop = watchTouchShortcuts((shown) => {
+      const visible = shown && Boolean(user?.driverId) && duty != null && duty !== 'SUSPENDED';
+      document.body.classList.toggle('has-driver-fab', visible);
+    });
+    return () => {
+      stop();
+      document.body.classList.remove('has-driver-fab');
+    };
+  }, [user, duty]);
 
   const flash = (n: Notice, ms: number) => {
     if (timer.current) window.clearTimeout(timer.current);

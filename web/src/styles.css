@@ -203,7 +203,10 @@ h3 { font-weight: 650; }
 }
 
 .app {
+  /* dvh, not vh: on iOS/iPadOS a 100vh page slides under the collapsing
+     browser chrome. The vh line stays first as the fallback. */
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* ---------- Top bar ---------- */
@@ -990,6 +993,7 @@ tfoot td {
 
 .auth-wrap {
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   padding: 24px;
@@ -1142,6 +1146,11 @@ tfoot td {
 /* ---------- Mobile ---------- */
 
 .mobile-bottom-nav {
+  display: none;
+}
+
+/* Floating quick-actions entry point for touch tablets (see the iPad block). */
+.tablet-quick-btn {
   display: none;
 }
 
@@ -1298,6 +1307,15 @@ tfoot td {
     align-items: flex-start;
   }
 
+  /* `flex: 1` on the lane grows it along the *main* axis. That's what pushes
+     the rate to the right in the desktop row — but once the card flips to a
+     column it grows the lane's height, leaving a huge empty box with the lane
+     stranded at the bottom. Stop it growing; width is already handled. */
+  .now-loading .lane {
+    flex: 0 0 auto;
+    align-self: stretch;
+  }
+
   .now-loading .amount {
     align-self: stretch;
     text-align: right;
@@ -1322,6 +1340,7 @@ tfoot td {
   display: grid;
   grid-template-columns: 268px 1fr;
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .sidebar {
@@ -1333,6 +1352,7 @@ tfoot td {
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100dvh;
   gap: 12px;
 }
 
@@ -1969,6 +1989,18 @@ textarea:focus {
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
+/* iOS and iPadOS zoom the whole page when a focused field's text is under
+   16px, and `font: inherit` computes every control inside a label from the
+   label's 0.8rem — so tapping any form field yanked the layout. Pin touch
+   devices to 16px; the desktop look is unchanged. */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 .drawer-form {
   display: flex;
   flex-direction: column;
@@ -2017,6 +2049,7 @@ textarea:focus {
 
 .mkt {
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .mkt-wrap {
@@ -2680,8 +2713,13 @@ textarea:focus {
     transform: scale(0.92);
   }
 
-  /* ---- Mobile sheets: quick actions + the full "More" menu ---- */
-  .nav-sheet-root {
+}
+
+/* ---- Action sheets: quick actions + the full "More" menu ----
+   Deliberately outside any width query. The sheet is only in the DOM while
+   it's open, and it has to work wherever the shortcut layer exists — phones
+   *and* iPads, which are wider than the phone shell. ---- */
+.nav-sheet-root {
     display: flex;
     align-items: flex-end;
     position: fixed;
@@ -2912,11 +2950,10 @@ textarea:focus {
     margin: 8px 0 0;
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .nav-sheet,
-    .nav-sheet-backdrop {
-      animation: none;
-    }
+@media (prefers-reduced-motion: reduce) {
+  .nav-sheet,
+  .nav-sheet-backdrop {
+    animation: none;
   }
 }
 
@@ -3020,6 +3057,7 @@ textarea:focus {
 /* Route chunk loading fallback (code-split pages) */
 .route-fallback {
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   background: var(--bg);
@@ -3305,6 +3343,7 @@ button.onboarding-step:hover {
 /* ---------- Diagnostics page ---------- */
 .diag-page {
   min-height: 100vh;
+  min-height: 100dvh;
   padding: 40px 24px 80px;
 }
 
@@ -3563,6 +3602,7 @@ button.onboarding-step:hover {
 /* ---------- App error boundary ---------- */
 .app-crash {
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   text-align: center;
@@ -3793,6 +3833,16 @@ html.theme-fading * {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 14px;
+}
+
+@media (max-width: 720px) {
+  /* "CYCLE 2 · 120H / 14 DAYS" crowded "Hours this cycle" into two lines on a
+     narrow card. Drop the badge under the heading instead. */
+  .hos-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
 }
 
 .hos-row + .hos-row {
@@ -4236,6 +4286,7 @@ a {
 .app-crash {
   min-height: 100vh;
   min-height: 100dvh;
+  min-height: 100dvh;
 }
 
 /* Modals: never taller than the screen — the body scrolls on its own.
@@ -4434,6 +4485,7 @@ a {
     border-radius: 0;
     min-height: 100vh;
     min-height: 100dvh;
+    min-height: 100dvh;
   }
 
   .auth-card {
@@ -4602,13 +4654,16 @@ a {
   }
 }
 
-/* ---------- Driver one-tap quick action (mobile FAB) ---------- */
+/* ---------- Driver one-tap quick action (mobile FAB) ----------
+   Shown on anything driven by a finger: phones, plus tablets wider than the
+   phone breakpoint (they have no room for the phone bottom nav, so the iPad
+   block below re-seats this FAB). ---- */
 
 .driver-fab {
   display: none;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 960px), (pointer: coarse) {
   .driver-fab {
     display: flex;
     align-items: center;
@@ -4676,16 +4731,125 @@ a {
   }
 }
 
+/* ---------- Phone touch targets ----------
+   A finger needs ~44px. Several controls were well under that: the board's
+   add-to-comparison button was 24×24 and the sort select 27px tall, on the
+   two pages drivers use most. Sizes only grow on phones — the roomy desktop
+   density is untouched. ---- */
+@media (max-width: 560px) {
+  .compare-toggle {
+    width: 40px;
+    height: 40px;
+  }
+
+  .chip {
+    padding: 9px 14px;
+  }
+
+  .view-toggle button {
+    padding: 10px 14px;
+  }
+
+  .btn-sm,
+  .btn-primary,
+  .btn-green,
+  .btn-ghost,
+  .btn-cta,
+  .btn-danger,
+  .btn-secondary {
+    min-height: 44px;
+  }
+
+  select,
+  input:not([type='checkbox']):not([type='radio']):not([type='range']) {
+    min-height: 44px;
+  }
+}
+
+/* ---------- iPad shortcut layer ----------
+   A landscape iPad is wider than the 960px phone shell, so it never got the
+   bottom nav — and therefore no quick actions — while a mouse-driven desktop
+   of the same width kept its roomy sidebar. These rules give touch tablets the
+   shortcut layer the phones have, without swapping their layout for the phone
+   one. `pointer: coarse` is false for a mouse or trackpad and true on an iPad
+   (including iPad Safari's desktop-class "Mac" user agent), so nothing here
+   can leak onto the desktop layout. */
+@media (pointer: coarse) and (min-width: 961px) {
+  .tablet-quick-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: fixed;
+    right: 20px;
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    z-index: 55;
+    padding: 11px 18px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.12s ease;
+  }
+
+  .tablet-quick-btn svg {
+    width: 20px;
+    height: 20px;
+    color: var(--accent-strong);
+    flex-shrink: 0;
+  }
+
+  .tablet-quick-btn:active {
+    transform: scale(0.96);
+  }
+
+  /* No bottom nav to clear here, so the driver FAB stacks above the
+     quick-actions pill instead of floating a nav-height above the floor. */
+  .driver-fab {
+    right: 20px;
+    bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+
+  /* A sheet the full width of a landscape iPad reads as a page, not a sheet. */
+  .nav-sheet {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+}
+
 /* ---------- Dashboard: paired two-column rows (Right now / Cab tools) ---------- */
 
 .grid.grid-2 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+@media (max-width: 960px) {
+  /* Paired cards stretch to match each other by default, which on a narrow
+     screen leaves the shorter card as mostly empty box beside the tall one.
+     Let each card hug its own content instead. */
+  .grid.grid-2 {
+    align-items: start;
+  }
+}
+
 @media (max-width: 560px) {
   .grid.grid-2 {
     grid-template-columns: 1fr;
   }
+}
+
+/* The floating driver action sits *over* the page. Give the shell a taller
+   bottom gutter while it's mounted so the last card is never trapped under
+   it — the class comes from the FAB itself, because `:has()` is unavailable
+   on the older cab tablets this app targets. */
+body.has-driver-fab .content {
+  padding-bottom: 152px;
 }
 
 .now-empty {
@@ -5273,6 +5437,28 @@ a {
   font-size: 0.8rem;
   font-weight: 700;
   color: var(--text);
+}
+
+@media (max-width: 560px) {
+  /* Seven day-chips plus the label can't share a line on a phone, and 38×34
+     is under a comfortable thumb target — this is the one control that sets
+     up a recurring load, so give it the full width and a real tap height. */
+  .recur-row {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .recur-title,
+  .recur-row .muted {
+    grid-column: 1 / -1;
+  }
+
+  .recur-day {
+    width: auto;
+    height: 44px;
+    font-size: 0.8rem;
+  }
 }
 
 /* Scorecard rows pair with the driver row above them — no visual seam. */

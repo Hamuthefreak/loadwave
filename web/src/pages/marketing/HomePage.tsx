@@ -60,11 +60,15 @@ export default function HomePage() {
 
           <div className="ld-hero-visual">
             <span className="ld-container-glow" aria-hidden />
+            {/* Lowercase on purpose: React 18 has no mapping for the
+                camelCase `fetchPriority`, so it warns and lowercases it
+                anyway. Spreading the lowercase name passes it straight
+                through — same hint, no console error on every visit. */}
             <img
               src="/assets/images/container.webp"
               alt="Loadwave freight — every load at a glance"
               className="ld-container-img"
-              fetchPriority="high"
+              {...({ fetchpriority: 'high' } as Record<string, string>)}
               decoding="async"
             />
             <span className="ld-anno ld-anno-360">Live</span>

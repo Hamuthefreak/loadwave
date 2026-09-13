@@ -597,6 +597,19 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
             <span>More</span>
           </button>
         </nav>
+        {/* iPads in landscape are wider than the phone shell, so they never see
+            the bottom nav or its quick-actions button. This floating entry
+            point gives them the same sheet. It is hidden on phones (they have
+            the raised button) and on desktop. */}
+        <button
+          type="button"
+          className="tablet-quick-btn"
+          onClick={() => setQuickOpen(true)}
+          aria-label="Quick actions"
+        >
+          <IconBolt />
+          <span>Quick actions</span>
+        </button>
       </div>
 
       <Modal

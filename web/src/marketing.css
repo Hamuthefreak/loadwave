@@ -24,6 +24,7 @@
   --error-text: #a33a2e;
   --card-hot: linear-gradient(160deg, #ffffff, #f2f7eb);
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--page);
   color: var(--ink);
   font-family: 'Archivo', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -1438,6 +1439,8 @@ html[data-theme='light'] .ld-pill-orange {
 .ld-mkt .auth-wrap,
 .ld-auth-wrap {
   min-height: 100vh;
+  min-height: 100dvh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   padding: 40px 24px;
@@ -3242,6 +3245,7 @@ html[data-theme='light'] .ld-nav-cta > .ld-pill-orange,
 .ld-auth-wrap {
   min-height: 100vh;
   min-height: 100dvh;
+  min-height: 100dvh;
 }
 
 @media (max-width: 560px) {
@@ -3315,6 +3319,7 @@ html[data-theme='light'] .ld-nav-cta > .ld-pill-orange,
     border-radius: 0;
     min-height: 100vh;
     min-height: 100dvh;
+    min-height: 100dvh;
   }
 
   .ld-auth-card {
@@ -3325,6 +3330,7 @@ html[data-theme='light'] .ld-nav-cta > .ld-pill-orange,
   .ld-auth-solo {
     width: 100%;
     min-height: 100vh;
+    min-height: 100dvh;
     min-height: 100dvh;
     border: none;
     border-radius: 0;

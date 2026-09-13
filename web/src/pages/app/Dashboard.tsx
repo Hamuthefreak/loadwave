@@ -478,6 +478,8 @@ function DriverDashboard() {
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   const openCount = open.filter((l) => l.marketplaceStatus === 'PUBLIC').length;
   const unitsReady = trucks.filter((t) => t.status === 'ACTIVE').length;
+  // Live duty from the shared store, falling back to the driver record.
+  const dutyState = duty ?? driver?.status ?? 'OFF_DUTY';
   const hauled = open.filter((l) => l.bookedByTenantId === tenant.id);
   const nowHauling = hauled.find((r) => r.marketplaceStatus === 'BOOKED') ?? hauled[0] ?? null;
 
@@ -503,8 +505,25 @@ function DriverDashboard() {
         <Stat label="Units available" value={unitsReady} sub="Equipment posted by partner carriers" />
         <Stat
           label={driver ? 'Your duty status' : 'Carrier'}
-          value={driver ? cycleLabel(driver.cycleType) : tenant.name}
-          sub={driver ? ((duty ?? driver.status) === 'ACTIVE' ? 'On duty / available' : (duty ?? driver.status)) : 'Hauling under this carrier'}
+          // The headline used to be the HOS *cycle* under a "duty status" label,
+          // which read as if the cycle were the duty state. Show the state, and
+          // keep the cycle in the sub-line where it belongs.
+          value={
+            driver
+              ? dutyState === 'ACTIVE'
+                ? 'On duty'
+                : dutyState === 'SUSPENDED'
+                  ? 'Suspended'
+                  : 'Off duty'
+              : tenant.name
+          }
+          sub={
+            driver
+              ? dutyState === 'SUSPENDED'
+                ? 'Dispatch has paused your profile'
+                : `${dutyState === 'ACTIVE' ? 'Available to dispatch' : 'Not taking loads'} · ${cycleLabel(driver.cycleType)}`
+              : 'Hauling under this carrier'
+          }
           tone="cyan"
         />
       </div>

@@ -23,6 +23,7 @@
     "db:seed-places": "tsx scripts/seed-places.ts",
     "import:loads": "tsx scripts/import-loads.ts",
     "db:seed-demo": "tsx scripts/seed-demo.ts",
+    "db:fix-recurring-clones": "tsx scripts/fix-recurring-clones.ts",
     "verify:postgis": "tsx scripts/verify-postgis.ts"
   },
   "dependencies": {
