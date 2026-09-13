@@ -39,7 +39,13 @@ function widthOf(ch: string, font: PdfFontName): number {
 /** Width of a string in points at the given size. */
 export function textWidth(text: string, size: number, font: PdfFontName = 'regular'): number {
   let total = 0;
-  for (const ch of text) total += widthOf(ch, font);
+  // Measured through the same substitution the encoder applies. A character
+  // that prints as several glyphs ("→" prints as "->") has to be measured as
+  // those glyphs, or a right-aligned column overflows by exactly the
+  // difference between what we measured and what the reader draws.
+  for (const ch of text) {
+    for (const mapped of PUNCTUATION[ch] ?? ch) total += widthOf(mapped, font);
+  }
   return (total * size) / 1000;
 }
 
@@ -65,6 +71,12 @@ const PUNCTUATION: Record<string, string> = {
   '\u2033': '"',
   '\u2212': '-',
   '\u00ad': '-',
+  // Lanes are written "QC → ON" throughout the app, and the built-in fonts have
+  // no arrow: without this the statement prints "QC ? ON", which reads like a
+  // missing value on a document that goes to a driver and a payroll file.
+  '\u2192': '->',
+  '\u2190': '<-',
+  '\u2194': '<->',
 };
 
 /**

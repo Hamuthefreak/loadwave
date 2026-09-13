@@ -605,6 +605,162 @@ export function buildInvoice(input: InvoiceInput): Buffer {
   return doc.build();
 }
 
+export interface SettlementStatementInput {
+  statementNumber: string;
+  issuedAt: Date;
+  carrier: Party;
+  driver: Party;
+  periodLabel: string;
+  periodFrom: string;
+  periodTo: string;
+  /** "$0.58 / mi" or "Owner-operator — keeps the revenue". */
+  payLabel: string;
+  lines: Array<{
+    deliveredAt: string;
+    reference: string;
+    lane: string;
+    /** How the pay was worked out, printed under the lane. */
+    basis: string;
+    detentionBasis: string | null;
+    amount: string;
+  }>;
+  totals: Array<{ label: string; amount: string }>;
+  totalLabel: string;
+  total: string;
+  notes: string[];
+  /** Queries the driver has raised that the office has not answered yet. */
+  openQueries: string[];
+  signoff: string;
+  driverSignature: SignatureBlock | null;
+  carrierSignature: SignatureBlock | null;
+}
+
+/** One pay line: when and what, the working beside it, the money on the right. */
+function payLineTable(doc: PdfDocument, layout: Layout, lines: SettlementStatementInput['lines']): void {
+  const rightEdge = 612 - MARGIN;
+  if (lines.length === 0) {
+    layout.need(24);
+    doc.text('No loads were delivered in this period.', MARGIN, layout.y, { size: 9.5, color: GREY });
+    layout.y += 22;
+    return;
+  }
+
+  layout.need(22);
+  doc.rect(MARGIN, layout.y - 11, CONTENT_WIDTH, 18, { fill: HEAD_FILL });
+  doc.text('Load', MARGIN + 6, layout.y, { size: 8, font: 'bold', color: GREY });
+  doc.text('Pay basis', MARGIN + 210, layout.y, { size: 8, font: 'bold', color: GREY });
+  doc.text('Amount', rightEdge - 6, layout.y, { size: 8, font: 'bold', color: GREY, align: 'right' });
+  layout.y += 16;
+
+  for (const line of lines) {
+    layout.need(34);
+    const top = layout.y;
+    doc.text(`${dateOf(line.deliveredAt)} · ${line.reference}`, MARGIN + 6, top, { size: 9, font: 'bold' });
+    doc.text(line.lane, MARGIN + 6, top + 12, { size: 8.5, color: GREY });
+    // The working, so the driver can check the arithmetic instead of the total.
+    const basis = doc.paragraph(line.basis, MARGIN + 210, top, CONTENT_WIDTH - 290, { size: 8.5, leading: 11 });
+    const detention = line.detentionBasis
+      ? doc.paragraph(line.detentionBasis, MARGIN + 210, basis, CONTENT_WIDTH - 290, { size: 8, leading: 10.5, color: GREY })
+      : basis;
+    doc.text(line.amount, rightEdge - 6, top, { size: 9.5, align: 'right' });
+    layout.y = Math.max(detention, top + 22) + 8;
+    // Drawn after the row has advanced, so the rule never lands alone on the
+    // next page ahead of its own row.
+    doc.line(MARGIN, layout.y - 5, rightEdge, layout.y - 5, RULE_GREY, 0.4);
+  }
+  layout.space(4);
+}
+
+/**
+ * A driver's settlement statement for one pay period.
+ *
+ * This is the sheet payroll files and the sheet a driver is handed. It shows the
+ * arithmetic behind every line — the same basis string the app shows — because a
+ * statement a driver cannot check is a statement they have to take on faith, and
+ * the first thing anyone does with a pay slip is try to reproduce it.
+ *
+ * Open pay queries are printed above the signature rather than hidden: a sheet
+ * that asserts agreement while a question is unanswered is the kind of document
+ * that ends up in a labour complaint.
+ */
+export function buildSettlementStatement(input: SettlementStatementInput): Buffer {
+  const doc = new PdfDocument({
+    title: `Settlement statement ${input.statementNumber}`,
+    createdAt: input.issuedAt,
+  });
+  const layout = new Layout(doc);
+
+  drawHeader(doc, {
+    left: input.carrier,
+    title: 'SETTLEMENT STATEMENT',
+    subtitle: input.statementNumber,
+    issuedAt: input.issuedAt,
+  });
+
+  partyPair(
+    doc,
+    layout,
+    { heading: 'Carrier', party: input.carrier },
+    { heading: 'Driver', party: input.driver },
+  );
+
+  sectionHeading(doc, layout, 'Pay period');
+  detailGrid(doc, layout, [
+    ['Period', input.periodLabel],
+    ['From', input.periodFrom],
+    ['To', input.periodTo],
+    ['Pay model', input.payLabel],
+    ['Statement', input.statementNumber],
+    ['Issued', dateOf(input.issuedAt)],
+  ]);
+
+  sectionHeading(doc, layout, 'Pay by load', 60);
+  payLineTable(doc, layout, input.lines);
+
+  amountTable(doc, layout, input.totals, { label: input.totalLabel, amount: input.total });
+
+  if (input.notes.length) {
+    sectionHeading(doc, layout, 'Notes on this period', measureTerms(input.notes));
+    termList(doc, layout, input.notes);
+  }
+
+  if (input.openQueries.length) {
+    sectionHeading(doc, layout, 'Open pay queries', 40);
+    noteBox(
+      doc,
+      layout,
+      `Unanswered at the time this statement was issued: ${input.openQueries.join(' · ')}. The figures above are not final until these are settled.`,
+    );
+  }
+
+  sectionHeading(doc, layout, 'Driver acknowledgement', 130);
+  // Measured rather than flowed, so the signature boxes below never start on
+  // top of the paragraph that introduces them.
+  const signoffLines = wrapText(input.signoff, CONTENT_WIDTH, 8.5);
+  signoffLines.forEach((text, index) => {
+    doc.text(text, MARGIN, layout.y + index * 11, { size: 8.5 });
+  });
+  layout.y += signoffLines.length * 11 + 10;
+
+  layout.need(106);
+  const sigWidth = (CONTENT_WIDTH - 16) / 2;
+  const sigTop = layout.y;
+  signatureBox(doc, layout, MARGIN, sigWidth, 'Driver', input.driverSignature);
+  signatureBox(doc, layout, MARGIN + sigWidth + 16, sigWidth, 'Carrier', input.carrierSignature);
+  layout.y = sigTop + 106;
+
+  const terms = [
+    'Loads and pay are derived from the delivered loads on file; correcting a delivery date or a rate re-prices the period.',
+    'Detention is paid at the rate recorded on the load, for closed timer entries only.',
+    'Questions about a line must be raised in the app so the answer is written down with the load it refers to.',
+  ];
+  sectionHeading(doc, layout, 'How this statement was worked out', measureTerms(terms));
+  termList(doc, layout, terms);
+
+  drawFooter(doc, input.statementNumber, input.issuedAt);
+  return doc.build();
+}
+
 export function buildDeliveryPacket(input: PacketInput): Buffer {
   const doc = new PdfDocument({
     title: `Delivery packet ${input.reference}`,

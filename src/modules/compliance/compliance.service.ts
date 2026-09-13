@@ -1,19 +1,30 @@
 import type { PrismaClient } from '@prisma/client';
 import { badRequest, notFound } from '../../utils/errors';
 import {
+  assignmentBlocks,
+  assignmentWarnings,
   checklist,
   countStatuses,
   deriveExpiry,
+  describeFlag,
   documentStatus,
+  overrideSnapshot,
   specFor,
   statusHeadline,
   subjectStatus,
   type ChecklistItem,
+  type ComplianceFlag,
   type ComplianceStatus,
   type ComplianceSubject,
   type StoredDoc,
 } from './compliance.policy';
+import type {
+  AssignmentComplianceGate,
+  AssignmentComplianceReport,
+  ComplianceOverrideInput,
+} from './compliance.gate';
 import { normalizeDocumentMime, MAX_DOCUMENT_BYTES } from '../documents/document.service';
+import type { NotificationService } from '../notification/notification.service';
 
 export const COMPLIANCE_SUBJECTS: ComplianceSubject[] = ['DRIVER', 'ASSET', 'TENANT'];
 
@@ -29,12 +40,28 @@ export interface ComplianceSubjectView {
   items: ChecklistItem[];
 }
 
+export interface ComplianceOverrideRow {
+  id: string;
+  loadId: string;
+  /** Load reference as it is quoted elsewhere, when the load is still around. */
+  loadReference: string | null;
+  driverId: string | null;
+  assetId: string | null;
+  /** What was lapsed when the call was made. */
+  blockers: Array<{ label: string; kind: string; status: ComplianceStatus; expiresAt: string | null }>;
+  reason: string;
+  actorName: string | null;
+  createdAt: string;
+}
+
 export interface ComplianceView {
   asOf: string;
   drivers: ComplianceSubjectView[];
   assets: ComplianceSubjectView[];
   carrier: ComplianceSubjectView;
   totals: { expired: number; missing: number; expiring: number; ok: number };
+  /** Dispatches made on a lapsed document, newest first. */
+  overrides: ComplianceOverrideRow[];
 }
 
 export interface ComplianceDocumentRow {
@@ -69,7 +96,7 @@ export interface ComplianceUpsertInput {
   uploadedById?: string | null;
 }
 
-export interface ComplianceService {
+export interface ComplianceService extends AssignmentComplianceGate {
   list(tenantId: string): Promise<ComplianceView>;
   /** Just one driver's checklist — the cab-side view. */
   forDriver(tenantId: string, driverId: string): Promise<ComplianceSubjectView | null>;
@@ -101,7 +128,15 @@ function parseDate(value: string | null | undefined, field: string): Date | null
 }
 
 export class PrismaComplianceService implements ComplianceService {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    /**
+     * Optional: an override is always recorded in the database, and told to the
+     * office as well when the notification service is wired in — an owner who
+     * only finds out from the audit list was not told at all.
+     */
+    private readonly notifications: NotificationService | null = null,
+  ) {}
 
   private toRow(row: DocRow, now: Date): ComplianceDocumentRow {
     return {
@@ -126,7 +161,7 @@ export class PrismaComplianceService implements ComplianceService {
 
   async list(tenantId: string): Promise<ComplianceView> {
     const now = new Date();
-    const [docs, drivers, assets, tenant] = await Promise.all([
+    const [docs, drivers, assets, tenant, overrides] = await Promise.all([
       this.prisma.complianceDocument.findMany({
         where: { tenantId },
         select: {
@@ -155,6 +190,11 @@ export class PrismaComplianceService implements ComplianceService {
         orderBy: { powerUnitNumber: 'asc' },
       }),
       this.prisma.tenant.findFirst({ where: { id: tenantId }, select: { id: true, name: true } }),
+      this.prisma.complianceOverride.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: 'desc' },
+        take: 25,
+      }),
     ]);
 
     const bySubject = new Map<string, StoredDoc[]>();
@@ -226,6 +266,136 @@ export class PrismaComplianceService implements ComplianceService {
       ),
       carrier,
       totals,
+      overrides: overrides.map((row) => this.mapOverride(row)),
+    };
+  }
+
+  /**
+   * Whether a driver and a unit may go on a load.
+   *
+   * Both are looked at together because assigning a truck with a lapsed
+   * inspection and a driver with a valid licence is still not legal to move, and
+   * reporting only the first would hide the second behind a fix-and-retry.
+   */
+  async checkAssignment(
+    tenantId: string,
+    driverId: string | null,
+    assetId: string | null,
+  ): Promise<AssignmentComplianceReport> {
+    if (!driverId && !assetId) return { blocks: [], warnings: [] };
+    const now = new Date();
+
+    const [driver, asset] = await Promise.all([
+      driverId
+        ? this.prisma.driver.findFirst({
+            where: { id: driverId, tenantId },
+            select: { id: true, name: true, licenseNumber: true },
+          })
+        : null,
+      assetId
+        ? this.prisma.asset.findFirst({
+            where: { id: assetId, tenantId },
+            select: { id: true, powerUnitNumber: true, vin: true },
+          })
+        : null,
+    ]);
+    if (driverId && !driver) throw notFound('driver not found');
+    if (assetId && !asset) throw notFound('asset not found');
+
+    const subjects: Array<{ subject: ComplianceSubject; subjectId: string }> = [
+      ...(driver ? [{ subject: 'DRIVER' as const, subjectId: driver.id }] : []),
+      ...(asset ? [{ subject: 'ASSET' as const, subjectId: asset.id }] : []),
+    ];
+    const docs = await this.prisma.complianceDocument.findMany({
+      where: { tenantId, OR: subjects },
+      select: { id: true, subject: true, subjectId: true, kind: true, identifier: true, expiresAt: true, notes: true, sizeBytes: true },
+    });
+
+    const blocks: ComplianceFlag[] = [];
+    const warnings: ComplianceFlag[] = [];
+    const collect = (scope: ComplianceSubject, subjectId: string, label: string): void => {
+      const own = (docs as StoredDoc[]).filter((doc) => {
+        const row = doc as StoredDoc & { subject?: ComplianceSubject; subjectId?: string };
+        return row.subject === scope && row.subjectId === subjectId;
+      });
+      const items = checklist(scope, own, now);
+      blocks.push(...assignmentBlocks(items, scope, subjectId, label));
+      warnings.push(...assignmentWarnings(items, scope, subjectId, label));
+    };
+    if (driver) collect('DRIVER', driver.id, driver.name);
+    if (asset) {
+      collect('ASSET', asset.id, asset.powerUnitNumber ? `Unit ${asset.powerUnitNumber}` : (asset.vin ?? 'Unit'));
+    }
+
+    return { blocks, warnings };
+  }
+
+  async recordOverride(input: ComplianceOverrideInput): Promise<void> {
+    if (input.blocks.length === 0) return;
+    // Who did this is the whole value of the row, so it is resolved here rather
+    // than left as an id the reader has to chase: the access token carries the
+    // user id, not a name.
+    const actorName =
+      input.actorName ??
+      (input.actorId
+        ? ((await this.prisma.user.findFirst({
+            where: { id: input.actorId, tenantId: input.tenantId },
+            select: { email: true },
+          }))?.email ?? null)
+        : null);
+
+    const row = await this.prisma.complianceOverride.create({
+      data: {
+        tenantId: input.tenantId,
+        loadId: input.loadId,
+        driverId: input.driverId,
+        assetId: input.assetId,
+        blockers: overrideSnapshot(input.blocks) as unknown as never,
+        reason: input.reason,
+        actorId: input.actorId,
+        actorName,
+      },
+    });
+
+    if (this.notifications) {
+      const who = actorName ? `${actorName} dispatched` : 'A dispatch was made';
+      const first = describeFlag(input.blocks[0] as ComplianceFlag);
+      await this.notifications.notify({
+        tenantId: input.tenantId,
+        kind: 'compliance',
+        title: 'Compliance override recorded',
+        body: `${who} with ${first} on file. Reason: ${input.reason}`,
+        link: '/app/compliance',
+        payload: { overrideId: row.id, loadId: input.loadId, blockers: row.blockers },
+      });
+    }
+  }
+
+  private mapOverride(row: {
+    id: string;
+    loadId: string;
+    driverId: string | null;
+    assetId: string | null;
+    blockers: unknown;
+    reason: string;
+    actorName: string | null;
+    createdAt: Date;
+  }): ComplianceOverrideRow {
+    const blockers = Array.isArray(row.blockers)
+      ? (row.blockers as ComplianceOverrideRow['blockers'])
+      : [];
+    return {
+      id: row.id,
+      loadId: row.loadId,
+      // Quoted the same way everywhere else quotes a load, so an owner comparing
+      // this list against a rate confirmation sees the same id.
+      loadReference: `LD-${row.loadId.replace(/-/g, '').slice(0, 8).toUpperCase()}`,
+      driverId: row.driverId,
+      assetId: row.assetId,
+      blockers,
+      reason: row.reason,
+      actorName: row.actorName,
+      createdAt: row.createdAt.toISOString(),
     };
   }
 

@@ -1,7 +1,30 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api } from '../../api';
-import { Badge, Empty, PageHeader, Spinner, Stat } from '../../components/ui';
+import { api, fetchFile, saveBlob } from '../../api';
+import { Badge, Empty, Modal, PageHeader, Spinner, Stat } from '../../components/ui';
+import { SignaturePad } from '../../components/SignaturePad';
 import { money, shortDate } from '../../utils/format';
+
+interface PayQuery {
+  id: string;
+  reference: string;
+  driverId: string;
+  driverName: string;
+  loadId: string | null;
+  subject: 'LINE' | 'DETENTION';
+  status: 'OPEN' | 'RESOLVED' | 'DECLINED';
+  message: string;
+  periodLabel: string;
+  line: { reference: string; lane: string; deliveredAt: string };
+  disputedCents: number;
+  summary: string;
+  currentCents: number | null;
+  /** The figure moved since the query was raised — often because it was fixed. */
+  lineChanged: boolean;
+  resolution: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+  ageDays: number;
+}
 
 type PayModel = 'PER_MILE' | 'PERCENT_REVENUE' | 'FLAT_PER_LOAD';
 
@@ -44,6 +67,9 @@ interface Statement {
   lines: StatementLine[];
   totals: StatementTotals;
   notes: string[];
+  /** Present on the fleet view: whether the driver has signed this period off. */
+  signedAt?: string | null;
+  signedBy?: string | null;
 }
 
 interface Overview {
@@ -81,6 +107,17 @@ export default function Settlements() {
   const [draftModel, setDraftModel] = useState<PayModel>('PER_MILE');
   const [draftRate, setDraftRate] = useState('0.58');
   const [savingPay, setSavingPay] = useState(false);
+  // Driver pay queries: the office reads them with the load and the arithmetic.
+  const [queries, setQueries] = useState<PayQuery[]>([]);
+  const [openQueries, setOpenQueries] = useState(0);
+  const [answering, setAnswering] = useState<PayQuery | null>(null);
+  const [decision, setDecision] = useState<'RESOLVED' | 'DECLINED'>('RESOLVED');
+  const [answerText, setAnswerText] = useState('');
+  const [answerBusy, setAnswerBusy] = useState(false);
+  const [answerError, setAnswerError] = useState<string | null>(null);
+  const [showAnswered, setShowAnswered] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState<string | null>(null);
+  const [signFor, setSignFor] = useState<Statement | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -95,9 +132,68 @@ export default function Settlements() {
     }
   }, [period]);
 
+  const loadQueries = useCallback(async () => {
+    try {
+      const res = await api<{ open: number; disputes: PayQuery[] }>('/api/settlements/disputes');
+      setQueries(res.disputes);
+      setOpenQueries(res.open);
+    } catch {
+      setQueries([]);
+      setOpenQueries(0);
+    }
+  }, []);
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void loadQueries();
+  }, [loadQueries]);
+
+  const answer = async (q: PayQuery) => {
+    if (answerBusy) return;
+    if (answerText.trim().length < 8) {
+      setAnswerError('Say something the driver can use — at least a short sentence.');
+      return;
+    }
+    setAnswerBusy(true);
+    setAnswerError(null);
+    try {
+      await api(`/api/settlements/disputes/${q.id}`, {
+        method: 'PATCH',
+        body: { status: decision, resolution: answerText },
+      });
+      setAnswering(null);
+      setAnswerText('');
+      setNotice(
+        decision === 'RESOLVED'
+          ? 'Answer sent — the driver sees it on their pay card.'
+          : 'Query declined with your reason — the driver sees it on their pay card.',
+      );
+      await Promise.all([loadQueries(), load()]);
+      window.setTimeout(() => setNotice(null), 5000);
+    } catch (err) {
+      setAnswerError(err instanceof Error ? err.message : 'Could not save that answer');
+    } finally {
+      setAnswerBusy(false);
+    }
+  };
+
+  const downloadStatement = async (s: Statement) => {
+    if (pdfBusy) return;
+    setPdfBusy(s.driverId);
+    try {
+      const file = await fetchFile(
+        `/api/settlements/drivers/${s.driverId}/statement.pdf?period=${period}`,
+      );
+      saveBlob(file.blob, file.fileName);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not build that statement');
+    } finally {
+      setPdfBusy(null);
+    }
+  };
 
   const openPay = (s: Statement) => {
     const model = s.payModel ?? 'PER_MILE';
@@ -129,6 +225,8 @@ export default function Settlements() {
   };
 
   const totals = data?.totals;
+  // Open queries are the work; answered ones are only shown on request.
+  const visibleQueries = showAnswered ? queries : queries.filter((q) => q.status === 'OPEN');
 
   return (
     <div className="page">
@@ -172,6 +270,12 @@ export default function Settlements() {
             value={dollars(totals.marginCents)}
             sub={`of ${dollars(totals.revenueCents)} hauled`}
           />
+          <Stat
+            label="Driver queries"
+            value={openQueries}
+            sub={openQueries > 0 ? 'Waiting on an answer' : 'Nothing outstanding'}
+            tone={openQueries > 0 ? 'amber' : 'green'}
+          />
         </div>
       )}
 
@@ -179,6 +283,63 @@ export default function Settlements() {
         <p className="muted small settle-period">
           {data.period.label} · Monday to Sunday in each driver&rsquo;s home terminal timezone
         </p>
+      )}
+
+      {visibleQueries.length > 0 && (
+        <section className="card query-inbox">
+          <div className="query-inbox-head">
+            <div>
+              <h3 style={{ marginBottom: 2 }}>Pay queries from drivers</h3>
+              <span className="muted small">
+                Each one carries the load and the arithmetic the driver was looking at.
+              </span>
+            </div>
+            <button className="link-btn" onClick={() => setShowAnswered(!showAnswered)}>
+              {showAnswered ? 'Hide answered' : `Show answered (${queries.length - openQueries})`}
+            </button>
+          </div>
+          <ul className="query-list">
+            {visibleQueries.map((q) => (
+              <li className={`query-row ${q.status === 'OPEN' ? '' : 'query-row-done'}`} key={q.id}>
+                <div className="query-row-main">
+                  <div className="query-row-title">
+                    <strong>{q.driverName}</strong>
+                    <span className="badge badge-gray">{q.reference}</span>
+                    <Badge tone={q.status === 'OPEN' ? 'amber' : q.status === 'RESOLVED' ? 'green' : 'gray'}>
+                      {q.status === 'OPEN' ? `open ${q.ageDays === 0 ? 'today' : `${q.ageDays}d`}` : q.status.toLowerCase()}
+                    </Badge>
+                    {/* The statement re-prices on read, so say when the number has
+                        moved since the driver objected to it. */}
+                    {q.lineChanged && (
+                      <Badge tone="cyan">
+                        was {dollars(q.disputedCents)} · now {q.currentCents == null ? 'gone' : dollars(q.currentCents)}
+                      </Badge>
+                    )}
+                  </div>
+                  <span className="muted small">
+                    {q.subject === 'DETENTION' ? 'Detention · ' : ''}
+                    {q.summary}
+                  </span>
+                  <span className="muted small">“{q.message}”</span>
+                  {q.resolution && <span className="muted small">Answered: {q.resolution}</span>}
+                </div>
+                {q.status === 'OPEN' && (
+                  <button
+                    className="btn-sm"
+                    onClick={() => {
+                      setAnswering(q);
+                      setDecision('RESOLVED');
+                      setAnswerText('');
+                      setAnswerError(null);
+                    }}
+                  >
+                    Answer
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {data && data.drivers.length === 0 && (
@@ -209,6 +370,13 @@ export default function Settlements() {
                       ? ` · ${centsPerMile(rpm)}`
                       : ` · ${dollars(s.totals.revenueCents)} hauled`}
                   </span>
+                  <span className="settle-signoff">
+                    {s.signedAt ? (
+                      <Badge tone="green">Signed {shortDate(s.signedAt)}</Badge>
+                    ) : (
+                      <Badge tone="gray">Not signed</Badge>
+                    )}
+                  </span>
                 </div>
               </header>
 
@@ -233,6 +401,17 @@ export default function Settlements() {
                   </button>
                   <button className="link-btn" onClick={() => (editingPay === s.driverId ? setEditingPay(null) : openPay(s))}>
                     Change pay
+                  </button>
+                  <button
+                    className="btn-ghost sm"
+                    disabled={pdfBusy === s.driverId}
+                    title="The statement as a PDF, for payroll or to hand to the driver"
+                    onClick={() => void downloadStatement(s)}
+                  >
+                    {pdfBusy === s.driverId ? 'Building…' : 'Statement PDF'}
+                  </button>
+                  <button className="btn-ghost sm" onClick={() => setSignFor(s)}>
+                    {s.signedAt ? 'Re-sign' : 'Sign'}
                   </button>
                 </div>
               )}
@@ -311,6 +490,96 @@ export default function Settlements() {
           rate re-prices the period rather than leaving a stale total behind.
         </p>
       )}
+
+      <Modal
+        open={answering !== null}
+        onClose={() => setAnswering(null)}
+        title={answering ? `Answer ${answering.driverName}'s query` : 'Answer the query'}
+        footer={
+          <>
+            <button className="btn-ghost" onClick={() => setAnswering(null)} disabled={answerBusy}>
+              Cancel
+            </button>
+            <button
+              className={decision === 'DECLINED' ? 'btn-ghost' : 'btn-green'}
+              disabled={answerBusy}
+              onClick={() => answering && void answer(answering)}
+            >
+              {answerBusy ? 'Sending…' : decision === 'RESOLVED' ? 'Send the answer' : 'Decline the query'}
+            </button>
+          </>
+        }
+      >
+        {answering && (
+          <>
+            <p className="muted small" style={{ marginTop: 0 }}>
+              {answering.reference} · {answering.periodLabel} · {answering.summary}
+            </p>
+            <div className="query-context">
+              <span className="muted small">The driver says: “{answering.message}”</span>
+              {answering.lineChanged && (
+                <span className="muted small">
+                  This figure has moved since the query was raised: {dollars(answering.disputedCents)} then,{' '}
+                  {answering.currentCents == null ? 'gone from the statement now' : `${dollars(answering.currentCents)} now`}.
+                  Correcting the load re-priced the week, so re-check before answering.
+                </span>
+              )}
+            </div>
+            <div className="form-grid">
+              <label>
+                Outcome
+                <select
+                  value={decision}
+                  onChange={(e) => setDecision(e.target.value as 'RESOLVED' | 'DECLINED')}
+                >
+                  <option value="RESOLVED">Resolved — the driver was right, or it is now fixed</option>
+                  <option value="DECLINED">Declined — the pay is correct as shown</option>
+                </select>
+              </label>
+            </div>
+            <label>
+              What you found
+              <textarea
+                rows={4}
+                value={answerText}
+                onChange={(e) => setAnswerText(e.target.value)}
+                maxLength={1000}
+                placeholder="e.g. The ELD shows 3.2 h at the dock; the timer was stopped early. Corrected and re-priced in this week's statement."
+              />
+            </label>
+            <p className="muted small">
+              The answer goes to the driver's own pay card and their bell. Because the statement is derived, the honest fix is
+              usually to correct the load or the detention entry rather than to adjust a number here.
+            </p>
+            {answerError && <div className="alert alert-error">{answerError}</div>}
+          </>
+        )}
+      </Modal>
+
+      <SignaturePad
+        open={signFor !== null}
+        endpoint={signFor ? `/api/settlements/drivers/${signFor.driverId}/signature` : undefined}
+        extraBody={{ role: 'DRIVER', period }}
+        roles={[
+          { value: 'DRIVER', label: 'Driver — signed at the yard' },
+          { value: 'CARRIER', label: 'Carrier — signed on the driver’s behalf' },
+        ]}
+        defaultRole="DRIVER"
+        title={signFor ? `Sign ${signFor.driverName}'s statement` : 'Sign the statement'}
+        hint={
+          signFor
+            ? `This puts ${signFor.driverName}'s signature on the ${signFor.period.label} statement, next to the loads and total of ${dollars(
+                signFor.totals.totalPayCents,
+              )}. The driver can also sign it from their own pay card.`
+            : undefined
+        }
+        onClose={() => setSignFor(null)}
+        onSigned={() => {
+          setNotice('Signature captured — it is printed on that period\u2019s statement PDF.');
+          void load();
+          window.setTimeout(() => setNotice(null), 5000);
+        }}
+      />
     </div>
   );
 }

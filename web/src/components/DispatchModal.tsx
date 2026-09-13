@@ -1,7 +1,33 @@
-import { useEffect, useMemo, useState } from 'react';
-import { api } from '../api';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { api, ApiError } from '../api';
 import { Modal } from './ui';
 import { regionLabel } from '../utils/format';
+import { shortBy, tooShort } from '../utils/text';
+
+/** A lapsed or lapsing document standing between this driver/unit and the load. */
+interface ComplianceFlag {
+  subject: 'DRIVER' | 'ASSET' | 'TENANT';
+  subjectId: string;
+  label: string;
+  kind: string;
+  itemLabel: string;
+  status: 'EXPIRED' | 'MISSING' | 'EXPIRING' | 'OK';
+  expiresAt: string | null;
+  daysUntil: number | null;
+}
+
+function flagLine(flag: ComplianceFlag): string {
+  const days = flag.daysUntil === null ? null : Math.abs(flag.daysUntil);
+  if (flag.status === 'EXPIRED') {
+    return `${flag.label} — ${flag.itemLabel} ${days === 0 || days === null ? 'expired' : `expired ${days} day${days === 1 ? '' : 's'} ago`}`;
+  }
+  if (flag.status === 'MISSING') return `${flag.label} — ${flag.itemLabel} not on file`;
+  const wait = flag.daysUntil ?? 0;
+  return `${flag.label} — ${flag.itemLabel} expires ${wait === 0 ? 'today' : `in ${wait} day${wait === 1 ? '' : 's'}`}`;
+}
+
+/** Mirrors MIN_OVERRIDE_REASON in the compliance policy — keep the two in step. */
+const MIN_OVERRIDE_REASON = 12;
 
 export interface DispatchLoad {
   id: string;
@@ -106,6 +132,11 @@ export default function DispatchModal({
   const [driverId, setDriverId] = useState('');
   const [assetId, setAssetId] = useState('');
   const [loadId, setLoadId] = useState('');
+  // What the vault says about the current selection, and — when the assign was
+  // refused outright — the sentence the server used.
+  const [flags, setFlags] = useState<{ blocks: ComplianceFlag[]; warnings: ComplianceFlag[] }>({ blocks: [], warnings: [] });
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const [overrideReason, setOverrideReason] = useState('');
 
   useEffect(() => {
     if (!open) return;
@@ -174,23 +205,69 @@ export default function DispatchModal({
     setAssetId(picked?.assigneeAssetId ?? '');
   };
 
-  const save = async (nextDriverId: string | null, nextAssetId: string | null) => {
+  /**
+   * What the vault thinks of this pairing, asked before the dispatcher commits.
+   * A warning here is the last moment the answer is still cheap to act on.
+   */
+  const checkCompliance = useCallback(async (nextDriverId: string, nextAssetId: string) => {
+    if (!nextDriverId && !nextAssetId) {
+      setFlags({ blocks: [], warnings: [] });
+      return;
+    }
+    try {
+      const query = new URLSearchParams();
+      if (nextDriverId) query.set('driverId', nextDriverId);
+      if (nextAssetId) query.set('assetId', nextAssetId);
+      setFlags(await api<{ blocks: ComplianceFlag[]; warnings: ComplianceFlag[] }>(`/api/loads/compliance-check?${query}`));
+    } catch {
+      // A failed pre-check must never block dispatch; the assign itself still
+      // enforces the gate server-side.
+      setFlags({ blocks: [], warnings: [] });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    // Selections change under the pre-check, so a stale refusal is cleared with
+    // them: leaving it up would make the reason field look required.
+    setRefusal(null);
+    setOverrideReason('');
+    void checkCompliance(driverId, assetId);
+  }, [open, driverId, assetId, checkCompliance]);
+
+  const save = async (nextDriverId: string | null, nextAssetId: string | null, reason?: string) => {
     if (!targetLoad || busy) return;
     setBusy(true);
     setError(null);
     try {
       await api(`/api/loads/${targetLoad.id}/assign`, {
         method: 'PATCH',
-        body: { driverId: nextDriverId, assetId: nextAssetId },
+        body: {
+          driverId: nextDriverId,
+          assetId: nextAssetId,
+          ...(reason ? { overrideReason: reason } : {}),
+        },
       });
       await onSaved();
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Dispatch failed — try again');
+      const payload = e instanceof ApiError ? (e.payload as { error?: string; details?: { blocks?: ComplianceFlag[]; warnings?: ComplianceFlag[] } } | null) : null;
+      if (e instanceof ApiError && payload?.error === 'COMPLIANCE_BLOCKED') {
+        // Keep the sheet open with the specific documents on it: a bare "blocked"
+        // message sends the dispatcher hunting through the Compliance page.
+        // A block that appeared between the pre-check and the write lands here.
+        setFlags({ blocks: payload.details?.blocks ?? [], warnings: payload.details?.warnings ?? [] });
+        setRefusal(e.message);
+      } else {
+        setError(e instanceof Error ? e.message : 'Dispatch failed — try again');
+      }
       setBusy(false);
     }
   };
 
+  // A lapsed document stops a dispatch, not a removal: pulling a driver off a
+  // load is always allowed, and refusing it would strand the truck.
+  const blocked = flags.blocks.length > 0;
   const removeable = targetLoad && !!targetLoad.assigneeDriverId && canUnassign(targetLoad);
   const current = targetLoad
     ? targetLoad.assigneeDriverId
@@ -216,13 +293,28 @@ export default function DispatchModal({
               Remove assignment
             </button>
           )}
-          <button
-            className="btn-green"
-            disabled={busy || loading || !changed}
-            onClick={() => void save(driverId || null, assetId || null)}
-          >
-            {busy ? 'Saving…' : loadFocus ? (targetLoad?.assigneeDriverId ? 'Update assignment' : 'Dispatch load') : 'Assign to driver'}
-          </button>
+          {blocked ? (
+            <button
+              className="btn"
+              disabled={busy || tooShort(overrideReason, MIN_OVERRIDE_REASON)}
+              title={
+                tooShort(overrideReason, MIN_OVERRIDE_REASON)
+                  ? 'A reason is required — it is stored against your name'
+                  : undefined
+              }
+              onClick={() => void save(driverId || null, assetId || null, overrideReason.trim())}
+            >
+              {busy ? 'Assigning…' : 'Assign anyway'}
+            </button>
+          ) : (
+            <button
+              className="btn-green"
+              disabled={busy || loading || !changed}
+              onClick={() => void save(driverId || null, assetId || null)}
+            >
+              {busy ? 'Saving…' : loadFocus ? (targetLoad?.assigneeDriverId ? 'Update assignment' : 'Dispatch load') : 'Assign to driver'}
+            </button>
+          )}
         </>
       }
     >
@@ -248,6 +340,57 @@ export default function DispatchModal({
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
+
+      {flags.warnings.length > 0 && (
+        <div className="alert compliance-warn">
+          <span>
+            {flags.warnings.map((f) => flagLine(f)).join(' · ')}. Worth chasing before it lapses.
+          </span>
+        </div>
+      )}
+
+      {blocked && (
+        <div className="compliance-block">
+          <div className="alert alert-error">
+            <strong>{refusal ?? 'This pairing cannot be dispatched as-is.'}</strong>
+            <ul>
+              {flags.blocks.map((f) => (
+                <li key={`${f.subject}:${f.kind}`}>{flagLine(f)}</li>
+              ))}
+            </ul>
+          </div>
+          {/* The override is offered here rather than hidden behind a failed
+              request: a dispatcher who cannot see a way forward does not ask for
+              one, they go and edit the expiry date until the block goes away. */}
+          <label>
+            Why this is going ahead anyway
+            <textarea
+              rows={3}
+              value={overrideReason}
+              onChange={(e) => setOverrideReason(e.target.value)}
+              maxLength={1000}
+              placeholder="e.g. Driver emailed the renewed medical card, hard copy is in the truck; customer appointment is today."
+            />
+          </label>
+          {/* Said out loud rather than in a tooltip: a dispatcher on a phone has
+              nothing to hover, and a disabled button with no explanation reads
+              as a bug rather than a requirement. */}
+          {tooShort(overrideReason, MIN_OVERRIDE_REASON) && (
+            <p className="muted small" style={{ marginTop: -4 }}>
+              {overrideReason.trim().length === 0
+                ? 'A reason is required before this can go ahead.'
+                : `${shortBy(overrideReason, MIN_OVERRIDE_REASON)} more character${
+                    shortBy(overrideReason, MIN_OVERRIDE_REASON) === 1 ? '' : 's'
+                  } and it can be recorded.`}
+            </p>
+          )}
+          <p className="muted small">
+            This is recorded against your account with the documents that had lapsed, and the office is notified. The
+            override covers this one assignment — the next load needs its own decision.
+          </p>
+        </div>
+      )}
+
       {loading && (
         <div className="spinner-wrap"><span className="spinner" aria-hidden /><span className="muted small">Loading options…</span></div>
       )}

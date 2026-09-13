@@ -30,17 +30,34 @@ export function SignaturePad({
   defaultRole = 'RECEIVER',
   onClose,
   onSigned,
+  /**
+   * Post the capture somewhere other than a load's POD. A settlement statement
+   * is signed with the same pad and the same drawn bytes — one capture path, so
+   * what a driver draws at the yard is what the PDF embeds, whether it goes on a
+   * delivery packet or a pay statement.
+   */
+  endpoint,
+  extraBody,
+  roles,
+  title,
+  hint,
 }: {
   open: boolean;
-  loadId: string | null;
+  loadId?: string | null;
   laneLabel?: string;
-  defaultRole?: SignatureRole;
+  defaultRole?: SignatureRole | string;
   onClose: () => void;
   onSigned?: () => void;
+  endpoint?: string;
+  extraBody?: Record<string, unknown>;
+  roles?: Array<{ value: string; label: string }>;
+  title?: string;
+  hint?: string;
 }) {
+  const roleOptions = roles ?? ROLES;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawing = useRef(false);
-  const [role, setRole] = useState<SignatureRole>(defaultRole);
+  const [role, setRole] = useState<string>(defaultRole);
   const [signerName, setSignerName] = useState('');
   const [hasInk, setHasInk] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -175,7 +192,7 @@ export function SignaturePad({
 
   const save = async () => {
     if (busy) return;
-    if (!loadId) return;
+    if (!endpoint && !loadId) return;
     if (signerName.trim().length < 2) {
       setError('Please type the name of the person signing.');
       return;
@@ -195,9 +212,9 @@ export function SignaturePad({
     setBusy(true);
     setError(null);
     try {
-      await api(`/api/loads/${loadId}/signatures`, {
+      await api(endpoint ?? `/api/loads/${loadId}/signatures`, {
         method: 'POST',
-        body: { role, signerName: signerName.trim(), data: base64 },
+        body: { role, signerName: signerName.trim(), data: base64, ...(extraBody ?? {}) },
       });
       onSigned?.();
       onClose();
@@ -212,7 +229,7 @@ export function SignaturePad({
     <Modal
       open={open}
       onClose={onClose}
-      title="Capture signature"
+      title={title ?? 'Capture signature'}
       footer={
         <>
           <button className="btn-ghost" onClick={() => resetCanvas()} disabled={busy}>
@@ -225,9 +242,10 @@ export function SignaturePad({
       }
     >
       <p className="muted small" style={{ marginTop: 0 }}>
-        {laneLabel
-          ? `Signature for ${laneLabel}. It goes on the delivery packet next to the rate and route.`
-          : 'The signature goes on the delivery packet next to the rate and route.'}
+        {hint ??
+          (laneLabel
+            ? `Signature for ${laneLabel}. It goes on the delivery packet next to the rate and route.`
+            : 'The signature goes on the delivery packet next to the rate and route.')}
       </p>
 
       <label>
@@ -243,8 +261,8 @@ export function SignaturePad({
 
       <label>
         Signing as
-        <select value={role} onChange={(e) => setRole(e.target.value as SignatureRole)}>
-          {ROLES.map((option) => (
+        <select value={role} onChange={(e) => setRole(e.target.value)}>
+          {roleOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>

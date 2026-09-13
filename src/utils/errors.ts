@@ -3,6 +3,13 @@ export class AppError extends Error {
     readonly statusCode: number,
     readonly code: string,
     message: string,
+    /**
+     * Structured payload the client needs to act on the refusal — the specific
+     * documents blocking an assignment, for instance. It rides along with the
+     * error rather than being fetched again, so the screen showing the problem
+     * is looking at the same facts the server refused on.
+     */
+    readonly details?: unknown,
   ) {
     super(message);
     this.name = 'AppError';
@@ -25,8 +32,17 @@ export function notFound(msg = 'Resource not found'): AppError {
   return new AppError(404, 'NOT_FOUND', msg);
 }
 
-export function conflict(msg: string): AppError {
-  return new AppError(409, 'CONFLICT', msg);
+export function conflict(msg: string, details?: unknown): AppError {
+  return new AppError(409, 'CONFLICT', msg, details);
+}
+
+/**
+ * Refused because a stated rule would be broken: a lapsed compliance document,
+ * a duplicate open query. Distinct from CONFLICT so the client can tell "no"
+ * apart from "that already exists".
+ */
+export function blocked(code: string, msg: string, details?: unknown): AppError {
+  return new AppError(409, code, msg, details);
 }
 
 /**

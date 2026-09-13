@@ -93,8 +93,11 @@ describe('PdfDocument structure', () => {
     doc.text('Québec → Montréal', 40, 60);
     const text = doc.build().toString('latin1');
     // é is WinAnsi 0xE9, written as the octal escape \351 so the content
-    // stream stays 7-bit ASCII; the arrow has no glyph and becomes '?'.
-    expect(text).toContain('Qu\\351bec ? Montr\\351al');
+    // stream stays 7-bit ASCII. The arrow has no glyph in WinAnsi, so it is
+    // transliterated to "->" rather than dropped: lanes are written "QC → ON"
+    // throughout the app, and on a settlement statement "QC ? ON" reads like a
+    // missing value.
+    expect(text).toContain('Qu\\351bec -> Montr\\351al');
   });
 
   it('right-aligns against the real font metrics', () => {

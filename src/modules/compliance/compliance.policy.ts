@@ -370,6 +370,142 @@ export function attentionSummary(
   };
 }
 
+/* ------------------------------------------------------------------ *
+ * Assignment gate
+ *
+ * Whether a driver or a unit may be put on a load. This is the part of the
+ * vault that acts rather than reports: a truck dispatched on a lapsed annual
+ * inspection is the failure the whole module exists to prevent, and it is worth
+ * more than any report.
+ *
+ * What blocks and what merely warns is a deliberate split:
+ *
+ *   - **EXPIRED blocks.** The document exists and its date has passed. There is
+ *     no reading of that which is fine, and a dispatcher cannot fix it by
+ *     ignoring it.
+ *   - **MISSING does not block.** A vault that is still being filled in is the
+ *     normal state of a new carrier — blocking on absence would refuse to assign
+ *     anything on day one and teach dispatch to route around this feature
+ *     entirely. It is reported, loudly, as a warning.
+ *   - **EXPIRING warns.** Not yet a violation.
+ *
+ * Blocks can be overridden on purpose, and the override is recorded with a name
+ * and a reason. A gate nobody can pass is a gate everybody turns off.
+ * ------------------------------------------------------------------ */
+
+export interface ComplianceFlag {
+  subject: ComplianceSubject;
+  subjectId: string;
+  /** The driver's name or the unit label, so a message needs no second lookup. */
+  label: string;
+  kind: string;
+  itemLabel: string;
+  status: ComplianceStatus;
+  expiresAt: string | null;
+  daysUntil: number | null;
+}
+
+/** Only a lapse stops a dispatch. */
+export const BLOCKING_STATUSES: readonly ComplianceStatus[] = ['EXPIRED'];
+
+/** How long an override reason must be — a checkbox is not an explanation. */
+export const MIN_OVERRIDE_REASON = 12;
+
+export function assignmentBlocks(
+  items: readonly ChecklistItem[],
+  subject: ComplianceSubject,
+  subjectId: string,
+  label: string,
+): ComplianceFlag[] {
+  return items
+    .filter((item) => BLOCKING_STATUSES.includes(item.status))
+    .map((item) => flagFor(item, subject, subjectId, label));
+}
+
+/** Everything worth mentioning that does not stop the assignment. */
+export function assignmentWarnings(
+  items: readonly ChecklistItem[],
+  subject: ComplianceSubject,
+  subjectId: string,
+  label: string,
+): ComplianceFlag[] {
+  return items
+    .filter((item) => item.status === 'EXPIRING' || (item.required && item.status === 'MISSING'))
+    .map((item) => flagFor(item, subject, subjectId, label))
+    .filter((flag) => !BLOCKING_STATUSES.includes(flag.status));
+}
+
+function flagFor(
+  item: ChecklistItem,
+  subject: ComplianceSubject,
+  subjectId: string,
+  label: string,
+): ComplianceFlag {
+  return {
+    subject,
+    subjectId,
+    label,
+    kind: item.kind,
+    itemLabel: item.label,
+    status: item.status,
+    expiresAt: item.expiresAt,
+    daysUntil: item.daysUntil,
+  };
+}
+
+/** `CDL / licence expired 3 days ago` — says what to fix, not just "blocked". */
+export function describeFlag(flag: ComplianceFlag): string {
+  const who = flag.label ? `${flag.label} — ` : '';
+  if (statusIsExpired(flag)) {
+    const days = flag.daysUntil === null ? null : Math.abs(flag.daysUntil);
+    const when = days === 0 ? 'expired today' : days === null ? 'expired' : `expired ${days} day${days === 1 ? '' : 's'} ago`;
+    return `${who}${flag.itemLabel} ${when}`;
+  }
+  if (flag.status === 'MISSING') return `${who}${flag.itemLabel} not on file`;
+  const days = flag.daysUntil ?? 0;
+  return `${who}${flag.itemLabel} expires ${days === 0 ? 'today' : `in ${days} day${days === 1 ? '' : 's'}`}`;
+}
+
+function statusIsExpired(flag: ComplianceFlag): boolean {
+  return flag.status === 'EXPIRED';
+}
+
+/** The sentence the dispatcher reads when the assign is refused. */
+export function blockedMessage(flags: readonly ComplianceFlag[]): string {
+  if (flags.length === 0) return 'This assignment is blocked by a compliance lapse.';
+  const first = describeFlag(flags[0] as ComplianceFlag);
+  const more = flags.length > 1 ? ` (+${flags.length - 1} more)` : '';
+  return `Cannot dispatch: ${first}${more}. Renew it, or override with a reason.`;
+}
+
+/** Trim and bound an override reason; null when it is usable. */
+export function overrideReasonIssue(raw: unknown): string | null {
+  if (typeof raw !== 'string' || raw.replace(/\s+/g, ' ').trim().length < MIN_OVERRIDE_REASON) {
+    return `An override needs a reason of at least ${MIN_OVERRIDE_REASON} characters — it is recorded against your name.`;
+  }
+  if (raw.length > 1000) return 'That reason is too long — keep it under 1000 characters.';
+  return null;
+}
+
+/** What an override row stores, so the decision is readable after a renewal. */
+export function overrideSnapshot(flags: readonly ComplianceFlag[]): Array<{
+  subject: ComplianceSubject;
+  subjectId: string;
+  label: string;
+  kind: string;
+  status: ComplianceStatus;
+  expiresAt: string | null;
+}> {
+  return flags.map((f) => ({
+    subject: f.subject,
+    subjectId: f.subjectId,
+    label: f.label,
+    kind: f.kind,
+    status: f.status,
+    expiresAt: f.expiresAt,
+  }));
+}
+
 export function describeItem(item: ChecklistItem): string {
   if (item.status === 'MISSING') return 'not on file';
   if (item.status === 'EXPIRED') {

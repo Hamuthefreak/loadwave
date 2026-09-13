@@ -179,7 +179,16 @@ function buildBaseServices(
   const geometry = overrides.geometry ?? new PostgisRouteGeometryService(prisma);
   const fx = overrides.fx ?? new PrismaFxService(prisma);
   const fuel = overrides.fuel ?? new PrismaFuelService(prisma, bus, fx);
-  const loads = overrides.loads ?? new PrismaLoadService(prisma, bus);
+  // Notifications are built first among the business services because dispatch,
+  // settlement queries and compliance overrides all raise rows in the same feed.
+  const email = overrides.email ?? new PrismaEmailService(prisma, env, logger);
+  const notifications =
+    overrides.notifications ??
+    new PrismaNotificationService(prisma, email, tenantEmail(prisma));
+  // The vault is injected into dispatch: a load cannot go to a driver or a unit
+  // with a lapsed document unless somebody overrides it and says why.
+  const compliance = overrides.compliance ?? new PrismaComplianceService(prisma, notifications);
+  const loads = overrides.loads ?? new PrismaLoadService(prisma, bus, compliance);
   const geo = overrides.geo ?? new PrismaGeoService(prisma);
   // Without FMCSA_WEBKEY the client is simply disabled, which keeps authority
   // status labelled self-declared rather than silently unverified.
@@ -197,10 +206,6 @@ function buildBaseServices(
   const trucks =
     overrides.trucks ??
     new TruckService(new PrismaTruckStore(prisma), geo, trust);
-  const email = overrides.email ?? new PrismaEmailService(prisma, env, logger);
-  const notifications =
-    overrides.notifications ??
-    new PrismaNotificationService(prisma, email, tenantEmail(prisma));
   const messages =
     overrides.messages ?? new PrismaMessageService(prisma, notifications, board);
   const ratings = overrides.ratings ?? new PrismaRatingService(new PrismaRatingRepo(prisma));
@@ -258,8 +263,8 @@ function buildBaseServices(
     importService,
     push,
     detention: overrides.detention ?? new PrismaDetentionService(prisma),
-    compliance: overrides.compliance ?? new PrismaComplianceService(prisma),
-    settlements: overrides.settlements ?? new PrismaSettlementService(prisma),
+    compliance,
+    settlements: overrides.settlements ?? new PrismaSettlementService(prisma, notifications),
   };
   void logger;
   return unlocked;
@@ -355,6 +360,9 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       return reply.code(error.statusCode).send({
         error: error.code,
         message: error.message,
+        // Structured detail travels with the refusal: the dispatch screen shows
+        // the exact documents the server refused on, not a re-derived guess.
+        ...(error.details !== undefined ? { details: error.details } : {}),
       });
     }
     const fastifyErr = error as { statusCode?: number; code?: string; message?: string };

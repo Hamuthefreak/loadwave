@@ -1805,6 +1805,134 @@ tfoot td {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto;
 }
 
+/* --- Pay queries ------------------------------------------------------- */
+/* Asking about a figure and signing off on the week both live on the pay
+   card, so the two actions sit together at its foot rather than in a menu. */
+.pay-line-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 2px;
+}
+
+.pay-queries {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.pay-queries-head {
+  display: block;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.68rem;
+  margin-bottom: 6px;
+}
+
+.pay-docs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.settle-signoff {
+  margin-top: 4px;
+}
+
+/* The office side: queries in, and what was dispatched on a lapse. */
+.query-inbox,
+.override-log {
+  margin: 16px 0;
+}
+
+.query-inbox-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.query-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.query-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.query-row:first-child {
+  border-top: none;
+  padding-top: 4px;
+}
+
+.query-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.query-row-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* An answered query stays legible but stops competing with the open ones. */
+.query-row-done .query-row-title strong {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.query-context {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface-2, rgba(127, 127, 127, 0.08));
+}
+
+/* A refusal has to read as a refusal before the reason field is reached. */
+.compliance-block ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.85rem;
+}
+
+.compliance-block textarea {
+  width: 100%;
+}
+
+.compliance-warn {
+  border: 1px solid var(--amber);
+  background: var(--amber-soft);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.85rem;
+}
+
 @media (max-width: 640px) {
   .pay-line {
     grid-template-columns: 1fr auto;
@@ -1812,6 +1940,15 @@ tfoot td {
 
   .pay-amount {
     font-size: 1.7rem;
+  }
+
+  .settle-signoff {
+    align-self: flex-start;
+  }
+
+  .query-row {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 

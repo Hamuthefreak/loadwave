@@ -5,6 +5,13 @@ import { EVENTS, LoadDispatched, LoadImported, LoadStatusChanged } from '../../e
 import type { EventBus } from '../../events/event-bus';
 import { assertTransition, canAdvance, type StatusActor } from '../dispatch/dispatch.policy';
 import { nextRecurrenceDate, parseRecurringDays } from '../../utils/recurring';
+import { blocked } from '../../utils/errors';
+import {
+  blockedMessage,
+  overrideReasonIssue,
+  type ComplianceFlag,
+} from '../compliance/compliance.policy';
+import type { AssignmentComplianceGate, AssignmentComplianceReport } from '../compliance/compliance.gate';
 
 export interface LoadStopRow {
   id: string;
@@ -132,8 +139,35 @@ export interface LoadService {
   list(tenantId: string, filters?: LoadListFilters): Promise<LoadRow[]>;
   // Loads dispatched to a specific driver (their "My Trips" inbox).
   listAssignedToDriver(tenantId: string, driverId: string): Promise<LoadRow[]>;
-  assign(tenantId: string, loadId: string, driverId: string | null, assetId: string | null): Promise<LoadRow>;
+  assign(
+    tenantId: string,
+    loadId: string,
+    driverId: string | null,
+    assetId: string | null,
+    options?: AssignOptions,
+  ): Promise<LoadRow>;
   setStatus(tenantId: string, loadId: string, status: string, actor: StatusActor): Promise<LoadRow>;
+  /**
+   * What assigning this driver and unit would run into, without assigning it.
+   * The dispatch screen asks *before* the dispatcher commits, which is the only
+   * moment the answer is still useful.
+   */
+  assignmentCompliance(
+    tenantId: string,
+    driverId: string | null,
+    assetId: string | null,
+  ): Promise<AssignmentComplianceReport>;
+}
+
+export interface AssignOptions {
+  /**
+   * The dispatcher's reason for dispatching on a lapsed document. Supplying one
+   * is the only way past the compliance gate, and it is stored against their
+   * name — the gate exists to make the decision attributable, not impossible.
+   */
+  overrideReason?: string | null;
+  actorId?: string | null;
+  actorName?: string | null;
 }
 
 interface LoadDbRow {
@@ -200,6 +234,12 @@ export class PrismaLoadService implements LoadService {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly bus: EventBus,
+    /**
+     * Optional so the importer and test doubles can build the service without
+     * the vault. When it is absent nothing blocks — a deployment that has not
+     * turned compliance on still dispatches.
+     */
+    private readonly compliance: AssignmentComplianceGate | null = null,
   ) {}
 
   private select = {
@@ -445,6 +485,7 @@ export class PrismaLoadService implements LoadService {
     loadId: string,
     driverId: string | null,
     assetId: string | null,
+    options: AssignOptions = {},
   ): Promise<LoadRow> {
     const row = await this.prisma.load.findFirst({ where: { id: loadId, tenantId } });
     if (!row) throw notFound('load not found');
@@ -456,6 +497,8 @@ export class PrismaLoadService implements LoadService {
       const asset = await this.prisma.asset.findFirst({ where: { id: assetId, tenantId } });
       if (!asset) throw notFound('asset not found for this tenant');
     }
+
+    await this.enforceCompliance(tenantId, loadId, driverId, assetId, options);
     // Assigning an OPEN load moves it to ASSIGNED; pulling the driver off an
     // ASSIGNED load reverts it to OPEN so it can be dispatched again (never
     // downgrades IN_TRANSIT+ — those require an explicit status change).
@@ -495,6 +538,62 @@ export class PrismaLoadService implements LoadService {
     }
 
     return this.map(updated as unknown as LoadDbRow);
+  }
+
+  /**
+   * Refuses to put a driver or a unit on a load while a document has lapsed.
+   *
+   * Called before the update rather than after, so a blocked dispatch leaves no
+   * trace on the load: a half-applied assignment that has to be undone is worse
+   * than a refusal, because the driver has already been told they have the trip.
+   *
+   * The reason is required, not optional. Without one this is a wall, and the
+   * first thing anyone does with a wall is find a way around it — usually by
+   * editing the expiry date. With one, the decision has a name on it, which is
+   * what makes it defensible after an accident and worth chasing in the morning.
+   */
+  async assignmentCompliance(
+    tenantId: string,
+    driverId: string | null,
+    assetId: string | null,
+  ): Promise<AssignmentComplianceReport> {
+    if (!this.compliance || (!driverId && !assetId)) return { blocks: [], warnings: [] };
+    return this.compliance.checkAssignment(tenantId, driverId, assetId);
+  }
+
+  private async enforceCompliance(
+    tenantId: string,
+    loadId: string,
+    driverId: string | null,
+    assetId: string | null,
+    options: AssignOptions,
+  ): Promise<void> {
+    if (!this.compliance || (!driverId && !assetId)) return;
+    const report = await this.compliance.checkAssignment(tenantId, driverId, assetId);
+    if (report.blocks.length === 0) return;
+
+    const reason = (options.overrideReason ?? '').trim();
+    if (!reason) {
+      throw blocked('COMPLIANCE_BLOCKED', blockedMessage(report.blocks), {
+        blocks: report.blocks,
+        warnings: report.warnings,
+      });
+    }
+    const issue = overrideReasonIssue(reason);
+    if (issue) throw blocked('COMPLIANCE_BLOCKED', issue, { blocks: report.blocks, warnings: report.warnings });
+
+    await this.compliance.recordOverride({
+      tenantId,
+      loadId,
+      driverId,
+      assetId,
+      // Snapshotted before the write: the document gets renewed, and the reason
+      // for the decision has to stay readable afterwards.
+      blocks: report.blocks as ComplianceFlag[],
+      reason,
+      actorId: options.actorId ?? null,
+      actorName: options.actorName ?? null,
+    });
   }
 
   async setStatus(tenantId: string, loadId: string, status: string, actor: StatusActor): Promise<LoadRow> {

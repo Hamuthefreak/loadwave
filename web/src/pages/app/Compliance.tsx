@@ -31,12 +31,25 @@ interface SubjectView {
   items: ChecklistItem[];
 }
 
+interface OverrideRow {
+  id: string;
+  loadId: string;
+  loadReference: string | null;
+  driverId: string | null;
+  assetId: string | null;
+  blockers: Array<{ label: string; kind: string; status: ComplianceStatus; expiresAt: string | null }>;
+  reason: string;
+  actorName: string | null;
+  createdAt: string;
+}
+
 interface ComplianceView {
   asOf: string;
   drivers: SubjectView[];
   assets: SubjectView[];
   carrier: SubjectView;
   totals: { expired: number; missing: number; expiring: number; ok: number };
+  overrides: OverrideRow[];
 }
 
 interface KindSpec {
@@ -205,6 +218,40 @@ export default function Compliance() {
 
       {!loading && view && subjects.length === 0 && (
         <Empty title="Nothing to track yet" sub="Add a driver or a unit first — their documents hang off them." />
+      )}
+
+      {/* A dispatch on a lapsed document is the thing this module exists to stop,
+          so when somebody overrode that it belongs on the same screen — not
+          buried in an audit log nobody opens. */}
+      {view && view.overrides.length > 0 && (
+        <section className="card override-log">
+          <h3 style={{ marginBottom: 2 }}>Dispatches cleared despite a lapse</h3>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            Each one was allowed deliberately, with a reason recorded against the person who made the call.
+          </p>
+          <ul className="query-list">
+            {view.overrides.map((o) => (
+              <li className="query-row query-row-done" key={o.id}>
+                <div className="query-row-main">
+                  <div className="query-row-title">
+                    <strong>{o.loadReference ?? o.loadId.slice(0, 8).toUpperCase()}</strong>
+                    <Badge tone="red">
+                      {o.blockers.length} lapsed document{o.blockers.length === 1 ? '' : 's'}
+                    </Badge>
+                    <span className="muted small">{o.createdAt.slice(0, 10)}</span>
+                  </div>
+                  <span className="muted small">
+                    {o.blockers.map((b) => `${b.label} — ${b.kind}`).join(' · ')}
+                  </span>
+                  <span className="muted small">“{o.reason}”</span>
+                  <span className="muted small">
+                    {o.actorName ? `Recorded against ${o.actorName}` : 'No account recorded'}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       <Modal

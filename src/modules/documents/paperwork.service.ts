@@ -127,8 +127,15 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-/** `image/jpeg` / `image/png` from the bytes themselves, or null if neither. */
-function sniffImageMime(data: Buffer): 'image/jpeg' | 'image/png' | null {
+/**
+ * `image/jpeg` / `image/png` from the bytes themselves, or null if neither.
+ *
+ * Exported because a signature is a signature wherever it is captured: the
+ * settlement statement stores the same kind of drawn mark as the delivery
+ * packet, and it must be sniffed the same way rather than trusting a client's
+ * MIME type.
+ */
+export function sniffImageMime(data: Buffer): 'image/jpeg' | 'image/png' | null {
   if (data.length > 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) {
     return 'image/jpeg';
   }

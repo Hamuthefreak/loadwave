@@ -88,6 +88,9 @@ model Tenant {
   teamInvites     TeamInvite[]
   planRequests    PlanRequest[]
   complianceDocs  ComplianceDocument[]
+  overrides       ComplianceOverride[]
+  payDisputes     PayDispute[]
+  paySignatures   SettlementSignature[]
 }
 
 /// Who a compliance document belongs to. Carrier-level paperwork (authority,
@@ -140,6 +143,39 @@ model ComplianceDocument {
   @@index([tenantId, subject, subjectId])
   /// The expiry sweep reads this: everything lapsing soon, across all tenants.
   @@index([expiresAt])
+}
+
+/// A dispatcher deliberately handing work to a driver or a unit whose paperwork
+/// has lapsed.
+///
+/// The point of this row is not to allow the assign — it is to make the decision
+/// belong to somebody. Blocking on its own just teaches dispatch to edit the
+/// expiry date until it stops complaining; a recorded reason with a name and a
+/// timestamp is what an auditor (or an insurer, after a claim) actually asks
+/// for, and it also makes the lapse visible in the daily feed.
+model ComplianceOverride {
+  id       String @id @default(uuid())
+  tenantId String
+  loadId   String
+  /// The driver and/or unit that was put on the load despite the lapse. Either
+  /// may be null: a load can be assigned a unit with no driver, or the reverse.
+  driverId String?
+  assetId  String?
+  /// Exactly what was overridden — [{ subject, subjectId, label, kind, status }]
+  /// — snapshotted, because the document gets renewed and the reason would
+  /// otherwise be unreadable a month later.
+  blockers Json
+  reason   String
+  actorId  String?
+  /// Name of the person who overrode it, so the record stands on its own.
+  actorName String?
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  load   Load   @relation(fields: [loadId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([loadId])
 }
 
 /// A signature captured against a load: the receiver signing at the dock, the
@@ -355,6 +391,8 @@ model Driver {
   loadDocuments LoadDocument[]
   detentions    DetentionEntry[]  @relation("DetentionDriver")
   signatures    LoadSignature[]
+  payDisputes   PayDispute[]
+  paySignatures SettlementSignature[]
 
   @@unique([tenantId, externalEldId])
   @@index([tenantId])
@@ -616,6 +654,8 @@ model Load {
   detentions     DetentionEntry[]
   signatures     LoadSignature[]
   reports        TenantReport[]
+  payDisputes    PayDispute[]
+  overrides      ComplianceOverride[]
 
   @@unique([tenantId, externalLoadboardId])
   @@index([tenantId, status])
@@ -952,4 +992,83 @@ model LaneDailyStat {
 
   @@unique([statDate, originRegion, destinationRegion, equipmentType])
   @@index([statDate])
+}
+
+/// A driver questioning a line on their own settlement statement.
+///
+/// Statements are derived rather than stored, which is right for the money but
+/// leaves nothing for a driver to point at when a number looks wrong: the usual
+/// outcome is a phone call nobody writes down, and dispatch reconstructing the
+/// week from memory. This table is that conversation, with the arithmetic
+/// attached.
+///
+/// The disputed line is **snapshotted** at the moment it is raised (lane, basis,
+/// amounts, period). A statement re-prices whenever a rate or a delivery date is
+/// corrected, so a dispute that stored only a load id would silently start
+/// pointing at different numbers than the ones the driver objected to.
+model PayDispute {
+  id       String  @id @default(uuid())
+  tenantId String
+  driverId String
+  loadId   String?
+  /// Which figure is questioned: LINE (the mileage/revenue working),
+  /// DETENTION (the waiting time), or PERIOD (the week as a whole).
+  subject String @default("LINE")
+  status  String @default("OPEN") // OPEN | RESOLVED | DECLINED
+  /// The driver's own words, in the driver's own words.
+  message String
+
+  // What they were looking at when they raised it.
+  periodLabel String
+  periodFrom  DateTime
+  periodTo    DateTime
+  /// The statement line as it read: { reference, lane, deliveredAt, basis,
+  /// baseCents, detentionBasis, detentionCents, totalCents, miles }.
+  line Json
+
+  /// The office's answer, and who stands behind it.
+  resolution  String?
+  decidedById String?
+  decidedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  driver Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  load   Load?  @relation(fields: [loadId], references: [id], onDelete: SetNull)
+
+  /// The office inbox: open queries, newest first.
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, driverId, createdAt])
+}
+
+/// A driver signing off on their settlement statement for one pay period.
+///
+/// Payroll has to be filable and handable-over: a week that the driver and the
+/// office both agree to, with a signature on it, is the record a labour
+/// inspector or a dispute months later is settled by. Captures are appended, not
+/// overwritten, so the audit trail survives a re-sign — the statement PDF shows
+/// the most recent capture for the period, the same rule the delivery packet
+/// uses for receiver signatures.
+model SettlementSignature {
+  id          String   @id @default(uuid())
+  tenantId    String
+  driverId    String
+  periodFrom  DateTime
+  periodTo    DateTime
+  periodLabel String
+  /// DRIVER (the driver acknowledging their pay) | CARRIER (the office).
+  role        String   @default("DRIVER")
+  signerName  String
+  signedAt    DateTime @default(now())
+  mimeType    String   @default("image/jpeg")
+  sizeBytes   Int
+  data        Bytes
+  capturedById String?
+  createdAt   DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  driver Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, driverId, periodFrom])
 }

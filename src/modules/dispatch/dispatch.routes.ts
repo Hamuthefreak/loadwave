@@ -13,6 +13,11 @@ const assignSchema = {
   properties: {
     driverId: { type: ['string', 'null'] },
     assetId: { type: ['string', 'null'] },
+    /**
+     * Why a lapsed document is being dispatched on anyway. This is the only way
+     * past the compliance gate, and it is stored against the caller's name.
+     */
+    overrideReason: { type: ['string', 'null'], maxLength: 1000 },
   },
 } as const;
 
@@ -48,7 +53,38 @@ export function registerDispatchRoutes(app: FastifyInstance, deps: DispatchModul
     },
   );
 
-  app.patch<{ Params: { id: string }; Body: { driverId?: string | null; assetId?: string | null } }>(
+  // What assigning this driver and unit would run into. The dispatch screen asks
+  // before the dispatcher commits, which is the only moment the answer helps.
+  app.get<{ Querystring: { driverId?: string; assetId?: string } }>(
+    '/api/loads/compliance-check',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          properties: {
+            driverId: { type: 'string', maxLength: 64 },
+            assetId: { type: 'string', maxLength: 64 },
+          },
+        },
+      },
+      preHandler: async (request, reply) => {
+        await app.requireRoles(['ADMIN', 'DISPATCHER'])(request, reply);
+      },
+    },
+    async (request, reply) =>
+      reply.send(
+        await deps.loads.assignmentCompliance(
+          request.user.tenantId,
+          request.query.driverId ?? null,
+          request.query.assetId ?? null,
+        ),
+      ),
+  );
+
+  app.patch<{
+    Params: { id: string };
+    Body: { driverId?: string | null; assetId?: string | null; overrideReason?: string | null };
+  }>(
     '/api/loads/:id/assign',
     {
       schema: { body: assignSchema },
@@ -62,6 +98,9 @@ export function registerDispatchRoutes(app: FastifyInstance, deps: DispatchModul
         request.params.id,
         request.body?.driverId ?? null,
         request.body?.assetId ?? null,
+        // The gate resolves the actor's name from the id, so the record carries
+        // a person rather than a uuid.
+        { overrideReason: request.body?.overrideReason ?? null, actorId: request.user.sub },
       );
       return reply.send({ ok: true, load: row });
     },
