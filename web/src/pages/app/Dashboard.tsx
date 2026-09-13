@@ -5,6 +5,7 @@ import { useDuty } from '../../duty-store';
 import { alertStatus as pushAlertStatus, enableLoadAlerts } from '../../push';
 import { Badge, Lane, PageHeader, Stat } from '../../components/ui';
 import DriverQuickAction from '../../components/DriverQuickAction';
+import { PayCard } from '../../components/PayCard';
 import DutyLogModal, { type HosDailyLogRow, type HosDayRow } from '../../components/DutyLogModal';
 import { FuelLogButton, FuelStopsList, type FuelLogRow } from '../../components/FuelLogger';
 import { sameJurisdictionStreak } from '../../utils/fuelPrefill';
@@ -379,6 +380,40 @@ interface TruckMini {
   status: string;
 }
 
+interface DocItem {
+  kind: string;
+  label: string;
+  required: boolean;
+  reference: string;
+  status: 'EXPIRED' | 'MISSING' | 'EXPIRING' | 'OK';
+  expiresAt: string | null;
+  daysUntil: number | null;
+}
+
+interface MyDocs {
+  status: 'EXPIRED' | 'MISSING' | 'EXPIRING' | 'OK';
+  headline: string;
+  items: DocItem[];
+}
+
+/** Only what needs doing — a driver doesn't need a list of documents that are fine. */
+function docProblems(items: DocItem[]): DocItem[] {
+  return items.filter(
+    (i) => i.status === 'EXPIRED' || (i.required && i.status === 'MISSING') || i.status === 'EXPIRING',
+  );
+}
+
+function docLine(item: DocItem): string {
+  if (item.status === 'MISSING') return 'not on file';
+  const days = item.daysUntil;
+  if (item.status === 'EXPIRED') {
+    const late = days === null ? null : Math.abs(days);
+    return late === 0 || late === null ? 'expired today' : `expired ${late} day${late === 1 ? '' : 's'} ago`;
+  }
+  if (days === 0) return 'expires today';
+  return `expires in ${days ?? 0} day${days === 1 ? '' : 's'}`;
+}
+
 // Driver-facing dashboard: shows the live board and the driver's own status,
 // and leaves out the ops tooling (revenue, fuel, IFTA, fleet, drivers) that a
 // DRIVER account can't access anyway.
@@ -389,6 +424,7 @@ function DriverDashboard() {
   const [driver, setDriver] = useState<DriverRow | null>(null);
   const [cycle, setCycle] = useState<HosCycle | null>(null);
   const [fuelRows, setFuelRows] = useState<FuelLogRow[]>([]);
+  const [docs, setDocs] = useState<MyDocs | null>(null);
   const [daily, setDaily] = useState<HosDailyLogRow | null>(null);
   const [logDay, setLogDay] = useState<HosDayRow | null>(null);
   const [alertsBusy, setAlertsBusy] = useState(false);
@@ -413,16 +449,19 @@ function DriverDashboard() {
       setTrucks(tr);
       if (user?.driverId) {
         try {
-          const [d, c, f, dl] = await Promise.all([
+          const [d, c, f, dl, dc] = await Promise.all([
             api<DriverRow>(`/api/drivers/${user.driverId}`),
             api<HosCycle>(`/api/hos/status/${user.driverId}`).catch(() => null),
             api<FuelLogRow[]>('/api/fuel/me?limit=5').catch(() => [] as FuelLogRow[]),
             api<HosDailyLogRow>(`/api/hos/logs/${user.driverId}`).catch(() => null),
+            // A driver is the one who has to produce a medical card at a scale.
+            api<MyDocs>('/api/compliance/me').catch(() => null),
           ]);
           setDriver(d);
           setCycle(c);
           setFuelRows(f);
           setDaily(dl);
+          setDocs(dc);
         } catch {
           /* driver profile not linked yet */
         }
@@ -572,6 +611,41 @@ function DriverDashboard() {
 
         {cycle && <HosHoursCard cycle={cycle} daily={daily} onOpenDay={setLogDay} />}
       </div>
+
+      {/* The question a driver actually asks dispatch, answered with its
+          arithmetic attached. */}
+      {user?.driverId && <PayCard />}
+
+      {/* A lapsed medical card is the fastest way to be put out of service, so
+          it sits above the fuel and shortcut cards, not buried in settings. */}
+      {docs && docProblems(docs.items).length > 0 && (
+        <div className="card">
+          <div className="hos-head">
+            <div>
+              <h3 style={{ marginBottom: 2 }}>Your documents</h3>
+              <span className="muted small">
+                Your qualification file — send dispatch a photo when you renew one
+              </span>
+            </div>
+            <Badge tone={docs.status === 'EXPIRED' ? 'red' : 'amber'}>{docs.headline}</Badge>
+          </div>
+          {docProblems(docs.items)
+            .slice(0, 5)
+            .map((item) => (
+              <div className="doc-alert" key={item.kind}>
+                <span className="doc-alert-mark" aria-hidden>
+                  {item.status === 'EXPIRED' ? '⛔' : '⚠️'}
+                </span>
+                <div>
+                  <strong>{item.label}</strong>
+                  <div className="muted small">
+                    {docLine(item)} · {item.reference}
+                  </div>
+                </div>
+              </div>
+            ))}
+        </div>
+      )}
 
       {user?.driverId && (() => {
         const streakJurisdiction = sameJurisdictionStreak(fuelRows, 3);

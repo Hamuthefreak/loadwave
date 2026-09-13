@@ -12,6 +12,8 @@ interface CreateDriverBody {
   licenseNumber?: string;
   homeTerminalTz?: string;
   cycleType?: 'CYCLE_1' | 'CYCLE_2';
+  payModel?: DriverPayModel;
+  payRate?: number | null;
 }
 
 interface UpdateDriverBody {
@@ -20,7 +22,17 @@ interface UpdateDriverBody {
   homeTerminalTz?: string;
   cycleType?: 'CYCLE_1' | 'CYCLE_2';
   status?: 'ACTIVE' | 'OFF_DUTY' | 'SUSPENDED';
+  /** null clears the profile, which means "owner-operator keeps the revenue". */
+  payModel?: DriverPayModel;
+  payRate?: number | null;
 }
+
+type DriverPayModel = 'PER_MILE' | 'PERCENT_REVENUE' | 'FLAT_PER_LOAD';
+
+// A partial profile is meaningless — the service merges these against the
+// stored row and rejects a model with no rate, so no rate is ever defaulted.
+const PAY_MODEL_SCHEMA = { type: ['string', 'null'], enum: ['PER_MILE', 'PERCENT_REVENUE', 'FLAT_PER_LOAD', null] } as const;
+const PAY_RATE_SCHEMA = { type: ['number', 'null'], minimum: 0, maximum: 100_000 } as const;
 
 export function registerDriverRoutes(app: FastifyInstance, deps: DriverModuleDeps): void {
   app.get(
@@ -66,6 +78,21 @@ export function registerDriverRoutes(app: FastifyInstance, deps: DriverModuleDep
   app.post<{ Body: CreateDriverBody }>(
     '/api/drivers',
     {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['name'],
+          properties: {
+            externalEldId: { type: 'string', maxLength: 120 },
+            name: { type: 'string', minLength: 1, maxLength: 200 },
+            licenseNumber: { type: 'string', maxLength: 60 },
+            homeTerminalTz: { type: 'string', maxLength: 80 },
+            cycleType: { type: 'string', enum: ['CYCLE_1', 'CYCLE_2'] },
+            payModel: PAY_MODEL_SCHEMA,
+            payRate: PAY_RATE_SCHEMA,
+          },
+        },
+      },
       preHandler: async (request, reply) => {
         await app.requireRoles(['ADMIN', 'DISPATCHER'] as UserRole[])(request, reply);
       },
@@ -107,6 +134,20 @@ export function registerDriverRoutes(app: FastifyInstance, deps: DriverModuleDep
   app.patch<{ Params: { driverId: string }; Body: UpdateDriverBody }>(
     '/api/drivers/:driverId',
     {
+      schema: {
+        body: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', minLength: 1, maxLength: 200 },
+            licenseNumber: { type: ['string', 'null'], maxLength: 60 },
+            homeTerminalTz: { type: 'string', maxLength: 80 },
+            cycleType: { type: 'string', enum: ['CYCLE_1', 'CYCLE_2'] },
+            status: { type: 'string', enum: ['ACTIVE', 'OFF_DUTY', 'SUSPENDED'] },
+            payModel: PAY_MODEL_SCHEMA,
+            payRate: PAY_RATE_SCHEMA,
+          },
+        },
+      },
       preHandler: async (request, reply) => {
         await app.requireRoles(['ADMIN', 'DISPATCHER'] as UserRole[])(request, reply);
       },

@@ -87,6 +87,59 @@ model Tenant {
   invoicesPaid    Invoice[]            @relation("InvoicePayer")
   teamInvites     TeamInvite[]
   planRequests    PlanRequest[]
+  complianceDocs  ComplianceDocument[]
+}
+
+/// Who a compliance document belongs to. Carrier-level paperwork (authority,
+/// IFTA licence) isn't attached to a truck, and a driver's CDL isn't attached to
+/// an asset, so the subject is part of the key rather than a nullable FK pair.
+enum ComplianceSubject {
+  DRIVER
+  ASSET
+  TENANT
+}
+
+/// The paperwork that decides whether a truck may legally move at all: the
+/// driver qualification file of 49 CFR 391.51, plus the carrier and equipment
+/// documents a roadside inspection asks for.
+///
+/// One row per (subject, kind) — an upsert target rather than an append-only
+/// log, because a carrier wants to know what is *currently* on file, and a
+/// `@@unique` over nullable columns wouldn't hold on Postgres (NULLs compare
+/// distinct), which is why the subject id is a plain string.
+model ComplianceDocument {
+  id         String            @id @default(uuid())
+  tenantId   String
+  subject    ComplianceSubject
+  /// Driver.id, Asset.id or Tenant.id, depending on `subject`.
+  subjectId  String
+  kind       String
+  /// Licence number, policy number, plate — whatever is printed on it.
+  identifier String?
+  issuedAt   DateTime?
+  /// Null for documents that don't lapse (an employment verification doesn't).
+  expiresAt  DateTime?
+  notes      String?
+  // The scan itself, when one was uploaded. Optional: plenty of carriers only
+  // record the date and keep the paper in a binder.
+  fileName   String?
+  mimeType   String?
+  sizeBytes  Int?
+  data       Bytes?
+
+  uploadedById String?
+  /// The status the expiry sweep last warned about, so a lapse is announced when
+  /// it happens rather than every morning. Cleared when the document is renewed.
+  notifiedStatus String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, subject, subjectId, kind])
+  @@index([tenantId, subject, subjectId])
+  /// The expiry sweep reads this: everything lapsing soon, across all tenants.
+  @@index([expiresAt])
 }
 
 /// A signature captured against a load: the receiver signing at the dock, the
@@ -285,6 +338,13 @@ model Driver {
   // Federal baseline applied unless tenant opts into intra-provincial regime.
   status         String    @default("ACTIVE") // ACTIVE | OFF_DUTY | SUSPENDED
   createdAt      DateTime  @default(now())
+
+  // Driver pay profile. Settlement statements are derived from these on read,
+  // never stored, so a rate change or a corrected delivery date re-prices the
+  // period properly instead of leaving a stale snapshot of pay nobody can
+  // reconcile. Null model = owner-operator, who keeps the revenue.
+  payModel String? // PER_MILE | PERCENT_REVENUE | FLAT_PER_LOAD
+  payRate  Decimal? @db.Decimal(12, 4)
 
   tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   hosLogs       HosLog[]

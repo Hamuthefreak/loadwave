@@ -53,7 +53,10 @@ const GROUPS: Array<{ label: string; items: Array<{ to: string; label: string; m
   },
   {
     label: 'Finance',
-    items: [{ to: '/app/billing', label: 'Billing & AR', mark: <IconMoney />, opsOnly: true }],
+    items: [
+      { to: '/app/billing', label: 'Billing & AR', mark: <IconMoney />, opsOnly: true },
+      { to: '/app/settlements', label: 'Driver settlements', mark: <IconPayout />, opsOnly: true },
+    ],
   },
   {
     label: 'Compliance',
@@ -61,6 +64,7 @@ const GROUPS: Array<{ label: string; items: Array<{ to: string; label: string; m
       { to: '/app/ifta', label: 'Fuel & IFTA', mark: <IconFuel />, opsOnly: true },
       { to: '/app/fleet', label: 'Fleet', mark: <IconFleet />, opsOnly: true },
       { to: '/app/drivers', label: 'Drivers', mark: <IconId />, opsOnly: true },
+      { to: '/app/compliance', label: 'Compliance', mark: <IconShield />, opsOnly: true },
     ],
   },
   {
@@ -201,6 +205,7 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
       ['/app/ifta', 'Fuel & IFTA'],
       ['/app/fleet', 'Fleet'],
       ['/app/drivers', 'Drivers'],
+      ['/app/compliance', 'Compliance'],
       ['/app/billing', 'Billing & AR'],
       ['/app/team', 'Team & Invites'],
       ['/app/settings', 'Settings & Security'],
@@ -931,6 +936,10 @@ function IconId() {
   return <Icon d="M3 5h18v14H3zM7.5 12.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM4.5 17c.6-1.8 1.7-2.5 3-2.5s2.4.7 3 2.5M14 9h4M14 13h4" />;
 }
 
+function IconShield() {
+  return <Icon d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6l7-3Z" extra="M9 12l2 2 4-4" />;
+}
+
 function IconTeam() {
   return <Icon d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2.5 20c.8-3.2 3.1-5 5.5-5s4.7 1.8 5.5 5M17.5 7a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM15 20c.6-2.2 2.1-3.5 4-3.5s3.4 1.3 4 3.5" />;
 }
@@ -939,6 +948,10 @@ function IconLock() {
 }
 function IconMoney() {
   return <Icon d="M2 6h20v12H2zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM6 9h.01M18 9h.01M6 15h.01M18 15h.01" />;
+}
+
+function IconPayout() {
+  return <Icon d="M4 4h16v13H4zM4 9h16M8 21h8M9 14h6" />;
 }
 
 function IconBolt() {

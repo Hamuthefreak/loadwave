@@ -1,5 +1,16 @@
 import type { PrismaClient, CycleType } from '@prisma/client';
-import { notFound } from '../../utils/errors';
+import { badRequest, notFound } from '../../utils/errors';
+import { isPayModel, isValidTimezone } from '../settlements/settlement.policy';
+
+/**
+ * An unrecognised zone would otherwise reach `Intl.DateTimeFormat` at HOS and
+ * payroll time and throw, so it is rejected where the dispatcher can fix it.
+ */
+function assertTimezone(tz: string | undefined): void {
+  if (tz !== undefined && !isValidTimezone(tz)) {
+    throw badRequest(`unknown timezone "${tz}" — use an IANA name such as America/Toronto`);
+  }
+}
 
 export interface DriverRow {
   id: string;
@@ -11,6 +22,9 @@ export interface DriverRow {
   cycleType: CycleType;
   status: string;
   createdAt: string;
+  /** PER_MILE | PERCENT_REVENUE | FLAT_PER_LOAD, or null for an owner-operator. */
+  payModel: string | null;
+  payRate: number | null;
 }
 
 export interface DriverCreateInput {
@@ -19,6 +33,8 @@ export interface DriverCreateInput {
   licenseNumber?: string | null;
   homeTerminalTz?: string;
   cycleType?: CycleType;
+  payModel?: string | null;
+  payRate?: number | null;
 }
 
 export interface DriverUpdateInput {
@@ -27,6 +43,8 @@ export interface DriverUpdateInput {
   homeTerminalTz?: string;
   cycleType?: CycleType;
   status?: string;
+  payModel?: string | null;
+  payRate?: number | null;
 }
 
 export interface DriverScorecard {
@@ -49,6 +67,29 @@ export interface DriverService {
   scorecards(tenantId: string): Promise<DriverScorecard[]>;
 }
 
+/**
+ * A pay profile is all-or-nothing. Passing `null` for the model is how a carrier
+ * says "this driver is an owner-operator who keeps the revenue" — a legitimate
+ * state, and different from a half-filled form.
+ */
+export function assertPayProfile(
+  model: string | null,
+  rate: number | null,
+  previousModel: string | null,
+): { payModel: string | null; payRate: number | null } {
+  if (model == null) {
+    if (rate == null) return { payModel: null, payRate: null };
+    // A rate with no model: keep the model already on file when there is one.
+    if (previousModel && isPayModel(previousModel)) return { payModel: previousModel, payRate: rate };
+    throw badRequest('a pay model is required when a pay rate is set');
+  }
+  if (!isPayModel(model)) throw badRequest('unknown pay model');
+  if (rate == null) throw badRequest('a pay rate is required when a pay model is set');
+  if (!Number.isFinite(rate) || rate < 0) throw badRequest('the pay rate must be zero or more');
+  if (model === 'PERCENT_REVENUE' && rate > 100) throw badRequest('a revenue share cannot exceed 100%');
+  return { payModel: model, payRate: rate };
+}
+
 export class PrismaDriverService implements DriverService {
   constructor(private readonly prisma: PrismaClient) {}
 
@@ -62,6 +103,8 @@ export class PrismaDriverService implements DriverService {
     cycleType: CycleType;
     status: string;
     createdAt: Date;
+    payModel: string | null;
+    payRate: unknown;
   }): DriverRow {
     return {
       id: row.id,
@@ -73,6 +116,8 @@ export class PrismaDriverService implements DriverService {
       cycleType: row.cycleType,
       status: row.status,
       createdAt: row.createdAt.toISOString(),
+      payModel: row.payModel,
+      payRate: row.payRate == null ? null : Number(row.payRate),
     };
   }
 
@@ -164,6 +209,8 @@ export class PrismaDriverService implements DriverService {
   }
 
   async create(tenantId: string, input: DriverCreateInput): Promise<DriverRow> {
+    assertTimezone(input.homeTerminalTz);
+    const profile = assertPayProfile(input.payModel ?? null, input.payRate ?? null, null);
     const row = await this.prisma.driver.create({
       data: {
         tenantId,
@@ -172,6 +219,8 @@ export class PrismaDriverService implements DriverService {
         licenseNumber: input.licenseNumber ?? null,
         homeTerminalTz: input.homeTerminalTz ?? 'America/Toronto',
         cycleType: input.cycleType ?? 'CYCLE_1',
+        payModel: profile.payModel,
+        payRate: profile.payRate,
       },
     });
     return this.map(row);
@@ -180,12 +229,30 @@ export class PrismaDriverService implements DriverService {
   async update(tenantId: string, driverId: string, input: DriverUpdateInput): Promise<DriverRow> {
     const existing = await this.prisma.driver.findFirst({ where: { id: driverId, tenantId } });
     if (!existing) throw notFound('driver not found');
+    assertTimezone(input.homeTerminalTz);
+
+    // The profile is patched as a pair: a new model keeps the stored rate, a new
+    // rate keeps the stored model, and an explicit null clears both. Validated
+    // after the merge so a model can never be saved without a rate (or vice
+    // versa) — which would otherwise silently pay $0.00 for real hauls.
+    const profileTouched = input.payModel !== undefined || input.payRate !== undefined;
+    let profile: { payModel: string | null; payRate: number | null } | null = null;
+    if (profileTouched) {
+      const merged = assertPayProfile(
+        input.payModel !== undefined ? input.payModel : existing.payModel,
+        input.payRate !== undefined ? input.payRate : (existing.payRate == null ? null : Number(existing.payRate)),
+        existing.payModel,
+      );
+      profile = merged;
+    }
+
     const data = {
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.licenseNumber !== undefined ? { licenseNumber: input.licenseNumber } : {}),
       ...(input.homeTerminalTz !== undefined ? { homeTerminalTz: input.homeTerminalTz } : {}),
       ...(input.cycleType !== undefined ? { cycleType: input.cycleType } : {}),
       ...(input.status !== undefined ? { status: input.status } : {}),
+      ...(profile ? { payModel: profile.payModel, payRate: profile.payRate } : {}),
     };
 
     // Duty transitions are recorded on the driver's HOS log so the daily log

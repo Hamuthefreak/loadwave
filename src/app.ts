@@ -107,6 +107,13 @@ import { registerNotificationRoutes } from './modules/notification/notification.
 
 import { registerDispatchRoutes } from './modules/dispatch/dispatch.routes';
 
+import { PrismaComplianceService } from './modules/compliance/compliance.service';
+import { registerComplianceRoutes } from './modules/compliance/compliance.routes';
+import { runComplianceSweep } from './modules/compliance/compliance.sweep';
+
+import { PrismaSettlementService } from './modules/settlements/settlement.service';
+import { registerSettlementRoutes } from './modules/settlements/settlement.routes';
+
 import { PrismaImportService } from './modules/import/import.service';
 import { registerImportRoutes } from './modules/import/import.routes';
 
@@ -148,6 +155,8 @@ export interface AppDeps {
   importService: PrismaImportService;
   push: PushService;
   detention: PrismaDetentionService;
+  compliance: PrismaComplianceService;
+  settlements: PrismaSettlementService;
 }
 
 export interface BuildAppOptions {
@@ -249,6 +258,8 @@ function buildBaseServices(
     importService,
     push,
     detention: overrides.detention ?? new PrismaDetentionService(prisma),
+    compliance: overrides.compliance ?? new PrismaComplianceService(prisma),
+    settlements: overrides.settlements ?? new PrismaSettlementService(prisma),
   };
   void logger;
   return unlocked;
@@ -411,6 +422,8 @@ function registerRoutes(app: FastifyInstance, deps: AppDeps, prisma: PrismaClien
   registerDispatchRoutes(app, { loads: deps.loads, detention: deps.detention });
   registerDetentionRoutes(app, { detention: deps.detention });
   registerDocumentRoutes(app, { documents: deps.documents, paperwork: deps.paperwork });
+  registerComplianceRoutes(app, { compliance: deps.compliance });
+  registerSettlementRoutes(app, { settlements: deps.settlements });
   registerImportRoutes(app, { importService: deps.importService });
   registerDiagnosticsRoutes(app, { prisma, env });
   registerHealthRoutes(app, { prisma, version: env.APP_VERSION });
@@ -440,6 +453,17 @@ function startSchedule(deps: AppDeps, logger: Logger): void {
   const alertTimer = setInterval(sweep, 5 * 60 * 1000);
   alertTimer.unref?.();
   setTimeout(sweep, 20_000);
+
+  // Compliance expiries: warn once when a document enters its window and once
+  // when it lapses. Daily, early morning, so the office sees it before dispatch.
+  const compliance = (): void => {
+    void withAdvisoryLock(deps.prisma, 'loadwave:compliance-expiry', () =>
+      runComplianceSweep(deps.prisma, deps.notifications, logger),
+    ).catch((err: unknown) => logger.warn({ err }, 'compliance expiry sweep failed'));
+  };
+  const complianceTimer = setInterval(compliance, 6 * 60 * 60 * 1000);
+  complianceTimer.unref?.();
+  setTimeout(compliance, 45_000);
 
   // Recurring loads: clone any due weekly load, then hourly afterwards.
   const recurrence = (): void => {

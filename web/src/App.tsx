@@ -26,6 +26,8 @@ const Network = lazy(() => import('./pages/app/Network'));
 const Tools = lazy(() => import('./pages/app/Tools'));
 const Ifta = lazy(() => import('./pages/app/Ifta'));
 const Fleet = lazy(() => import('./pages/app/Fleet'));
+const Compliance = lazy(() => import('./pages/app/Compliance'));
+const Settlements = lazy(() => import('./pages/app/Settlements'));
 const Drivers = lazy(() => import('./pages/app/Drivers'));
 const Team = lazy(() => import('./pages/app/Team'));
 const Billing = lazy(() => import('./pages/app/Billing'));
@@ -144,8 +146,10 @@ export default function App() {
         <Route path="tools" element={<Tools />} />
         <Route path="ifta" element={<Ifta />} />
         <Route path="fleet" element={<Fleet />} />
+        <Route path="compliance" element={<Compliance />} />
         <Route path="drivers" element={<Drivers />} />
         <Route path="billing" element={<Billing />} />
+        <Route path="settlements" element={<Settlements />} />
         <Route path="team" element={<Team />} />
         <Route path="settings" element={<Settings />} />
       </Route>

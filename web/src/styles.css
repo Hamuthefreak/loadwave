@@ -1636,6 +1636,204 @@ tfoot td {
   box-shadow: inset 0 0 0 1px var(--border);
 }
 
+/* --- Settlements -------------------------------------------------------
+   One card per driver rather than a payroll table: a statement is a narrative
+   (what they hauled, how it was priced, what is owed), and it has to be
+   readable on a phone in a truck as well as on a desk. */
+.settle-period {
+  margin: -4px 0 8px;
+}
+
+.settle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.settle-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.settle-who {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settle-amount {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: right;
+}
+
+.settle-total {
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-text);
+}
+
+.settle-notes {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.settle-facts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.settle-pay-edit {
+  display: grid;
+  grid-template-columns: 1fr 140px;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.settle-pay-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+}
+
+.settle-lines {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.settle-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.4fr) auto;
+  gap: 4px 14px;
+  align-items: baseline;
+  padding: 10px 0;
+  border-top: 1px solid var(--border-soft, var(--border));
+}
+
+.settle-line:first-child {
+  border-top: none;
+}
+
+.settle-line-main,
+.settle-line-basis {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settle-ref {
+  font-weight: 700;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.settle-line-amount {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  justify-self: end;
+}
+
+/* An unpriced line is a gap someone has to close, so it reads as a warning
+   rather than as a zero. */
+.settle-unpriced {
+  color: var(--amber-text, var(--amber));
+  font-weight: 600;
+}
+
+/* --- The driver's own pay card ---------------------------------------- */
+.pay-card {
+  margin-top: 16px;
+}
+
+.pay-figure {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 12px 0 4px;
+}
+
+.pay-amount {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-text);
+}
+
+.pay-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.pay-facts strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.pay-line {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto;
+}
+
+@media (max-width: 640px) {
+  .pay-line {
+    grid-template-columns: 1fr auto;
+  }
+
+  .pay-amount {
+    font-size: 1.7rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .settle-line {
+    grid-template-columns: 1fr auto;
+  }
+
+  .settle-line-basis {
+    grid-column: 1 / -1;
+  }
+
+  .settle-pay-edit {
+    grid-template-columns: 1fr;
+  }
+
+  .settle-amount {
+    align-items: flex-start;
+    text-align: left;
+  }
+}
+
 .board-metrics {
   display: flex;
   flex-wrap: wrap;
@@ -4850,6 +5048,71 @@ a {
    on the older cab tablets this app targets. */
 body.has-driver-fab .content {
   padding-bottom: 152px;
+}
+
+/* ---------- Compliance: the document checklist ---------- */
+
+.compliance-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+
+.compliance-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+
+.compliance-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.compliance-row-label {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+/* Driver-side expiry strip on the dashboard. */
+.doc-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  margin-bottom: 8px;
+}
+
+.doc-alert:last-child {
+  margin-bottom: 0;
+}
+
+.doc-alert-mark {
+  flex-shrink: 0;
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+@media (max-width: 480px) {
+  /* A long label plus a status pill plus a button stop sharing a line. */
+  .compliance-row {
+    flex-wrap: wrap;
+  }
+
+  .compliance-row-main {
+    flex-basis: 100%;
+  }
 }
 
 .now-empty {

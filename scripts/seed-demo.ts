@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { hash } from 'bcrypt';
+import { settlementPeriod } from '../src/modules/settlements/settlement.policy';
 
 /**
  * Seeds a demo tenant with loads, trucks, drivers, assets and fuel so the
@@ -41,12 +42,30 @@ async function main() {
       },
     });
 
+    // Two different pay models on purpose: a per-mile company driver and a
+    // driver on a share of revenue, so the settlements page shows both maths.
     const [driverA, driverB] = await Promise.all([
       prisma.driver.create({
-        data: { tenantId: tenant.id, name: 'Alex Tremblay', licenseNumber: 'L-1001', cycleType: 'CYCLE_1', externalEldId: 'ELD-A001' },
+        data: {
+          tenantId: tenant.id,
+          name: 'Alex Tremblay',
+          licenseNumber: 'L-1001',
+          cycleType: 'CYCLE_1',
+          externalEldId: 'ELD-A001',
+          payModel: 'PERCENT_REVENUE',
+          payRate: '27',
+        },
       }),
       prisma.driver.create({
-        data: { tenantId: tenant.id, name: 'Maria Chen', licenseNumber: 'L-1002', cycleType: 'CYCLE_2', externalEldId: 'ELD-A002' },
+        data: {
+          tenantId: tenant.id,
+          name: 'Maria Chen',
+          licenseNumber: 'L-1002',
+          cycleType: 'CYCLE_2',
+          externalEldId: 'ELD-A002',
+          payModel: 'PER_MILE',
+          payRate: '0.58',
+        },
       }),
     ]);
 
@@ -62,6 +81,51 @@ async function main() {
     });
 
     const now = new Date();
+
+    // --- Compliance file -----------------------------------------------------
+    // Seeded with one of each state on purpose, because a demo where everything
+    // is green doesn't show what the feature is for. The story the page tells:
+    // Alex's driving record lapsed, the unit's inspection is nearly due, and
+    // Maria's medical card needs renewing — all before a roadside check finds
+    // them. Documents whose cycle is set by rule only carry an issue date, so the
+    // derived-expiry path is exercised too.
+    const day = 86_400_000;
+    const iso = (offsetDays: number): Date => new Date(now.getTime() + offsetDays * day);
+    const issued = (monthsAgo: number): Date => {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - monthsAgo);
+      return d;
+    };
+
+    await prisma.complianceDocument.createMany({
+      data: [
+        // Alex — a lapsed record, the sort of thing that gets a truck parked.
+        { tenantId: tenant.id, subject: 'DRIVER', subjectId: driverA.id, kind: 'CDL', identifier: 'L-1001', expiresAt: iso(500) },
+        { tenantId: tenant.id, subject: 'DRIVER', subjectId: driverA.id, kind: 'MVR', expiresAt: iso(-5) },
+        { tenantId: tenant.id, subject: 'DRIVER', subjectId: driverA.id, kind: 'ANNUAL_REVIEW', issuedAt: issued(13) },
+        { tenantId: tenant.id, subject: 'DRIVER', subjectId: driverA.id, kind: 'VIOLATIONS_CERT', issuedAt: issued(4) },
+        { tenantId: tenant.id, subject: 'DRIVER', subjectId: driverA.id, kind: 'MEDICAL_CARD', expiresAt: iso(180) },
+        { tenantId: tenant.id, subject: 'DRIVER', subjectId: driverA.id, kind: 'EMPLOYMENT_VERIFICATION' },
+
+        // Maria — clean, but her card is three weeks from lapsing.
+        { tenantId: tenant.id, subject: 'DRIVER', subjectId: driverB.id, kind: 'CDL', identifier: 'L-1002', expiresAt: iso(220) },
+        { tenantId: tenant.id, subject: 'DRIVER', subjectId: driverB.id, kind: 'MEDICAL_CARD', expiresAt: iso(21) },
+        { tenantId: tenant.id, subject: 'DRIVER', subjectId: driverB.id, kind: 'MVR', issuedAt: issued(2) },
+        { tenantId: tenant.id, subject: 'DRIVER', subjectId: driverB.id, kind: 'ANNUAL_REVIEW', issuedAt: issued(2) },
+        { tenantId: tenant.id, subject: 'DRIVER', subjectId: driverB.id, kind: 'VIOLATIONS_CERT', issuedAt: issued(2) },
+        { tenantId: tenant.id, subject: 'DRIVER', subjectId: driverB.id, kind: 'EMPLOYMENT_VERIFICATION' },
+
+        // The tractor — inspection due soon, cab card missing.
+        { tenantId: tenant.id, subject: 'ASSET', subjectId: tractor.id, kind: 'REGISTRATION', identifier: 'ON-4471-882', expiresAt: iso(150) },
+        { tenantId: tenant.id, subject: 'ASSET', subjectId: tractor.id, kind: 'ANNUAL_INSPECTION', expiresAt: iso(9) },
+
+        // The carrier — covered and authorised, IFTA licence not recorded.
+        { tenantId: tenant.id, subject: 'TENANT', subjectId: tenant.id, kind: 'INSURANCE', identifier: 'POL-778213', expiresAt: iso(240) },
+        { tenantId: tenant.id, subject: 'TENANT', subjectId: tenant.id, kind: 'AUTHORITY', identifier: tenant.mcNumber ?? undefined, expiresAt: null },
+      ],
+    });
+    console.log('  Compliance: Alex has a lapsed driving record, PU-100 has an inspection due in 9 days');
+    console.log('  Compliance: Maria is current except a medical card expiring in 3 weeks');
 
     type DemoLoad = {
       originCountry: string;
@@ -162,6 +226,73 @@ async function main() {
         },
       });
     }
+
+    // --- Deliveries to settle -------------------------------------------------
+    // Dated off the driver's own pay week rather than "two days ago", so the
+    // settlements page always opens on a period with real work in it, whatever
+    // weekday the demo runs on.
+    const week = settlementPeriod(now, 'America/Toronto');
+    const at = (offsetHours: number): Date => new Date(week.from.getTime() + offsetHours * 3_600_000);
+    const lastWeek = settlementPeriod(now, 'America/Toronto', 1);
+
+    const deliveredRuns: Array<{
+      driverId: string;
+      km: number;
+      amount: number;
+      deliveredAt: Date;
+      detentionHours?: number;
+      detentionRate?: number;
+    }> = [
+      { driverId: driverB.id, km: 420, amount: 980, deliveredAt: at(9) },
+      { driverId: driverB.id, km: 610, amount: 1420, deliveredAt: at(31) },
+      { driverId: driverB.id, km: 480, amount: 1110, deliveredAt: at(52), detentionHours: 2.5, detentionRate: 60 },
+      { driverId: driverA.id, km: 380, amount: 890, deliveredAt: at(28) },
+      { driverId: driverA.id, km: 520, amount: 1240, deliveredAt: at(54) },
+      { driverId: driverB.id, km: 450, amount: 1020, deliveredAt: new Date(lastWeek.from.getTime() + 30 * 3_600_000) },
+    ];
+
+    for (const run of deliveredRuns) {
+      const created = await prisma.load.create({
+        data: {
+          tenantId: tenant.id,
+          originCountry: 'CA',
+          originRegion: 'QC',
+          originLocality: 'Montréal',
+          destinationCountry: 'CA',
+          destinationRegion: 'ON',
+          destinationLocality: 'Toronto',
+          equipmentType: 'DRY_VAN',
+          pickupDate: new Date(run.deliveredAt.getTime() - 12 * 3_600_000),
+          deliveryDate: run.deliveredAt,
+          distanceKmEstimate: String(run.km),
+          freightCurrency: 'CAD',
+          freightAmountTransaction: String(run.amount),
+          freightAmountBase: String(run.amount),
+          detentionRate: run.detentionRate != null ? String(run.detentionRate) : null,
+          status: 'DELIVERED',
+          marketplaceStatus: 'PRIVATE',
+          assigneeDriverId: run.driverId,
+          assigneeAssetId: tractor.id,
+          assignedAt: new Date(run.deliveredAt.getTime() - 36 * 3_600_000),
+          deliveredAt: run.deliveredAt,
+          createdAt: new Date(run.deliveredAt.getTime() - 36 * 3_600_000),
+        },
+      });
+      if (run.detentionHours != null) {
+        await prisma.detentionEntry.create({
+          data: {
+            tenantId: tenant.id,
+            loadId: created.id,
+            driverId: run.driverId,
+            startedAt: new Date(run.deliveredAt.getTime() - run.detentionHours * 3_600_000),
+            endedAt: run.deliveredAt,
+            ratePerHour: String(run.detentionRate ?? 0),
+            note: 'Live load on arrival',
+          },
+        });
+      }
+    }
+    console.log('  Settlements: Maria is on $0.58/mi (this week + last week), Alex on 27% of revenue');
 
     await prisma.truckPost.createMany({
       data: [
