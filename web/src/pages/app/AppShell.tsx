@@ -6,7 +6,7 @@ import ThemeToggle from '../../components/ThemeToggle';
 import { FuelLogModal } from '../../components/FuelLogger';
 import { setDuty, useDuty } from '../../duty-store';
 import { syncPushSubscription } from '../../push';
-import { clearRenewals, startRenewalQueue } from '../../renewal-store';
+import { clearPendingQueues, startPendingQueues } from '../../pending-store';
 import { timeAgo } from '../../utils/format';
 
 interface Tenant {
@@ -93,6 +93,9 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
   const [quickOpen, setQuickOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [fuelOpen, setFuelOpen] = useState(false);
+  // The fuel form opens from anywhere in the app, so the line a queued fill-up
+  // leaves behind is shown here rather than on the page underneath it.
+  const [fuelNotice, setFuelNotice] = useState<string | null>(null);
   const [refreshCount, setRefreshCount] = useState(0);
   const [pullY, setPullY] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -215,17 +218,24 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
     document.title = match ? `${match[1]} · Loadwave` : 'Loadwave';
   }, [location.pathname]);
 
-  // A renewal taken in the cab waits on this device until it can be sent, and
-  // this is the only thing that sends it: without it, nothing goes out until
-  // the driver happens to open the dashboard again.
-  useEffect(() => startRenewalQueue(), []);
+  // Anything taken in the cab — a renewal, a fill-up — waits on this device
+  // until it can be sent, and this is the only thing that sends it: without it,
+  // nothing goes out until the driver happens to open the page it belongs to.
+  useEffect(() => startPendingQueues(), []);
+
+  // A queued fill-up is said once, then gets out of the way.
+  useEffect(() => {
+    if (!fuelNotice) return;
+    const timer = window.setTimeout(() => setFuelNotice(null), 7000);
+    return () => window.clearTimeout(timer);
+  }, [fuelNotice]);
 
   const signOut = () => {
     setConfirmSignOut(false);
-    // What is waiting carries a photograph of the driver's licence, and it
-    // cannot be sent without the session that took it — so the phone is left
-    // clean for whoever holds it next.
-    void clearRenewals();
+    // What is waiting carries a photograph of the driver's licence and a record
+    // of where they bought fuel, and neither can be sent without the session
+    // that took it — so the phone is left clean for whoever holds it next.
+    void clearPendingQueues();
     onSignOut();
     navigate('/', { replace: true });
   };
@@ -559,6 +569,7 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
           </button>
         </header>
         <main className={`content${slide ? ` slide-${slide}` : ''}`} key={refreshCount}>
+          {fuelNotice && <div className="alert alert-success">{fuelNotice}</div>}
           {blockedPath ? <Navigate to="/app/dashboard" replace /> : <Outlet />}
         </main>
         {/* Mobile pull-to-refresh: drag down at the top of any page to remount
@@ -897,6 +908,7 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
       <FuelLogModal
         open={fuelOpen}
         onClose={() => setFuelOpen(false)}
+        onQueued={setFuelNotice}
         onLogged={() => {
           setFuelOpen(false);
           window.dispatchEvent(new Event('loadwave:fuel-logged'));

@@ -22,6 +22,14 @@ const driverFuelSchema = {
     unit: { type: 'string', enum: ['L', 'GAL'] },
     amountTransaction: { type: ['string', 'number'], minimum: 0 },
     transactionCurrency: { type: 'string', enum: ['CAD', 'USD'] },
+    /**
+     * The id the driver's phone made for this fill-up. A cab-side log is
+     * retried whenever the signal comes back, so the row needs a name the
+     * server can recognise: without one, a response that never arrived looks
+     * exactly like a fill-up that was never sent, and the litres get counted
+     * twice in the IFTA quarter.
+     */
+    sourceEventId: { type: 'string', minLength: 8, maxLength: 120 },
   },
 } as const;
 
@@ -102,7 +110,7 @@ export function registerFuelRoutes(app: FastifyInstance, deps: FuelModuleDeps): 
     },
   );
 
-  app.post<{ Body: { occurredAt?: string; jurisdictionCode: string; volume: string | number; unit: 'L' | 'GAL'; amountTransaction: string | number; transactionCurrency?: 'CAD' | 'USD' } }>(
+  app.post<{ Body: { occurredAt?: string; jurisdictionCode: string; volume: string | number; unit: 'L' | 'GAL'; amountTransaction: string | number; transactionCurrency?: 'CAD' | 'USD'; sourceEventId?: string } }>(
     '/api/fuel/me',
     {
       schema: { body: driverFuelSchema },
@@ -126,6 +134,7 @@ export function registerFuelRoutes(app: FastifyInstance, deps: FuelModuleDeps): 
         originalVolumeUnit: request.body.unit,
         amountTransaction: request.body.amountTransaction,
         transactionCurrency: request.body.transactionCurrency ?? 'CAD',
+        sourceEventId: request.body.sourceEventId ?? null,
       });
       return reply.code(201).send(created);
     },

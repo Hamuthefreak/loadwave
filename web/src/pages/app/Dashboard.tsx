@@ -11,11 +11,15 @@ import DutyLogModal, { type HosDailyLogRow, type HosDayRow } from '../../compone
 import { FuelLogButton, FuelStopsList, type FuelLogRow } from '../../components/FuelLogger';
 import { sameJurisdictionStreak } from '../../utils/fuelPrefill';
 import {
+  discardWaitingFuelStop,
   discardWaitingRenewal,
+  dismissFuelQueueNotice,
   dismissRenewalNotice,
+  sendWaitingFuelStops,
   sendWaitingRenewals,
+  useFuelQueue,
   useRenewals,
-} from '../../renewal-store';
+} from '../../pending-store';
 import { currencyOf, km, money, perMile, regionLabel, timeAgo } from '../../utils/format';
 
 interface Tenant {
@@ -447,6 +451,7 @@ function DriverDashboard() {
   const [docs, setDocs] = useState<MyDocs | null>(null);
   const [renewFor, setRenewFor] = useState<DocItem | null>(null);
   const [docNotice, setDocNotice] = useState<string | null>(null);
+  const [fuelNotice, setFuelNotice] = useState<string | null>(null);
   const [daily, setDaily] = useState<HosDailyLogRow | null>(null);
   const [logDay, setLogDay] = useState<HosDayRow | null>(null);
   const [alertsBusy, setAlertsBusy] = useState(false);
@@ -457,8 +462,9 @@ function DriverDashboard() {
   // Live duty status from the shared store — flips the instant the quick-action
   // button (or the bottom-nav toggle) is tapped, instead of waiting for refresh.
   const duty = useDuty();
-  // Renewals taken where there was no signal, which the shell sends for us.
+  // Anything taken where there was no signal, which the shell sends for us.
   const renewals = useRenewals();
+  const fuelQueue = useFuelQueue();
 
   const load = useCallback(async () => {
     setError(null);
@@ -520,17 +526,32 @@ function DriverDashboard() {
   }, [load]);
 
   // A renewal that goes out from the cab (or lands at the office) changes the
-  // file, so the card is re-read instead of showing yesterday's dates.
+  // file, and a fill-up changes both the fuel card and the quarter, so both are
+  // re-read instead of showing yesterday's numbers.
   useEffect(() => {
-    if (renewals.sentTotal > 0) void load();
-  }, [renewals.sentTotal, load]);
+    if (renewals.sentTotal > 0 || fuelQueue.sentTotal > 0) void load();
+  }, [renewals.sentTotal, fuelQueue.sentTotal, load]);
 
-  // The queue's notice is not attached to a tap, so it clears itself.
+  // A queue's notice is not attached to a tap, so it clears itself.
   useEffect(() => {
     if (!renewals.notice) return;
     const timer = window.setTimeout(() => dismissRenewalNotice(), 7000);
     return () => window.clearTimeout(timer);
   }, [renewals.notice]);
+
+  useEffect(() => {
+    if (!fuelQueue.notice) return;
+    const timer = window.setTimeout(() => dismissFuelQueueNotice(), 7000);
+    return () => window.clearTimeout(timer);
+  }, [fuelQueue.notice]);
+
+  // The same for the line a queued fill-up leaves behind, which is attached to
+  // a tap but said in words the driver should not have to dismiss.
+  useEffect(() => {
+    if (!fuelNotice) return;
+    const timer = window.setTimeout(() => setFuelNotice(null), 7000);
+    return () => window.clearTimeout(timer);
+  }, [fuelNotice]);
 
   if (error) {
     return (
@@ -656,7 +677,9 @@ function DriverDashboard() {
       {/* A lapsed medical card is the fastest way to be put out of service, so
           it sits above the fuel and shortcut cards, not buried in settings. */}
       {docNotice && <div className="alert alert-success">{docNotice}</div>}
+      {fuelNotice && <div className="alert alert-success">{fuelNotice}</div>}
       {renewals.notice && <div className="alert alert-success">{renewals.notice}</div>}
+      {fuelQueue.notice && <div className="alert alert-success">{fuelQueue.notice}</div>}
       {renewals.error && <div className="alert alert-error">{renewals.error}</div>}
 
       {docs && (docProblems(docs.items).length > 0 || renewals.items.length > 0) && (
@@ -699,9 +722,9 @@ function DriverDashboard() {
               rather than only in the sheet that took them: a driver who cannot
               see it waiting has no reason to believe it exists. */}
           {renewals.items.length > 0 && (
-            <div className="renew-queue">
+            <div className="queued-block">
               {renewals.items.map((item) => (
-                <div className="doc-alert renew-queued" key={item.id}>
+                <div className="doc-alert queued-row" key={item.id}>
                   <span className="doc-alert-mark" aria-hidden>
                     {item.blocked ? '⛔' : '📤'}
                   </span>
@@ -764,7 +787,7 @@ function DriverDashboard() {
                 <h3 style={{ marginBottom: 2 }}>Fuel stops</h3>
                 <span className="muted small">Logged from the cab · flows into your IFTA automatically</span>
               </div>
-              <FuelLogButton onLogged={() => load()} />
+              <FuelLogButton onLogged={() => load()} onQueued={setFuelNotice} />
             </div>
             {streakJurisdiction && (
               <p className="fuel-nudge">
@@ -772,6 +795,54 @@ function DriverDashboard() {
                 fueling in a lower-IFTA jurisdiction could cut your quarterly tax bill.
               </p>
             )}
+            {/* Fill-ups the pump could not send: the same row the documents
+                card uses, because a driver who cannot see it waiting has no
+                reason to believe it was recorded at all. */}
+            {fuelQueue.items.length > 0 && (
+              <div className="queued-block">
+                {fuelQueue.items.map((stop) => (
+                  <div className="doc-alert queued-row" key={stop.id}>
+                    <span className="doc-alert-mark" aria-hidden>
+                      {stop.blocked ? '⛔' : '📤'}
+                    </span>
+                    <div className="doc-alert-body">
+                      <strong>
+                        {regionLabel(stop.jurisdictionCode)} ·{' '}
+                        {money(stop.amountTransaction, stop.transactionCurrency)}
+                      </strong>
+                      <div className="muted small">
+                        {Number(stop.volume).toLocaleString('en-CA', { maximumFractionDigits: 1 })}{' '}
+                        {stop.unit === 'L' ? 'L' : 'gal'} · {timeAgo(stop.occurredAt)}
+                      </div>
+                      <div className="muted small">
+                        {stop.blocked
+                          ? `Could not send — ${stop.lastError ?? 'the office refused it'}`
+                          : fuelQueue.busy
+                            ? 'Sending to the office…'
+                            : 'Saved on your phone · sends itself when you have signal'}
+                      </div>
+                    </div>
+                    {stop.blocked ? (
+                      <button
+                        className="btn-sm doc-renew-btn"
+                        onClick={() => void discardWaitingFuelStop(stop.id)}
+                      >
+                        Discard
+                      </button>
+                    ) : (
+                      <button
+                        className="btn-sm doc-renew-btn"
+                        disabled={fuelQueue.busy}
+                        onClick={() => void sendWaitingFuelStops({ onlyId: stop.id, force: true })}
+                      >
+                        Send now
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
             <FuelStopsList rows={fuelRows} />
           </div>
 

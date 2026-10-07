@@ -3,9 +3,11 @@ import { Modal } from './ui';
 import { fullDate } from '../utils/format';
 import { describeAamva, kindHasBarcode, parseAamva } from '../utils/aamva';
 import { readPdf417FromImage } from '../utils/pdf417';
-import { failureAction, type RenewalDraft } from '../utils/renewalQueue';
-import { currentOwner, queueRenewal, sendRenewal } from '../utils/renewalSend';
-import { refreshRenewals } from '../renewal-store';
+import { failureAction } from '../utils/pendingQueue';
+import { type RenewalDraft } from '../utils/renewalQueue';
+import { queueRenewal, sendRenewal } from '../utils/renewalSend';
+import { currentOwner } from '../utils/queueOwner';
+import { refreshRenewals } from '../pending-store';
 
 /**
  * A driver renewing their own document, from the cab, on a phone.

@@ -1,8 +1,13 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { api, getTokenUser } from '../api';
 import { Modal } from './ui';
 import { money, regionLabel, timeAgo } from '../utils/format';
 import { mapLastStopToPrefill, mostCommonStopPrefill, type FuelStopRow } from '../utils/fuelPrefill';
+import { failureAction } from '../utils/pendingQueue';
+import { newFuelRef, type FuelStopDraft } from '../utils/fuelQueue';
+import { queueFuelStop, sendFuelStop } from '../utils/fuelSend';
+import { currentOwner } from '../utils/queueOwner';
+import { refreshFuelQueue } from '../pending-store';
 
 export interface FuelLogRow {
   id: string;
@@ -154,14 +159,33 @@ export function FuelNumpad({
   );
 }
 
+/**
+ * A fill-up logged from the cab.
+ *
+ * The pump is where the signal dies: a card lock in the middle of a run, a
+ * truck stop between two towers. Until now the log had two outcomes — the
+ * request went, or the driver was told it failed and the receipt was never
+ * typed in again. Since the quarter's fuel comes out of these rows, a fill-up
+ * that silently did not happen is an IFTA return that is short of a
+ * jurisdiction.
+ *
+ * So the form behaves like the renewal sheet beside it: no signal, or a
+ * request the network dropped, keeps the fill-up on the phone (see
+ * utils/fuelQueue) and it goes out by itself when the phone finds coverage. The
+ * one thing that makes that safe to retry is the reference made for this
+ * fill-up as the form opens, which the API treats as the row's name.
+ */
 export function FuelLogModal({
   open,
   onClose,
   onLogged,
+  onQueued,
 }: {
   open: boolean;
   onClose: () => void;
   onLogged: () => void | Promise<void>;
+  /** Told when the fill-up was kept on the phone instead of sent. */
+  onQueued?: (message: string) => void;
 }) {
   const [jurisdiction, setJurisdiction] = useState('QC');
   const [unit, setUnit] = useState<'L' | 'GAL'>('L');
@@ -172,6 +196,26 @@ export function FuelLogModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastStop, setLastStop] = useState<FuelStopRow | null>(null);
+  // `navigator.onLine` is only a hint, and it is not the decision: a request
+  // that dies mid-flight falls into the same queue a moment later.
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine));
+  // The name this fill-up is sent under, kept across a retry so a send that the
+  // server did but the driver never heard about cannot become a second row.
+  const clientRef = useRef('');
+
+  useEffect(() => {
+    const sync = () => setOnline(navigator.onLine);
+    window.addEventListener('online', sync);
+    window.addEventListener('offline', sync);
+    return () => {
+      window.removeEventListener('online', sync);
+      window.removeEventListener('offline', sync);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (open) clientRef.current = newFuelRef();
+  }, [open]);
 
   // Open where the driver usually fuels: the most frequent jurisdiction /
   // unit combo over the recent stops (falls back to the last stop). The
@@ -219,22 +263,63 @@ export function FuelLogModal({
       setBusy(false);
       return;
     }
+    // Always explicit, and taken now rather than when the phone eventually
+    // sends it: the quarter credits fuel to the day it was bought, so a fill-up
+    // that waited three days for signal still belongs to the quarter it was
+    // pumped in.
+    const draft: FuelStopDraft = {
+      clientRef: clientRef.current || newFuelRef(),
+      jurisdictionCode: jurisdiction,
+      volume: vol,
+      unit,
+      amountTransaction: amt,
+      transactionCurrency: currency,
+      occurredAt: (when ? new Date(when) : new Date()).toISOString(),
+    };
+
+    /**
+     * Keep it on the phone and say so. False when this device would not store
+     * it, because a fill-up that is neither sent nor saved has to be reported
+     * as a failure rather than as a success.
+     */
+    const keepForLater = async (): Promise<boolean> => {
+      const owner = currentOwner();
+      if (!owner) return false;
+      const queued = await queueFuelStop(draft, owner);
+      if (!queued) return false;
+      await refreshFuelQueue();
+      return true;
+    };
+
     try {
-      await api('/api/fuel/me', {
-        method: 'POST',
-        body: {
-          jurisdictionCode: jurisdiction,
-          volume: vol,
-          unit,
-          amountTransaction: amt,
-          transactionCurrency: currency,
-          ...(when ? { occurredAt: new Date(when).toISOString() } : {}),
-        },
-      });
+      // With no signal at all the attempt is a guaranteed failure, so save it
+      // instead — that is the situation this form was built for.
+      if (!navigator.onLine && (await keepForLater())) {
+        reset();
+        onQueued?.(
+          'No signal — your fill-up is saved on your phone and sends itself when you are back in coverage.',
+        );
+        await onLogged();
+        onClose();
+        return;
+      }
+      await sendFuelStop(draft);
       reset();
       await onLogged();
       onClose();
     } catch (err) {
+      // A connection that dropped mid-upload is not an answer from the office —
+      // it is the truck-stop signal — so keep the fill-up rather than making the
+      // driver remember the litres.
+      if (failureAction(err) === 'retry' && (await keepForLater())) {
+        reset();
+        onQueued?.(
+          'The office could not be reached — your fill-up is saved on your phone and sends itself once you have signal.',
+        );
+        await onLogged();
+        onClose();
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Could not log the fuel stop');
     } finally {
       setBusy(false);
@@ -258,8 +343,13 @@ export function FuelLogModal({
       <p className="muted small" style={{ marginTop: 0 }}>
         One tap at the pump — it lands on your unit and flows straight into your fleet's
         fuel records and IFTA.
-      </p>
-      {error && <div className="alert alert-error">{error}</div>}
+      </p>        {error && <div className="alert alert-error">{error}</div>}
+        {!online && (
+          <div className="alert alert-warn">
+            No signal here — log the fill-up anyway. It is saved on your phone and sends itself when
+            you are back in coverage.
+          </div>
+        )}
 
       <form id="fuel-log-form" onSubmit={(e) => void submit(e)}>
         <div className="form-grid fuel-form-grid">
@@ -336,9 +426,11 @@ export function FuelLogModal({
 export function FuelLogButton({
   label = 'Log fuel stop',
   onLogged,
+  onQueued,
 }: {
   label?: string;
   onLogged?: () => void | Promise<void>;
+  onQueued?: (message: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const driverId = getTokenUser()?.driverId;
@@ -348,7 +440,12 @@ export function FuelLogButton({
       <button type="button" className="btn-ghost" onClick={() => setOpen(true)}>
         {label}
       </button>
-      <FuelLogModal open={open} onClose={() => setOpen(false)} onLogged={onLogged ?? (() => undefined)} />
+      <FuelLogModal
+        open={open}
+        onClose={() => setOpen(false)}
+        onLogged={onLogged ?? (() => undefined)}
+        onQueued={onQueued}
+      />
     </>
   );
 }

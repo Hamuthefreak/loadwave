@@ -1,13 +1,8 @@
-import { api, getTokenUser } from '../api';
-import { indexedDbRenewalStore } from './renewalIndexedDb';
-import {
-  createRenewalQueue,
-  type FlushOutcome,
-  type OnFile,
-  type QueuedRenewal,
-  type QueueOwner,
-  type RenewalDraft,
-} from './renewalQueue';
+import { api } from '../api';
+import { indexedDbQueueStore } from './pendingIndexedDb';
+import { createPendingQueue, type FlushOutcome, type Queued, type QueueOwner } from './pendingQueue';
+import { currentOwner } from './queueOwner';
+import { describeFlush, kindSkipHook, type OnFile, type RenewalDraft } from './renewalQueue';
 
 /**
  * The app side of the renewal queue: the device it waits on, who is signed in,
@@ -18,13 +13,9 @@ import {
  * touches a real database.
  */
 
-const queue = createRenewalQueue(indexedDbRenewalStore);
+export type QueuedRenewal = Queued<RenewalDraft>;
 
-export function currentOwner(): QueueOwner | null {
-  const user = getTokenUser();
-  if (!user?.sub) return null;
-  return { userId: user.sub, tenantId: user.tenantId || null };
-}
+const queue = createPendingQueue<QueuedRenewal>(indexedDbQueueStore<QueuedRenewal>('renewals'));
 
 export function base64FromBytes(bytes: Uint8Array): string {
   let binary = '';
@@ -88,11 +79,13 @@ export function purgeQueuedRenewals(): Promise<void> {
 /** Send everything waiting for the signed-in driver. */
 export function flushWaitingRenewals(
   options: { onlyId?: string; force?: boolean } = {},
-): Promise<FlushOutcome> {
+): Promise<FlushOutcome<QueuedRenewal>> {
   return queue.flush({
     owner: currentOwner(),
     send: sendRenewal,
-    onFile: complianceOnFile,
+    skip: kindSkipHook(complianceOnFile),
     ...options,
   });
 }
+
+export { describeFlush };

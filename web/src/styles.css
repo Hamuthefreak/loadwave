@@ -5295,14 +5295,16 @@ body.has-driver-fab .content {
   display: none;
 }
 
-/* A renewal still on the phone, waiting for signal. It sits with the documents
-   it belongs to but reads as local — dashed rather than solid — so it is never
-   mistaken for something the office has already seen. */
-.renew-queue {
+/* A write still on the phone, waiting for signal — a renewal on the documents
+   card, a fill-up on the fuel card. It sits with the rows it belongs to but
+   reads as local — dashed rather than solid — so it is never mistaken for
+   something the office has already seen. Shared by both cards so the two cannot
+   drift into looking like different kinds of thing. */
+.queued-block {
   margin-top: 8px;
 }
 
-.renew-queued {
+.queued-row {
   border-style: dashed;
   background: transparent;
 }

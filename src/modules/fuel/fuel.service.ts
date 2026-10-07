@@ -198,7 +198,20 @@ export class PrismaFuelService implements FuelService {
 
   async importOne(input: FuelTransactionInput): Promise<FuelTransactionRow> {
     const [row] = await this.importMany([input]);
-    return row;
+    if (row) return row;
+    // Nothing came back, which for a single import means the row was already
+    // there: `sourceEventId` is unique per tenant, so a retry after a response
+    // that never arrived is a duplicate rather than a second fill-up. Hand back
+    // the row that exists — a driver whose phone lost the signal must not be
+    // told their fuel could not be logged, and must not end up with the litres
+    // counted twice in an IFTA quarter.
+    if (input.sourceEventId) {
+      const existing = await this.prisma.fuelTransaction.findFirst({
+        where: { tenantId: input.tenantId, sourceEventId: input.sourceEventId },
+      });
+      if (existing) return this.map(existing as unknown as FuelDbRow);
+    }
+    throw badRequest('fuel transaction could not be stored');
   }
 
   async importMany(inputs: FuelTransactionInput[]): Promise<FuelTransactionRow[]> {
