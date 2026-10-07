@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import QRCode from 'qrcode';
 import { api, purgeOfflineCache, setTokens } from '../api';
+import { clearRenewals } from '../renewal-store';
 
 interface AuthResponse {
   user: { email: string; roles: string[] };
@@ -94,8 +95,10 @@ export default function SignIn() {
   const finish = (res: AuthResponse) => {
     setTokens(res.tokens.accessToken, res.tokens.refreshToken, rememberMe);
     // Drop whoever was signed in before on this device — the offline cache
-    // holds their loads and trips.
-    void purgeOfflineCache().finally(() => {
+    // holds their loads and trips, and the renewal queue holds photographs of
+    // their documents. Neither belongs to the person now signing in.
+    void purgeOfflineCache();
+    void clearRenewals().finally(() => {
       navigate(state?.from ?? '/app/dashboard', { replace: true });
     });
   };

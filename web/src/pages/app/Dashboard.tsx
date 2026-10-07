@@ -10,6 +10,12 @@ import { DocumentRenewModal } from '../../components/DocumentRenewModal';
 import DutyLogModal, { type HosDailyLogRow, type HosDayRow } from '../../components/DutyLogModal';
 import { FuelLogButton, FuelStopsList, type FuelLogRow } from '../../components/FuelLogger';
 import { sameJurisdictionStreak } from '../../utils/fuelPrefill';
+import {
+  discardWaitingRenewal,
+  dismissRenewalNotice,
+  sendWaitingRenewals,
+  useRenewals,
+} from '../../renewal-store';
 import { currencyOf, km, money, perMile, regionLabel, timeAgo } from '../../utils/format';
 
 interface Tenant {
@@ -451,6 +457,8 @@ function DriverDashboard() {
   // Live duty status from the shared store — flips the instant the quick-action
   // button (or the bottom-nav toggle) is tapped, instead of waiting for refresh.
   const duty = useDuty();
+  // Renewals taken where there was no signal, which the shell sends for us.
+  const renewals = useRenewals();
 
   const load = useCallback(async () => {
     setError(null);
@@ -510,6 +518,19 @@ function DriverDashboard() {
     window.addEventListener('loadwave:fuel-logged', onFuel);
     return () => window.removeEventListener('loadwave:fuel-logged', onFuel);
   }, [load]);
+
+  // A renewal that goes out from the cab (or lands at the office) changes the
+  // file, so the card is re-read instead of showing yesterday's dates.
+  useEffect(() => {
+    if (renewals.sentTotal > 0) void load();
+  }, [renewals.sentTotal, load]);
+
+  // The queue's notice is not attached to a tap, so it clears itself.
+  useEffect(() => {
+    if (!renewals.notice) return;
+    const timer = window.setTimeout(() => dismissRenewalNotice(), 7000);
+    return () => window.clearTimeout(timer);
+  }, [renewals.notice]);
 
   if (error) {
     return (
@@ -635,8 +656,10 @@ function DriverDashboard() {
       {/* A lapsed medical card is the fastest way to be put out of service, so
           it sits above the fuel and shortcut cards, not buried in settings. */}
       {docNotice && <div className="alert alert-success">{docNotice}</div>}
+      {renewals.notice && <div className="alert alert-success">{renewals.notice}</div>}
+      {renewals.error && <div className="alert alert-error">{renewals.error}</div>}
 
-      {docs && docProblems(docs.items).length > 0 && (
+      {docs && (docProblems(docs.items).length > 0 || renewals.items.length > 0) && (
         <div className="card">
           <div className="hos-head">
             <div>
@@ -672,6 +695,47 @@ function DriverDashboard() {
                 )}
               </div>
             ))}
+          {/* Taken where there was no signal, still on this phone. Shown here
+              rather than only in the sheet that took them: a driver who cannot
+              see it waiting has no reason to believe it exists. */}
+          {renewals.items.length > 0 && (
+            <div className="renew-queue">
+              {renewals.items.map((item) => (
+                <div className="doc-alert renew-queued" key={item.id}>
+                  <span className="doc-alert-mark" aria-hidden>
+                    {item.blocked ? '⛔' : '📤'}
+                  </span>
+                  <div className="doc-alert-body">
+                    <strong>{item.label}</strong>
+                    <div className="muted small">
+                      {item.blocked
+                        ? `Could not send — ${item.lastError ?? 'the office refused it'}`
+                        : renewals.busy
+                          ? 'Sending to the office…'
+                          : 'Saved on your phone · sends itself when you have signal'}
+                    </div>
+                  </div>
+                  {item.blocked ? (
+                    <button
+                      className="btn-sm doc-renew-btn"
+                      onClick={() => void discardWaitingRenewal(item.id)}
+                    >
+                      Discard
+                    </button>
+                  ) : (
+                    <button
+                      className="btn-sm doc-renew-btn"
+                      disabled={renewals.busy}
+                      onClick={() => void sendWaitingRenewals({ onlyId: item.id, force: true })}
+                    >
+                      Send now
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
           <p className="muted small" style={{ marginBottom: 0 }}>
             A renewal you send stays a request until the office confirms it — that is what keeps your
             own upload from being the thing that says a truck is legal.

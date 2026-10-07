@@ -5295,6 +5295,18 @@ body.has-driver-fab .content {
   display: none;
 }
 
+/* A renewal still on the phone, waiting for signal. It sits with the documents
+   it belongs to but reads as local — dashed rather than solid — so it is never
+   mistaken for something the office has already seen. */
+.renew-queue {
+  margin-top: 8px;
+}
+
+.renew-queued {
+  border-style: dashed;
+  background: transparent;
+}
+
 .renew-submit {
   width: 100%;
   margin-top: 12px;

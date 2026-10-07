@@ -6,6 +6,7 @@ import ThemeToggle from '../../components/ThemeToggle';
 import { FuelLogModal } from '../../components/FuelLogger';
 import { setDuty, useDuty } from '../../duty-store';
 import { syncPushSubscription } from '../../push';
+import { clearRenewals, startRenewalQueue } from '../../renewal-store';
 import { timeAgo } from '../../utils/format';
 
 interface Tenant {
@@ -214,8 +215,17 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
     document.title = match ? `${match[1]} · Loadwave` : 'Loadwave';
   }, [location.pathname]);
 
+  // A renewal taken in the cab waits on this device until it can be sent, and
+  // this is the only thing that sends it: without it, nothing goes out until
+  // the driver happens to open the dashboard again.
+  useEffect(() => startRenewalQueue(), []);
+
   const signOut = () => {
     setConfirmSignOut(false);
+    // What is waiting carries a photograph of the driver's licence, and it
+    // cannot be sent without the session that took it — so the phone is left
+    // clean for whoever holds it next.
+    void clearRenewals();
     onSignOut();
     navigate('/', { replace: true });
   };

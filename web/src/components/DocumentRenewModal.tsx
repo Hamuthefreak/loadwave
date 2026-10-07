@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { api } from '../api';
 import { Modal } from './ui';
 import { fullDate } from '../utils/format';
 import { describeAamva, kindHasBarcode, parseAamva } from '../utils/aamva';
 import { readPdf417FromImage } from '../utils/pdf417';
+import { failureAction, type RenewalDraft } from '../utils/renewalQueue';
+import { currentOwner, queueRenewal, sendRenewal } from '../utils/renewalSend';
+import { refreshRenewals } from '../renewal-store';
 
 /**
  * A driver renewing their own document, from the cab, on a phone.
@@ -24,6 +26,12 @@ import { readPdf417FromImage } from '../utils/pdf417';
  * reads a smudged month correctly, and it costs nothing per scan. What it does
  * not do is decide anything — it fills the two boxes the driver is looking at,
  * shows what it read so they can check it, and the office still confirms.
+ *
+ * And the fourth thing a driver at a fuel stop does not have is signal. If the
+ * office cannot be reached the renewal is kept on the phone and sent by itself
+ * later (see utils/renewalQueue) rather than handed back as a failed request —
+ * losing a photograph of the new card because the signal dropped is how a
+ * renewal ends up not happening at all.
  */
 
 export interface RenewableDoc {
@@ -44,15 +52,6 @@ function suggestExpiry(expiresAt: string | null): string {
   return next.toISOString().slice(0, 10);
 }
 
-function base64FromBytes(bytes: Uint8Array): string {
-  let binary = '';
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
-}
-
 export function DocumentRenewModal({
   doc,
   onClose,
@@ -69,7 +68,20 @@ export function DocumentRenewModal({
   const [error, setError] = useState<string | null>(null);
   const [scanBusy, setScanBusy] = useState(false);
   const [scanNote, setScanNote] = useState<{ text: string; warn: boolean } | null>(null);
+  // `navigator.onLine` is only ever a hint, and it is not the decision — a
+  // dropped upload falls into the same queue a moment later.
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine));
   const scanInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const sync = () => setOnline(navigator.onLine);
+    window.addEventListener('online', sync);
+    window.addEventListener('offline', sync);
+    return () => {
+      window.removeEventListener('online', sync);
+      window.removeEventListener('offline', sync);
+    };
+  }, []);
 
   useEffect(() => {
     if (!doc) return;
@@ -119,37 +131,52 @@ export function DocumentRenewModal({
     }
   };
 
+  /**
+   * Keep it on the phone and say so. False when this device would not store it,
+   * because a renewal that is neither sent nor saved has to be reported as a
+   * failure rather than as a success.
+   */
+  const keepForLater = async (draft: RenewalDraft): Promise<boolean> => {
+    const owner = currentOwner();
+    if (!owner) return false;
+    const queued = await queueRenewal(draft, owner);
+    if (!queued) return false;
+    await refreshRenewals();
+    onSent(
+      `${draft.label} is saved on your phone — it sends itself as soon as you have signal, and the office confirms it then.`,
+    );
+    return true;
+  };
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (busy) return;
     setBusy(true);
     setError(null);
+    const draft: RenewalDraft = {
+      kind: doc.kind,
+      label: doc.label,
+      identifier: identifier || null,
+      expiresAt: expiresAt || null,
+      photo: file,
+      fileName: file?.name ?? null,
+      mimeType: file?.type || null,
+    };
     try {
-      let data: string | undefined;
-      let fileName: string | undefined;
-      let mimeType: string | undefined;
-      if (file) {
-        // Base64 in the JSON body, the same as every other upload here: one
-        // request and no signed URL to get wrong on a truck-stop connection.
-        const buf = await file.arrayBuffer();
-        data = base64FromBytes(new Uint8Array(buf));
-        fileName = file.name;
-        mimeType = file.type || 'application/octet-stream';
-      }
-      await api(`/api/compliance/me/${doc.kind}`, {
-        method: 'PUT',
-        body: {
-          identifier: identifier || null,
-          expiresAt: expiresAt || null,
-          ...(data ? { data, fileName, mimeType } : {}),
-        },
-      });
+      // With no signal at all the attempt is a guaranteed failure, so save it
+      // instead — that is the situation this sheet was built for.
+      if (!navigator.onLine && (await keepForLater(draft))) return;
+      await sendRenewal(draft);
       onSent(
         file
           ? `${doc.label} sent to the office with your photo — they confirm it, then it stops blocking you.`
           : `${doc.label} sent to the office — they confirm it, then it stops blocking you.`,
       );
     } catch (err) {
+      // A connection that dropped mid-upload is not an answer from the office —
+      // it is the truck-stop signal — so keep the renewal rather than making the
+      // driver take the photograph again.
+      if (failureAction(err) === 'retry' && (await keepForLater(draft))) return;
       setError(err instanceof Error ? err.message : 'Could not send that renewal');
     } finally {
       setBusy(false);
@@ -254,6 +281,13 @@ export function DocumentRenewModal({
           The office sees this on their compliance page and confirms it. It stays a request until
           they do — so nothing here can put a truck on the road by itself.
         </p>
+
+        {!online && (
+          <div className="alert alert-warn">
+            No signal here — this is saved on your phone and sends itself when you are back in
+            coverage.
+          </div>
+        )}
 
         {error && <div className="alert alert-error">{error}</div>}
         {/* A visible submit as well as the footer: on a phone the footer button

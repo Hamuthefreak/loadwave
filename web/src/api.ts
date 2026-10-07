@@ -3,21 +3,11 @@
 // Requests are made with a RELATIVE path (e.g. "/auth/login"). In development
 // Vite proxies those calls to http://localhost:4000 (see vite.config.ts).
 
+import { ApiError } from './api-error';
 import { purgeOfflineCache } from './offline-cache';
 import { clearPlanCache } from './utils/planCache';
 
-export { purgeOfflineCache };
-
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly payload: unknown,
-  ) {
-    super(message);
-    this.name = 'ApiError';
-  }
-}
+export { ApiError, purgeOfflineCache };
 
 const TOKEN_KEY = 'loadwave.accessToken';
 const REFRESH_KEY = 'loadwave.refreshToken';
