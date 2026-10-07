@@ -131,6 +131,11 @@ model ComplianceDocument {
   data       Bytes?
 
   uploadedById String?
+  /// A document the holder uploaded from their own account and the office has
+  /// not confirmed. It blocks dispatch like a lapse does: the date on it is a
+  /// claim, and a claim that unlocks the gate is the hole the gate exists to
+  /// close. Cleared by any write from the office.
+  pendingReview Boolean @default(false)
   /// The status the expiry sweep last warned about, so a lapse is announced when
   /// it happens rather than every morning. Cleared when the document is renewed.
   notifiedStatus String?

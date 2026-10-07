@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { UserRole } from '../auth/auth.types';
 import { settlementPeriod, periodFromInputs, type SettlementPeriod } from './settlement.policy';
 import { DISPUTE_SUBJECTS, type DisputeSubject } from './dispute.policy';
+import { DEFAULT_HISTORY_WEEKS } from './variance.policy';
 import type { SettlementService } from './settlement.service';
 
 export interface SettlementModuleDeps {
@@ -48,6 +49,20 @@ function sendPdf(reply: FastifyReply, fileName: string, pdf: Buffer): FastifyRep
     .header('X-Content-Type-Options', 'nosniff')
     .send(pdf);
 }
+
+/** How far back the variance report reaches; the default is a month of weeks. */
+const varianceQuerySchema = {
+  type: 'object',
+  properties: {
+    period: { type: 'string', enum: ['current', 'last'] },
+    from: { type: 'string', maxLength: 10 },
+    to: { type: 'string', maxLength: 10 },
+    // Query parameters stay strings app-wide — ajv coercion is switched off in
+    // app.ts — so the bound is expressed as a string and converted below. The
+    // service clamps it either way.
+    weeks: { type: 'string', pattern: '^[0-9]{1,2}$' },
+  },
+} as const;
 
 const raiseDisputeSchema = {
   type: 'object',
@@ -117,6 +132,28 @@ export function registerSettlementRoutes(app: FastifyInstance, deps: SettlementM
     async (request, reply) => {
       const tz = await deps.settlements.tenantTimezone(request.user.tenantId);
       return reply.send(await deps.settlements.overview(request.user.tenantId, resolvePeriod(request.query, tz)));
+    },
+  );
+
+  // Why payroll moved. Registered before the per-driver route so a static path
+  // can never be parsed as a driver id.
+  app.get<{ Querystring: PeriodQuery & { weeks?: string } }>(
+    '/api/settlements/variance',
+    {
+      schema: { querystring: varianceQuerySchema },
+      preHandler: async (request, reply) => {
+        await app.requireRoles(OPS)(request, reply);
+      },
+    },
+    async (request, reply) => {
+      const tz = await deps.settlements.tenantTimezone(request.user.tenantId);
+      return reply.send(
+        await deps.settlements.variance(
+          request.user.tenantId,
+          resolvePeriod(request.query, tz),
+          request.query.weeks == null ? DEFAULT_HISTORY_WEEKS : Number(request.query.weeks),
+        ),
+      );
     },
   );
 

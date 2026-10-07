@@ -7,6 +7,7 @@ import {
   payProfileOf,
   rollupStatements,
   safeTimezone,
+  settlementPeriod,
   yearToDatePeriod,
   type PayLoadInput,
   type SettlementPeriod,
@@ -32,6 +33,13 @@ import {
   type DisputeSubject,
   type DisputedLine,
 } from './dispute.policy';
+import {
+  DEFAULT_HISTORY_WEEKS,
+  MAX_HISTORY_WEEKS,
+  driverVariance,
+  type DriverVariance,
+  type VarianceReport,
+} from './variance.policy';
 import { buildSettlementStatement, dateOf, moneyOf, referenceOf } from '../documents/pdf.templates';
 import {
   latestSignaturePerRole,
@@ -161,6 +169,12 @@ export interface SettlementService {
   driverTimezone(tenantId: string, driverId: string): Promise<string>;
   /** Fleet default: the home terminal most of the drivers share. */
   tenantTimezone(tenantId: string): Promise<string>;
+
+  /**
+   * Why this period's payroll differs from the driver's own recent norm.
+   * `weeks` is how far back the comparison reaches.
+   */
+  variance(tenantId: string, period: SettlementPeriod, weeks: number): Promise<VarianceReport>;
 
   /** A driver questioning a line on their own statement. */
   raiseDispute(input: {
@@ -345,6 +359,93 @@ export class PrismaSettlementService implements SettlementService {
     if (rows.length === 0) return DEFAULT_TIMEZONE;
     const [top] = [...rows].sort((a, b) => b._count._all - a._count._all);
     return safeTimezone(top.homeTerminalTz);
+  }
+
+  async variance(tenantId: string, period: SettlementPeriod, weeks: number): Promise<VarianceReport> {
+    const tz = await this.tenantTimezone(tenantId);
+    const bounded = Math.max(
+      1,
+      Math.min(Number.isFinite(weeks) ? Math.floor(weeks) : DEFAULT_HISTORY_WEEKS, MAX_HISTORY_WEEKS),
+    );
+
+    // Each trailing week is the seven days immediately before the period under
+    // review, cut in the same timezone, so consecutive weeks tile against the
+    // period being explained rather than against today.
+    const historyPeriods = Array.from({ length: bounded }, (_, index) =>
+      settlementPeriod(new Date(period.from.getTime() - (index + 1) * 86_400_000 * 7), tz),
+    );
+
+    // One pass per week for the whole fleet rather than one per driver: a
+    // statement needs every load in the window, so batching here is the
+    // difference between bounded queries and driver-count-squared ones.
+    const [current, ...historyWeeks] = await Promise.all([
+      this.statementsFor(tenantId, period),
+      ...historyPeriods.map((historyPeriod) => this.statementsFor(tenantId, historyPeriod)),
+    ]);
+
+    const historyByDriver = new Map<string, Statement[]>();
+    for (const week of historyWeeks) {
+      for (const statement of week) {
+        const bucket = historyByDriver.get(statement.driverId) ?? [];
+        bucket.push(statement);
+        historyByDriver.set(statement.driverId, bucket);
+      }
+    }
+
+    const rows: DriverVariance[] = [];
+    let offPayroll = 0;
+    for (const statement of current) {
+      // A driver with no pay profile keeps the revenue, so there is no payroll
+      // figure to explain and comparing one would be inventing a wage.
+      if (statement.payModel === null) {
+        offPayroll += 1;
+        continue;
+      }
+      rows.push(
+        driverVariance({
+          current: statement,
+          history: historyByDriver.get(statement.driverId) ?? [],
+          weeks: bounded,
+        }),
+      );
+    }
+
+    // Biggest movers first: they are the ones a payroll run reconciles by hand.
+    rows.sort((a, b) => Math.abs(b.components.totalCents) - Math.abs(a.components.totalCents));
+
+    const withoutBasis = rows.filter((row) => row.basis.activeWeeks === 0).length;
+    const notes: string[] = [];
+    if (offPayroll > 0) {
+      notes.push(
+        `${offPayroll} driver${offPayroll === 1 ? '' : 's'} keep${offPayroll === 1 ? 's' : ''} their own revenue and ${offPayroll === 1 ? 'is' : 'are'} not on payroll, so ${offPayroll === 1 ? 'it is' : 'they are'} not compared here.`,
+      );
+    }
+    if (withoutBasis > 0) {
+      notes.push(
+        `${withoutBasis} driver${withoutBasis === 1 ? ' has' : 's have'} no trailing work to compare against yet — a first week is shown as it stands rather than as a change.`,
+      );
+    }
+    const partial = rows.filter((row) => row.basis.activeWeeks > 0 && row.basis.activeWeeks < bounded).length;
+    if (partial > 0) {
+      notes.push(
+        `${partial} driver${partial === 1 ? ' was' : 's were'} off for part of the last ${bounded} weeks; their average is taken over the weeks with work, so a week off does not read as a drop in pay.`,
+      );
+    }
+
+    return {
+      period: { from: period.from.toISOString(), to: period.to.toISOString(), label: period.label },
+      weeks: bounded,
+      drivers: rows,
+      totals: {
+        currentPayCents: rows.reduce((a, row) => a + row.current.totalPayCents, 0),
+        trailingAverageCents: rows.reduce((a, row) => a + row.basis.averageTotalPayCents, 0),
+        changeCents: rows.reduce((a, row) => a + row.components.totalCents, 0),
+        flaggedLoads: rows.reduce((a, row) => a + row.shifts.length + row.shiftsOmitted, 0),
+        withoutBasis,
+      },
+      offPayroll,
+      notes,
+    };
   }
 
   async overview(tenantId: string, period: SettlementPeriod): Promise<SettlementOverview> {

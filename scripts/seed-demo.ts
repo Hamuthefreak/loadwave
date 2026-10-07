@@ -251,7 +251,14 @@ async function main() {
       { driverId: driverB.id, km: 450, amount: 1020, deliveredAt: new Date(lastWeek.from.getTime() + 30 * 3_600_000) },
     ];
 
-    for (const run of deliveredRuns) {
+    const createDeliveredRun = async (run: {
+      driverId: string;
+      km: number;
+      amount: number;
+      deliveredAt: Date;
+      detentionHours?: number;
+      detentionRate?: number;
+    }): Promise<void> => {
       const created = await prisma.load.create({
         data: {
           tenantId: tenant.id,
@@ -291,8 +298,59 @@ async function main() {
           },
         });
       }
+    };
+
+    for (const run of deliveredRuns) await createDeliveredRun(run);
+
+    // --- Four weeks of past work ---------------------------------------------
+    // The variance report measures this week against the driver's own recent
+    // weeks, so the demo needs recent weeks to measure against — and needs
+    // *shape* in them: a short week, a long dock wait, a steady lane. Four
+    // identical copies would make the report say nothing at all.
+    const history: Array<{
+      weeksBack: number;
+      driverId: string;
+      km: number;
+      amount: number;
+      detentionHours?: number;
+    }> = [
+      // Maria, per mile: a steady lane, one long wait, one week cut short.
+      { weeksBack: 1, driverId: driverB.id, km: 480, amount: 1120 },
+      { weeksBack: 1, driverId: driverB.id, km: 520, amount: 1210 },
+      { weeksBack: 1, driverId: driverB.id, km: 610, amount: 1420, detentionHours: 2 },
+      { weeksBack: 2, driverId: driverB.id, km: 450, amount: 1040 },
+      { weeksBack: 2, driverId: driverB.id, km: 500, amount: 1160 },
+      { weeksBack: 2, driverId: driverB.id, km: 560, amount: 1290 },
+      { weeksBack: 3, driverId: driverB.id, km: 520, amount: 1180 },
+      // Off most of that week — the report averages over worked weeks only.
+      { weeksBack: 3, driverId: driverB.id, km: 480, amount: 1100 },
+      { weeksBack: 4, driverId: driverB.id, km: 500, amount: 1150 },
+      // Alex, on a share of revenue: two or three runs a week.
+      { weeksBack: 1, driverId: driverA.id, km: 420, amount: 1280 },
+      { weeksBack: 1, driverId: driverA.id, km: 610, amount: 1840 },
+      { weeksBack: 1, driverId: driverA.id, km: 480, amount: 1450 },
+      { weeksBack: 2, driverId: driverA.id, km: 460, amount: 1390 },
+      { weeksBack: 2, driverId: driverA.id, km: 520, amount: 1580 },
+      { weeksBack: 3, driverId: driverA.id, km: 400, amount: 1210 },
+      { weeksBack: 3, driverId: driverA.id, km: 560, amount: 1690 },
+      { weeksBack: 4, driverId: driverA.id, km: 430, amount: 1310 },
+      { weeksBack: 4, driverId: driverA.id, km: 500, amount: 1520 },
+    ];
+
+    for (const run of history) {
+      const past = settlementPeriod(now, 'America/Toronto', run.weeksBack);
+      await createDeliveredRun({
+        ...run,
+        // Late on the second day of the week it belongs to, so the load always
+        // lands inside its own period whatever weekday the demo runs on.
+        deliveredAt: new Date(past.from.getTime() + 50 * 3_600_000),
+        detentionHours: run.detentionHours,
+        detentionRate: run.detentionHours != null ? 60 : undefined,
+      });
     }
-    console.log('  Settlements: Maria is on $0.58/mi (this week + last week), Alex on 27% of revenue');
+    console.log(
+      '  Settlements: Maria is on $0.58/mi, Alex on 27% of revenue, with four weeks of history behind them',
+    );
 
     await prisma.truckPost.createMany({
       data: [

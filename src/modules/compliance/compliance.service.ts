@@ -29,6 +29,8 @@ import type { NotificationService } from '../notification/notification.service';
 export const COMPLIANCE_SUBJECTS: ComplianceSubject[] = ['DRIVER', 'ASSET', 'TENANT'];
 
 export interface ComplianceSubjectView {
+  /** Documents in this file waiting on the office to confirm them. */
+  pending: number;
   subject: ComplianceSubject;
   subjectId: string;
   /** Driver name, unit number, or carrier name. */
@@ -78,6 +80,8 @@ export interface ComplianceDocumentRow {
   fileName: string | null;
   mimeType: string | null;
   sizeBytes: number | null;
+  /** Uploaded by the holder and not yet confirmed by the office. */
+  pendingReview: boolean;
   updatedAt: string;
 }
 
@@ -94,6 +98,11 @@ export interface ComplianceUpsertInput {
   mimeType?: string | null;
   dataBase64?: string | null;
   uploadedById?: string | null;
+  /**
+   * Set when the upload came from the holder's own account. Anything written
+   * from the office clears it, because that write is the confirmation.
+   */
+  pendingReview?: boolean;
 }
 
 export interface ComplianceService extends AssignmentComplianceGate {
@@ -101,6 +110,11 @@ export interface ComplianceService extends AssignmentComplianceGate {
   /** Just one driver's checklist — the cab-side view. */
   forDriver(tenantId: string, driverId: string): Promise<ComplianceSubjectView | null>;
   upsert(input: ComplianceUpsertInput): Promise<ComplianceDocumentRow>;
+  /**
+   * The office accepting a document the holder uploaded: the date on it becomes
+   * the one the gate reasons about, and the block lifts.
+   */
+  confirm(tenantId: string, id: string, actorId: string | null): Promise<ComplianceDocumentRow>;
   remove(tenantId: string, id: string): Promise<void>;
   file(tenantId: string, id: string): Promise<{ row: ComplianceDocumentRow; data: Buffer } | null>;
 }
@@ -117,6 +131,7 @@ interface DocRow {
   fileName: string | null;
   mimeType: string | null;
   sizeBytes: number | null;
+  pendingReview: boolean;
   updatedAt: Date;
 }
 
@@ -155,6 +170,7 @@ export class PrismaComplianceService implements ComplianceService {
       fileName: row.fileName,
       mimeType: row.mimeType,
       sizeBytes: row.sizeBytes,
+      pendingReview: row.pendingReview,
       updatedAt: row.updatedAt.toISOString(),
     };
   }
@@ -176,6 +192,7 @@ export class PrismaComplianceService implements ComplianceService {
           fileName: true,
           mimeType: true,
           sizeBytes: true,
+          pendingReview: true,
           updatedAt: true,
         },
       }),
@@ -228,6 +245,10 @@ export class PrismaComplianceService implements ComplianceService {
         detail,
         status: subjectStatus(items),
         headline: statusHeadline(items),
+        // Counted separately from the status: a file full of unconfirmed uploads
+        // reads as "on file" by date, and the office has to be able to see that
+        // it is waiting on them without opening every row.
+        pending: items.filter((item) => item.pendingReview).length,
         items,
       };
     };
@@ -307,8 +328,17 @@ export class PrismaComplianceService implements ComplianceService {
       ...(asset ? [{ subject: 'ASSET' as const, subjectId: asset.id }] : []),
     ];
     const docs = await this.prisma.complianceDocument.findMany({
-      where: { tenantId, OR: subjects },
-      select: { id: true, subject: true, subjectId: true, kind: true, identifier: true, expiresAt: true, notes: true, sizeBytes: true },
+      where: { tenantId, OR: subjects },        select: {
+          id: true,
+          subject: true,
+          subjectId: true,
+          kind: true,
+          identifier: true,
+          expiresAt: true,
+          notes: true,
+          sizeBytes: true,
+          pendingReview: true,
+        },
     });
 
     const blocks: ComplianceFlag[] = [];
@@ -415,6 +445,7 @@ export class PrismaComplianceService implements ComplianceService {
         expiresAt: true,
         notes: true,
         sizeBytes: true,
+        pendingReview: true,
       },
     });
     const items = checklist('DRIVER', docs as StoredDoc[], now);
@@ -425,6 +456,7 @@ export class PrismaComplianceService implements ComplianceService {
       detail: driver.licenseNumber ? `Licence ${driver.licenseNumber}` : null,
       status: subjectStatus(items),
       headline: statusHeadline(items),
+      pending: items.filter((item) => item.pendingReview).length,
       items,
     };
   }
@@ -479,12 +511,15 @@ export class PrismaComplianceService implements ComplianceService {
         sizeBytes: data?.length ?? null,
         data: data ?? null,
         uploadedById: input.uploadedById ?? null,
+        pendingReview: input.pendingReview ?? false,
       },
       update: {
         identifier: input.identifier ?? null,
         issuedAt,
         expiresAt,
         notes: input.notes ?? null,
+        // An office write is the confirmation; a holder's write asks for one.
+        pendingReview: input.pendingReview ?? false,
         // Only replace the scan when a new one is actually uploaded, so editing
         // the expiry date doesn't silently throw away the certificate.
         ...(data
@@ -499,7 +534,80 @@ export class PrismaComplianceService implements ComplianceService {
       },
     });
 
+    // A holder's upload is a question, and a question nobody is told about is
+    // the same as a lapsed document: the driver sees "uploaded", the office sees
+    // nothing, and the truck sits until somebody asks. So it is announced.
+    if (input.pendingReview && this.notifications) {
+      const label = specFor(input.kind)?.label ?? input.kind;
+      const who = await this.nameForSubject(input.tenantId, input.subject, input.subjectId);
+      const when = expiresAt ? `says it expires ${expiresAt.toISOString().slice(0, 10)}` : 'left the expiry blank';
+      await this.notifications.notify({
+        tenantId: input.tenantId,
+        kind: 'COMPLIANCE_REVIEW',
+        title: `${who} uploaded a ${label.toLowerCase()}`,
+        body: `${who} ${when}. Until somebody confirms it, this keeps blocking dispatch.`,
+        link: '/app/compliance',
+      });
+    }
+
     return this.toRow(row as DocRow, new Date());
+  }
+
+  /** A human name for a subject, so a notification reads like a sentence. */
+  private async nameForSubject(
+    tenantId: string,
+    subject: ComplianceSubject,
+    subjectId: string,
+  ): Promise<string> {
+    if (subject === 'TENANT') return 'Your carrier file';
+    if (subject === 'DRIVER') {
+      const driver = await this.prisma.driver.findFirst({
+        where: { id: subjectId, tenantId },
+        select: { name: true },
+      });
+      return driver?.name ?? 'A driver';
+    }
+    const asset = await this.prisma.asset.findFirst({
+      where: { id: subjectId, tenantId },
+      select: { powerUnitNumber: true, vin: true },
+    });
+    return asset?.powerUnitNumber ? `Unit ${asset.powerUnitNumber}` : (asset?.vin ?? 'A unit');
+  }
+
+  async confirm(tenantId: string, id: string, actorId: string | null): Promise<ComplianceDocumentRow> {
+    const row = await this.prisma.complianceDocument.findFirst({
+      where: { id, tenantId },
+      select: { id: true, subject: true, subjectId: true, kind: true },
+    });
+    if (!row) throw notFound('document not found');
+
+    const updated = await this.prisma.complianceDocument.update({
+      where: { id },
+      data: {
+        pendingReview: false,
+        uploadedById: actorId,
+        // Confirming is a fresh decision about the same dates, so the expiry
+        // sweep is allowed to warn about them again — an unconfirmed upload was
+        // never warned about, and a confirmed one needs its own clock.
+        notifiedStatus: null,
+      },
+      select: {
+        id: true,
+        subject: true,
+        subjectId: true,
+        kind: true,
+        identifier: true,
+        issuedAt: true,
+        expiresAt: true,
+        notes: true,
+        fileName: true,
+        mimeType: true,
+        sizeBytes: true,
+        pendingReview: true,
+        updatedAt: true,
+      },
+    });
+    return this.toRow(updated, new Date());
   }
 
   async remove(tenantId: string, id: string): Promise<void> {

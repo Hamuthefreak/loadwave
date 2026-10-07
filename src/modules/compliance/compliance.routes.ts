@@ -25,6 +25,19 @@ const upsertSchema = {
   },
 } as const;
 
+/**
+ * True when the caller is the driver the document is filed against. Compared by
+ * id rather than by role: a dispatcher who happens to drive occasionally still
+ * goes through the office path for someone else's file.
+ */
+function ownsSubject(
+  subject: string,
+  subjectId: string,
+  user: { driverId: string | null },
+): boolean {
+  return subject.toUpperCase() === 'DRIVER' && !!user.driverId && user.driverId === subjectId;
+}
+
 export function registerComplianceRoutes(app: FastifyInstance, deps: ComplianceModuleDeps): void {
   // The kind registry, so the UI never hard-codes names that could drift from
   // the policy that actually decides what is required.
@@ -85,6 +98,14 @@ export function registerComplianceRoutes(app: FastifyInstance, deps: ComplianceM
       // A photographed certificate can exceed Fastify's default body limit.
       bodyLimit: 16 * 1024 * 1024,
       preHandler: async (request, reply) => {
+        await app.authenticate(request, reply);
+        if (reply.sent) return;
+        // A driver may renew their own qualification documents and nothing else:
+        // the licence and the medical card are theirs to produce, and waiting
+        // until they are next in the yard means the truck sits. Their write lands
+        // as pending review, so this is a request to the office rather than a
+        // way around the gate.
+        if (ownsSubject(request.params.subject, request.params.subjectId, request.user)) return;
         await app.requireRoles(OPS)(request, reply);
       },
     },
@@ -93,6 +114,7 @@ export function registerComplianceRoutes(app: FastifyInstance, deps: ComplianceM
       if (!COMPLIANCE_SUBJECTS.includes(subject as (typeof COMPLIANCE_SUBJECTS)[number])) {
         return reply.code(400).send({ error: 'BAD_REQUEST', message: 'unknown subject' });
       }
+      const selfService = ownsSubject(request.params.subject, request.params.subjectId, request.user);
       const row = await deps.compliance.upsert({
         tenantId: request.user.tenantId,
         subject: subject as (typeof COMPLIANCE_SUBJECTS)[number],
@@ -106,9 +128,60 @@ export function registerComplianceRoutes(app: FastifyInstance, deps: ComplianceM
         mimeType: request.body.mimeType ?? null,
         dataBase64: request.body.data ?? null,
         uploadedById: request.user.sub,
+        pendingReview: selfService,
       });
       return reply.code(201).send(row);
     },
+  );
+
+  // The holder's own route, so the app never has to know its own driver id and
+  // a driver cannot file against somebody else's file by editing a URL. Writes
+  // land pending: this is a request to the office, not a way round the gate.
+  app.put<{ Params: { kind: string }; Body: { identifier?: string | null; issuedAt?: string | null; expiresAt?: string | null; notes?: string | null; fileName?: string | null; mimeType?: string | null; data?: string | null } }>(
+    '/api/compliance/me/:kind',
+    {
+      schema: { body: upsertSchema },
+      bodyLimit: 16 * 1024 * 1024,
+      preHandler: async (request, reply) => {
+        await app.authenticate(request, reply);
+      },
+    },
+    async (request, reply) => {
+      const driverId = request.user.driverId;
+      if (!driverId) {
+        return reply.code(403).send({ error: 'FORBIDDEN', message: 'no driver profile is linked to this account' });
+      }
+      const row = await deps.compliance.upsert({
+        tenantId: request.user.tenantId,
+        subject: 'DRIVER',
+        subjectId: driverId,
+        kind: request.params.kind.toUpperCase(),
+        identifier: request.body.identifier ?? null,
+        issuedAt: request.body.issuedAt ?? null,
+        expiresAt: request.body.expiresAt ?? null,
+        notes: request.body.notes ?? null,
+        fileName: request.body.fileName ?? null,
+        mimeType: request.body.mimeType ?? null,
+        dataBase64: request.body.data ?? null,
+        uploadedById: request.user.sub,
+        pendingReview: true,
+      });
+      return reply.code(201).send(row);
+    },
+  );
+
+  // The office accepting a holder's upload. One tap, because the alternative is
+  // retyping the dates that are already on the screen — and a confirmation that
+  // is tedious is a confirmation that gets skipped in favour of an override.
+  app.post<{ Params: { id: string } }>(
+    '/api/compliance/:id/confirm',
+    {
+      preHandler: async (request, reply) => {
+        await app.requireRoles(OPS)(request, reply);
+      },
+    },
+    async (request, reply) =>
+      reply.send(await deps.compliance.confirm(request.user.tenantId, request.params.id, request.user.sub)),
   );
 
   app.delete<{ Params: { id: string } }>(

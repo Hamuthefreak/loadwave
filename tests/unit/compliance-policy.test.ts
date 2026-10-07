@@ -35,6 +35,7 @@ function item(over: Partial<ChecklistItem>): ChecklistItem {
     hasFile: false,
     documentId: null,
     notes: null,
+    pendingReview: false,
     ...over,
   };
 }

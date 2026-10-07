@@ -19,6 +19,8 @@ interface ChecklistItem {
   /** Row id of the document on file, so update/delete need no second lookup. */
   documentId: string | null;
   notes: string | null;
+  /** A driver uploaded this from the cab and nobody has confirmed it yet. */
+  pendingReview: boolean;
 }
 
 interface SubjectView {
@@ -26,6 +28,8 @@ interface SubjectView {
   subjectId: string;
   label: string;
   detail: string | null;
+  /** Documents in this file waiting on the office to confirm them. */
+  pending: number;
   status: ComplianceStatus;
   headline: string;
   items: ChecklistItem[];
@@ -76,6 +80,8 @@ const STATUS_WORD: Record<ComplianceStatus, string> = {
 };
 
 function expiryText(item: ChecklistItem): string {
+  // What is waiting is more useful than the date on a claim nobody has accepted.
+  if (item.pendingReview) return 'Uploaded by the driver — not confirmed';
   if (item.status === 'MISSING') return 'Nothing on file';
   if (!item.expiresAt) return 'No expiry date';
   const date = item.expiresAt.slice(0, 10);
@@ -99,6 +105,7 @@ export default function Compliance() {
   const [open, setOpen] = useState<SubjectView | null>(null);
   // Which document the editor is open on, or 'new'.
   const [editing, setEditing] = useState<ChecklistItem | 'new' | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -120,6 +127,22 @@ export default function Compliance() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const confirm = async (item: ChecklistItem) => {
+    if (!item.documentId || confirming) return;
+    setConfirming(item.documentId);
+    setError(null);
+    try {
+      await api(`/api/compliance/${item.documentId}/confirm`, { method: 'POST', body: {} });
+      setNotice(`${item.label} confirmed — it no longer blocks a dispatch.`);
+      await load();
+      window.setTimeout(() => setNotice(null), 6000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not confirm that document');
+    } finally {
+      setConfirming(null);
+    }
+  };
 
   const subjects = useMemo(
     () => (view ? [...view.drivers, ...view.assets, view.carrier] : []),
@@ -189,7 +212,11 @@ export default function Compliance() {
               <tbody>
                 {subjects.map((s) => {
                   const open1 = s.items.filter(
-                    (i) => i.status === 'EXPIRED' || (i.required && i.status === 'MISSING') || i.status === 'EXPIRING',
+                    (i) =>
+                      i.pendingReview ||
+                      i.status === 'EXPIRED' ||
+                      (i.required && i.status === 'MISSING') ||
+                      i.status === 'EXPIRING',
                   );
                   return (
                     <tr key={`${s.subject}:${s.subjectId}`}>
@@ -199,6 +226,16 @@ export default function Compliance() {
                       </td>
                       <td>
                         <Badge tone={STATUS_TONE[s.status]}>{STATUS_WORD[s.status]}</Badge>
+                        {/* A file can read "on file" by date and still be holding
+                            a dispatch, so what is waiting is said here rather
+                            than only inside the modal. */}
+                        {s.pending > 0 && (
+                          <div style={{ marginTop: 4 }}>
+                            <Badge tone="cyan">
+                              {s.pending} to confirm
+                            </Badge>
+                          </div>
+                        )}
                       </td>
                       <td>{s.headline}</td>
                       <td className="mono-num">{open1.length}</td>
@@ -281,7 +318,21 @@ export default function Compliance() {
                       {item.identifier ? ` · ${item.identifier}` : ''}
                     </span>
                   </div>
-                  <Badge tone={STATUS_TONE[item.status]}>{STATUS_WORD[item.status]}</Badge>
+                  <Badge tone={item.pendingReview ? 'cyan' : STATUS_TONE[item.status]}>
+                    {item.pendingReview ? 'To confirm' : STATUS_WORD[item.status]}
+                  </Badge>
+                  {/* Confirming copies nothing: the dates are already on the row.
+                      One tap, because a confirmation that takes retyping is one
+                      that gets skipped in favour of an override. */}
+                  {item.pendingReview && item.documentId && (
+                    <button
+                      className="btn-green btn-sm"
+                      disabled={confirming === item.documentId}
+                      onClick={() => void confirm(item)}
+                    >
+                      {confirming === item.documentId ? 'Confirming…' : 'Confirm'}
+                    </button>
+                  )}
                   <button className="btn-sm" onClick={() => setEditing(item)}>
                     {item.status === 'MISSING' ? 'Add' : 'Update'}
                   </button>

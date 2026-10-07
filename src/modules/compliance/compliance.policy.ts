@@ -244,6 +244,8 @@ export interface ChecklistItem {
   /** Row id, so the UI can update or delete without a second lookup. Null when nothing is on file. */
   documentId: string | null;
   notes: string | null;
+  /** Uploaded by the driver and not yet confirmed by the office. */
+  pendingReview: boolean;
 }
 
 export interface StoredDoc {
@@ -253,6 +255,7 @@ export interface StoredDoc {
   expiresAt?: Date | string | null;
   notes?: string | null;
   hasFile?: boolean;
+  pendingReview?: boolean;
 }
 
 /**
@@ -284,6 +287,9 @@ export function checklist(
         hasFile: Boolean(doc?.hasFile),
         documentId: doc?.id ?? null,
         notes: doc?.notes ?? null,
+        // Only ever true for a document that exists: there is nothing to
+        // confirm about one nobody has uploaded.
+        pendingReview: Boolean(doc && doc.pendingReview),
       };
     })
     .sort(
@@ -403,6 +409,15 @@ export interface ComplianceFlag {
   status: ComplianceStatus;
   expiresAt: string | null;
   daysUntil: number | null;
+  /**
+   * A document the holder uploaded themselves and nobody has confirmed.
+   *
+   * It blocks in its own right. The date it carries is a claim, and a claim that
+   * unlocks dispatch is the same hole as editing the expiry — so a driver's
+   * renewal lands as a request for the office rather than as a fix. Nothing here
+   * is dishonest about it: the message says who uploaded it and what is waiting.
+   */
+  pendingReview: boolean;
 }
 
 /** Only a lapse stops a dispatch. */
@@ -418,7 +433,9 @@ export function assignmentBlocks(
   label: string,
 ): ComplianceFlag[] {
   return items
-    .filter((item) => BLOCKING_STATUSES.includes(item.status))
+    // An unconfirmed upload blocks alongside a lapse: the office has not agreed
+    // to the date on it, so the truck does not move on the strength of it yet.
+    .filter((item) => BLOCKING_STATUSES.includes(item.status) || item.pendingReview)
     .map((item) => flagFor(item, subject, subjectId, label));
 }
 
@@ -432,7 +449,7 @@ export function assignmentWarnings(
   return items
     .filter((item) => item.status === 'EXPIRING' || (item.required && item.status === 'MISSING'))
     .map((item) => flagFor(item, subject, subjectId, label))
-    .filter((flag) => !BLOCKING_STATUSES.includes(flag.status));
+    .filter((flag) => !BLOCKING_STATUSES.includes(flag.status) && !flag.pendingReview);
 }
 
 function flagFor(
@@ -450,12 +467,17 @@ function flagFor(
     status: item.status,
     expiresAt: item.expiresAt,
     daysUntil: item.daysUntil,
+    pendingReview: item.pendingReview,
   };
 }
 
 /** `CDL / licence expired 3 days ago` — says what to fix, not just "blocked". */
 export function describeFlag(flag: ComplianceFlag): string {
   const who = flag.label ? `${flag.label} — ` : '';
+  // An unconfirmed upload is described first, whatever the date on it says: the
+  // dispatcher needs to know the office has not agreed to it, not how long it
+  // has left.
+  if (flag.pendingReview) return `${who}${flag.itemLabel} uploaded, awaiting confirmation`;
   if (statusIsExpired(flag)) {
     const days = flag.daysUntil === null ? null : Math.abs(flag.daysUntil);
     const when = days === 0 ? 'expired today' : days === null ? 'expired' : `expired ${days} day${days === 1 ? '' : 's'} ago`;
@@ -475,7 +497,12 @@ export function blockedMessage(flags: readonly ComplianceFlag[]): string {
   if (flags.length === 0) return 'This assignment is blocked by a compliance lapse.';
   const first = describeFlag(flags[0] as ComplianceFlag);
   const more = flags.length > 1 ? ` (+${flags.length - 1} more)` : '';
-  return `Cannot dispatch: ${first}${more}. Renew it, or override with a reason.`;
+  // The remedy differs: a lapse needs a renewal, an upload needs somebody in the
+  // office to look at it.
+  const remedy = flags.every((flag) => flag.pendingReview)
+    ? 'Confirm it on the compliance page, or override with a reason.'
+    : 'Renew it, or override with a reason.';
+  return `Cannot dispatch: ${first}${more}. ${remedy}`;
 }
 
 /** Trim and bound an override reason; null when it is usable. */

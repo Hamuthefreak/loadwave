@@ -6,6 +6,7 @@ import { alertStatus as pushAlertStatus, enableLoadAlerts } from '../../push';
 import { Badge, Lane, PageHeader, Stat } from '../../components/ui';
 import DriverQuickAction from '../../components/DriverQuickAction';
 import { PayCard } from '../../components/PayCard';
+import { DocumentRenewModal } from '../../components/DocumentRenewModal';
 import DutyLogModal, { type HosDailyLogRow, type HosDayRow } from '../../components/DutyLogModal';
 import { FuelLogButton, FuelStopsList, type FuelLogRow } from '../../components/FuelLogger';
 import { sameJurisdictionStreak } from '../../utils/fuelPrefill';
@@ -388,6 +389,10 @@ interface DocItem {
   status: 'EXPIRED' | 'MISSING' | 'EXPIRING' | 'OK';
   expiresAt: string | null;
   daysUntil: number | null;
+  documentId: string | null;
+  hasFile: boolean;
+  /** Uploaded by the driver and not yet confirmed by the office. */
+  pendingReview: boolean;
 }
 
 interface MyDocs {
@@ -396,14 +401,23 @@ interface MyDocs {
   items: DocItem[];
 }
 
-/** Only what needs doing — a driver doesn't need a list of documents that are fine. */
+/**
+ * Only what needs doing — a driver doesn't need a list of documents that are
+ * fine. An upload waiting on the office counts: the driver has done their part
+ * and needs to know it is not the finished job yet.
+ */
 function docProblems(items: DocItem[]): DocItem[] {
   return items.filter(
-    (i) => i.status === 'EXPIRED' || (i.required && i.status === 'MISSING') || i.status === 'EXPIRING',
+    (i) =>
+      i.pendingReview ||
+      i.status === 'EXPIRED' ||
+      (i.required && i.status === 'MISSING') ||
+      i.status === 'EXPIRING',
   );
 }
 
 function docLine(item: DocItem): string {
+  if (item.pendingReview) return 'sent — waiting for the office to confirm';
   if (item.status === 'MISSING') return 'not on file';
   const days = item.daysUntil;
   if (item.status === 'EXPIRED') {
@@ -425,6 +439,8 @@ function DriverDashboard() {
   const [cycle, setCycle] = useState<HosCycle | null>(null);
   const [fuelRows, setFuelRows] = useState<FuelLogRow[]>([]);
   const [docs, setDocs] = useState<MyDocs | null>(null);
+  const [renewFor, setRenewFor] = useState<DocItem | null>(null);
+  const [docNotice, setDocNotice] = useState<string | null>(null);
   const [daily, setDaily] = useState<HosDailyLogRow | null>(null);
   const [logDay, setLogDay] = useState<HosDayRow | null>(null);
   const [alertsBusy, setAlertsBusy] = useState(false);
@@ -618,13 +634,15 @@ function DriverDashboard() {
 
       {/* A lapsed medical card is the fastest way to be put out of service, so
           it sits above the fuel and shortcut cards, not buried in settings. */}
+      {docNotice && <div className="alert alert-success">{docNotice}</div>}
+
       {docs && docProblems(docs.items).length > 0 && (
         <div className="card">
           <div className="hos-head">
             <div>
               <h3 style={{ marginBottom: 2 }}>Your documents</h3>
               <span className="muted small">
-                Your qualification file — send dispatch a photo when you renew one
+                Your qualification file — renew one here and the office confirms it
               </span>
             </div>
             <Badge tone={docs.status === 'EXPIRED' ? 'red' : 'amber'}>{docs.headline}</Badge>
@@ -634,18 +652,43 @@ function DriverDashboard() {
             .map((item) => (
               <div className="doc-alert" key={item.kind}>
                 <span className="doc-alert-mark" aria-hidden>
-                  {item.status === 'EXPIRED' ? '⛔' : '⚠️'}
+                  {item.pendingReview ? '⏳' : item.status === 'EXPIRED' ? '⛔' : '⚠️'}
                 </span>
-                <div>
+                <div className="doc-alert-body">
                   <strong>{item.label}</strong>
                   <div className="muted small">
                     {docLine(item)} · {item.reference}
                   </div>
                 </div>
+                {/* Hidden while an upload is already with the office: sending
+                    the same document twice just moves the queue around. */}
+                {!item.pendingReview && (
+                  <button
+                    className="btn-sm doc-renew-btn"
+                    onClick={() => setRenewFor(item)}
+                  >
+                    Renew
+                  </button>
+                )}
               </div>
             ))}
+          <p className="muted small" style={{ marginBottom: 0 }}>
+            A renewal you send stays a request until the office confirms it — that is what keeps your
+            own upload from being the thing that says a truck is legal.
+          </p>
         </div>
       )}
+
+      <DocumentRenewModal
+        doc={renewFor}
+        onClose={() => setRenewFor(null)}
+        onSent={(message) => {
+          setRenewFor(null);
+          setDocNotice(message);
+          void load();
+          window.setTimeout(() => setDocNotice(null), 6000);
+        }}
+      />
 
       {user?.driverId && (() => {
         const streakJurisdiction = sameJurisdictionStreak(fuelRows, 3);

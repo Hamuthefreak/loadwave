@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, fetchFile, saveBlob } from '../../api';
 import { Badge, Empty, Modal, PageHeader, Spinner, Stat } from '../../components/ui';
 import { SignaturePad } from '../../components/SignaturePad';
+import { VariancePanel } from '../../components/VariancePanel';
 import { money, shortDate } from '../../utils/format';
 
 interface PayQuery {
@@ -284,6 +285,11 @@ export default function Settlements() {
           {data.period.label} · Monday to Sunday in each driver&rsquo;s home terminal timezone
         </p>
       )}
+
+      {/* A year-to-date total has no trailing week to be measured against, so the
+          comparison is only offered for the two week periods where it means
+          something. */}
+      {period !== 'ytd' && <VariancePanel period={period} />}
 
       {visibleQueries.length > 0 && (
         <section className="card query-inbox">

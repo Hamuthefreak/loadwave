@@ -41,6 +41,7 @@ export async function runComplianceSweep(
       kind: true,
       expiresAt: true,
       notifiedStatus: true,
+      pendingReview: true,
     },
   });
 
@@ -67,6 +68,11 @@ export async function runComplianceSweep(
 
   const byTenant = new Map<string, Change[]>();
   for (const row of due) {
+    // A pending upload is not a lapse and not a renewal: it is a question the
+    // office has not answered. Warning about the date on it would be warning
+    // about a date nobody has accepted yet, so it is left to the upload
+    // notification and to the compliance page.
+    if (row.pendingReview) continue;
     const status = documentStatus(row.expiresAt, now, warnDays);
     if (status === 'OK' || status === row.notifiedStatus) continue;
     const change: Change = {
@@ -99,6 +105,18 @@ export async function runComplianceSweep(
   const driverNames = new Map(drivers.map((d) => [d.id, d.name]));
   const assetNames = new Map(
     assets.map((a) => [a.id, a.powerUnitNumber ? `Unit ${a.powerUnitNumber}` : (a.vin ?? 'Unit')]),
+  );
+
+  // The driver is the one who has to produce the card at a scale, so their own
+  // document is addressed to their own account as well as to the office. Sent
+  // only where a login is actually linked — an unlinked driver still gets the
+  // office warning, and a notification nobody can open is just noise.
+  const driverUsers = await prisma.user.findMany({
+    where: { tenantId: { in: tenantIds }, driverId: { not: null } },
+    select: { id: true, driverId: true },
+  });
+  const userForDriver = new Map(
+    driverUsers.filter((u) => u.driverId).map((u) => [u.driverId as string, u.id]),
   );
 
   let notified = 0;
@@ -141,6 +159,29 @@ export async function runComplianceSweep(
         await prisma.complianceDocument.update({
           where: { id: c.id },
           data: { notifiedStatus: c.status },
+        });
+        if (c.subject !== 'DRIVER') continue;
+        const userId = userForDriver.get(c.subjectId);
+        if (!userId) continue;
+        const label = specFor(c.kind)?.label ?? c.kind;
+        const when =
+          c.status === 'EXPIRED'
+            ? c.days === null || c.days === 0
+              ? 'expired today'
+              : `expired ${Math.abs(c.days)} day${Math.abs(c.days) === 1 ? '' : 's'} ago`
+            : c.days === 0
+              ? 'expires today'
+              : `expires in ${c.days} day${c.days === 1 ? '' : 's'}`;
+        await notifications.notify({
+          tenantId,
+          userId,
+          kind: 'COMPLIANCE_EXPIRY_OWN',
+          title: `Your ${label.toLowerCase()} ${when}`,
+          body: 'Upload the renewal from your dashboard and the office can confirm it before it stops you being dispatched.',
+          link: '/app/dashboard',
+          // The office already has the row above; a second email for the same
+          // document would be the noise the dedupe exists to avoid.
+          email: false,
         });
       }
       notified += changes.length;

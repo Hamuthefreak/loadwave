@@ -13,6 +13,7 @@
   "dependencies": {
     "@types/react": "^18.3.31",
     "@types/react-dom": "18.3.7",
+    "@zxing/library": "^0.23.0",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
