@@ -66,6 +66,10 @@ Why it matters: a carrier with 20 trucks will not accept tenders by hand for
 long, and "we can take your tenders" is what turns a board into a system of
 record.
 
+The outbound half of this is designed in `BROKER_API.md`, including why the
+milestone function in `tracking.policy.ts` is the thing that decides what to
+send.
+
 ### 2.2 Know the broker before you haul — **M**
 
 DAT and the credit services around it sell broker credit, days-to-pay and a
@@ -226,6 +230,11 @@ recovered and dollars unclaimed (a clock that never ran because the driver
 didn't tap). That last number is only visible to us, which is exactly why it is
 worth showing.
 
+**Designed:** `FACILITY_SCORECARDS.md` — the grouping (dock area plus
+counterparty, because there is no `Facility` and no customer on a load), the
+clock-to-stop attribution `DetentionEntry` has no `stopId` for, and the free time
+that exists nowhere in the schema and therefore has to be stated on screen.
+
 ### 2.12 An automated rate confirmation — **M**
 
 Booking a load today flips `marketplaceStatus` to BOOKED, and the rate lives in
@@ -300,6 +309,12 @@ customer's TMS can hold, scoped and revocable, plus status webhooks signed with
 a per-tenant secret. None of it exists — the only inbound webhook is
 authenticated by a single instance-wide `ELD_WEBHOOK_SECRET`, which is exactly
 the thing that cannot be handed to a third party.
+
+**Designed:** `BROKER_API.md` — the key model (hashed, prefix-looked-up,
+scoped, bound to the counterparty it was issued for), the `/api/v1` read surface,
+and the outbound half: an event catalogue, delivery that is idempotent by a
+derived key rather than by a stored event, and the SSRF guard on a URL a stranger
+chooses.
 
 ### 2.19 Truck-legal routing, scales and tolls — **L**
 
