@@ -306,10 +306,26 @@ other integration suites):
   facilities.
 - The window cap answers `truncated: true` rather than quietly shortening.
 
-Live check: the seeded demo tenant's trip (arrived, departed, an hour on the
-clock) should produce one measured visit at the receiver's locality with a
-non-zero unclaimed line, screenshotted at 390 px alongside the coverage sentence
-— the same check that caught the three real defects in the earning-tools work.
+Live check, against the demo data as it stands today (measured, not assumed):
+
+| What the demo has | What it proves |
+|---|---|
+| The in-transit trip (Québec to Ottawa) has a **measured visit** at Québec: arrived 2026-10-07T08:00Z, departed 11:00Z, **180 minutes on site, on time** | The derivation path: a visit, a dwell and a lateness with no stored event anywhere |
+| That trip's `detentionRate` is **null** | Every dollar column must show a dash while the minutes still appear. This is the no-rate branch, on real data |
+| The tenant's two existing clocks both sit on September loads with **no `LoadStop` rows at all** | The **unattributable** branch: 2 h 30 m and 2 h of waiting that belong to no dock and must not be folded into one |
+| An open load carrying two clocks of about **two seconds** each, left by an earlier end-to-end run | The noise that branch has to survive without it looking like a real finding |
+
+The demo therefore proves the measurement and neither money column. To see those,
+the seed needs two more things: a `detentionRate` on the trip, and one clock
+**shorter than the claimable time** — the driver who tapped the clock late, which
+is the failure this feature exists to price. Against a 180-minute wait and a
+120-minute free time, a 20-minute clock leaves 40 unclaimed minutes and
+(billed at the load's rate) a recovered figure beside it, which is the pair of
+numbers the page is for.
+
+The check itself is the same one that caught the three real defects in the
+earning-tools work: render at 390 px and read what is on the screen, including
+the coverage sentence and the assumed free time, not just the totals.
 
 ---
 
