@@ -102,8 +102,13 @@ export default function SearchLoads() {
       const k = Number(l.distanceKmEstimate ?? 0);
       return r > 0 && k > 0 ? r / k / 0.621371 : -1;
     };
+    // Ranked on the server's net figure, which subtracts the empty kilometres to
+    // the pickup. A load the server could not price sorts last rather than being
+    // credited with a rate it does not have.
+    const netNum = (l: BoardLoad): number => l.netPerMile ?? -1;
     const list = [...filtered];
     if (sort === 'rate') list.sort((a, b) => Number(b.freightAmountBase ?? b.freightAmountTransaction ?? 0) - Number(a.freightAmountBase ?? a.freightAmountTransaction ?? 0));
+    else if (sort === 'netPerMile') list.sort((a, b) => netNum(b) - netNum(a) || perMileNum(b) - perMileNum(a));
     else if (sort === 'perMile') list.sort((a, b) => perMileNum(b) - perMileNum(a));
     else if (sort === 'distance') list.sort((a, b) => Number(a.distanceKmEstimate ?? Infinity) - Number(b.distanceKmEstimate ?? Infinity));
     return list;
@@ -308,6 +313,7 @@ export default function SearchLoads() {
             <option value="newest">Newest first</option>
             <option value="rate">Best rate</option>
             <option value="perMile">Best $ / mile</option>
+            <option value="netPerMile">Best net $ / mile (deadhead in)</option>
             <option value="distance">Shortest haul</option>
           </select>
         </label>
@@ -400,7 +406,7 @@ export function LoadCard({
   const rate = load.freightAmountBase ?? load.freightAmountTransaction;
   const taken = load.marketplaceStatus === 'BOOKED';
   const authority = cardAuthority(load);
-  const perMileVal = perMile(rate, load.distanceKmEstimate);
+  const perMileVal = perMile(rate, load.distanceKmEstimate, load.freightCurrency);
   // Rate-my-lane: how this load's $/mile compares to the marketplace average
   // for the same lane over the last 90 days.
   const numRate = Number(rate ?? 0);
@@ -451,6 +457,7 @@ export function LoadCard({
           )}
         </div>
       </div>
+      <EarningLines load={load} />
       <div className="carrier-row">
         <span className="carrier-name">{load.postedByTenantName}</span>
         {(load.postedByRatingCount ?? 0) > 0 && load.postedByRatingAvg != null && (
@@ -482,6 +489,70 @@ export function LoadCard({
       </div>
     </div>
   );
+}
+
+/**
+ * The rate the truck actually earns, and the backhaul that fills the run home.
+ *
+ * The plain $/mile on the line above is what every board shows, and it is not
+ * wrong — it is just silent about the empty road between where the truck is and
+ * where the load starts. When the server could not price that hop (no reported
+ * position, or no pickup coordinate on the load) this renders nothing at all
+ * rather than a zero, because a made-up deadhead is worse than a missing one.
+ */
+function EarningLines({ load }: { load: BoardLoad }) {
+  const net = load.netPerMile ?? null;
+  const deadhead = load.deadheadKm ?? null;
+  const trips = load.topRoundTrips ?? [];
+  const best = trips[0];
+
+  const from =
+    load.positionSource === 'ACTIVE_LOAD'
+      ? load.positionPlace
+        ? `your delivery in ${load.positionPlace}`
+        : 'your delivery'
+      : (load.positionPlace ?? 'your last reported position');
+
+  return (
+    <>
+      {net != null && deadhead != null && (
+        <div className="load-card__earning">
+          <div className="load-card__net">
+            {money(net, load.freightCurrency)}/mi net
+            <span className="load-card__net-note">{km(Math.round(deadhead))} empty to the pickup</span>
+          </div>
+          <div className="load-card__deadhead">Measured from {from}</div>
+        </div>
+      )}
+      {best && (
+        <div className="round-trips">
+          <span className="round-trips__title">Backhaul near the delivery</span>
+          {trips.map((t, i) => {
+            const label = `${placeShort(t.originLocality, t.originRegion)} to ${placeShort(t.destinationLocality, t.destinationRegion)}`;
+            return (
+              <div key={t.id} className={i === 0 ? 'round-trip round-trip--best' : 'round-trip'}>
+                <span className="round-trip__lane" title={label}>
+                  {label}
+                </span>
+                <span className="round-trip__rate">
+                  {t.netPerMile != null ? `${money(t.netPerMile, t.freightCurrency)}/mi` : '—'}
+                </span>
+              </div>
+            );
+          })}
+          <div className="round-trips__note">
+            {km(Math.round(best.deadheadKm))} empty between the two
+            {best.sameEquipment ? ' · same trailer' : ''}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Locality when we have it, the region when we do not — never a blank cell. */
+function placeShort(locality: string | null, region: string): string {
+  return locality?.trim() || regionLabel(region);
 }
 
 function PickupHint({ date }: { date: string }) {
@@ -627,7 +698,7 @@ function CompareView({
                   <span className="lane-city">{regionLabel(c.destinationRegion)}</span>
                 </div>
                 <div className="cmp-amount">{money(c.freightAmountBase ?? c.freightAmountTransaction, c.freightCurrency)}</div>
-                <div className="muted small">{perMile(c.freightAmountBase ?? c.freightAmountTransaction, c.distanceKmEstimate) ?? '—'}/mi · {km(c.distanceKmEstimate)}</div>
+                <div className="muted small">{perMile(c.freightAmountBase ?? c.freightAmountTransaction, c.distanceKmEstimate, c.freightCurrency) ?? '—'}/mi · {km(c.distanceKmEstimate)}</div>
                 <div className="muted small">{equipmentLabel(c.equipmentType)} · {c.postedByTenantName}</div>
               </div>
             ))}
@@ -840,7 +911,7 @@ function DetailDrawer({ load, onClose, onBook, onBooked }: { load: BoardLoad; on
           <LaneTrend origin={load.originRegion} destination={load.destinationRegion} />
           <dl className="detail-list">
             <DetailRow label="Rate" value={money(rate, load.freightCurrency)} strong />
-            <DetailRow label="Rate per mile" value={perMile(rate, load.distanceKmEstimate) ?? '—'} />
+            <DetailRow label="Rate per mile" value={perMile(rate, load.distanceKmEstimate, load.freightCurrency) ?? '—'} />
             <DetailRow label="Distance" value={km(load.distanceKmEstimate)} />
             <DetailRow label="Equipment" value={equipmentLabel(load.equipmentType)} />
             <DetailRow label="Pickup" value={load.pickupDate ? shortDate(load.pickupDate) : 'Flexible'} />
@@ -944,7 +1015,7 @@ export function BookingModal({
           <LaneXL load={load} />
           <dl className="detail-list">
             <DetailRow label="Rate" value={money(load.freightAmountBase ?? load.freightAmountTransaction, load.freightCurrency)} strong />
-            <DetailRow label="Rate per mile" value={perMile(load.freightAmountBase ?? load.freightAmountTransaction, load.distanceKmEstimate) ?? '—'} />
+            <DetailRow label="Rate per mile" value={perMile(load.freightAmountBase ?? load.freightAmountTransaction, load.distanceKmEstimate, load.freightCurrency) ?? '—'} />
             <DetailRow label="Distance" value={km(load.distanceKmEstimate)} />
             <DetailRow label="Posted by" value={load.postedByTenantName} />
           </dl>

@@ -6860,3 +6860,288 @@ tr.scorecard-tr > td {
     font-size: 0.8rem;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   What the truck earns: the loaded rate is what every other board shows, so
+   the net rate and the backhaul sit next to it rather than replacing it.
+   --------------------------------------------------------------------------- */
+
+.load-card__earning {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  min-width: 0;
+}
+
+.load-card__net {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  color: var(--accent-text);
+}
+
+.load-card__net-note {
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-left: 6px;
+}
+
+.load-card__deadhead {
+  font-size: 0.72rem;
+  color: var(--faint);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.round-trips {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  min-width: 0;
+}
+
+.round-trips__title {
+  display: block;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.round-trip {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.82rem;
+  padding: 2px 0;
+  min-width: 0;
+}
+
+.round-trip__lane {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.round-trip__rate {
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.round-trip--best .round-trip__rate {
+  color: var(--accent-text);
+}
+
+.round-trips__note {
+  font-size: 0.7rem;
+  color: var(--faint);
+}
+
+/* ---------------------------------------------------------------------------
+   Cost per mile. The figures are stated with what they omit, so the omissions
+   get a treatment of their own rather than a footnote nobody reads.
+   --------------------------------------------------------------------------- */
+
+.cost-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.cost-stat {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  min-width: 0;
+}
+
+.cost-stat__label {
+  display: block;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.cost-stat__value {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 1.3rem;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.cost-stat__sub {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--faint);
+  margin-top: 2px;
+}
+
+.cost-omissions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.cost-omission {
+  font-size: 0.7rem;
+  color: var(--muted);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+}
+
+.cost-declared {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.cost-declared__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.cost-declared__row label {
+  flex: 1 1 150px;
+  min-width: 0;
+}
+
+.cost-mono {
+  font-family: var(--font-mono);
+}
+
+/* ---------------------------------------------------------------------------
+   The public tracking page. It is read on a phone, in a cab or a customer's
+   office, by somebody who has no account and no reason to trust a spinner.
+   --------------------------------------------------------------------------- */
+
+.track-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 28px 16px 48px;
+  min-height: 100dvh;
+}
+
+.track-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.track-brand {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.track-lane {
+  font-size: 1.15rem;
+  margin: 14px 0 6px;
+  overflow-wrap: anywhere;
+}
+
+.track-headline {
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin: 14px 0 8px;
+}
+
+.track-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.track-timeline {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+}
+
+.track-stop {
+  position: relative;
+  border-left: 1px solid var(--border);
+  padding: 0 0 18px 26px;
+  min-width: 0;
+}
+
+.track-stop:last-child {
+  border-left-color: transparent;
+  padding-bottom: 0;
+}
+
+.track-stop__marker {
+  position: absolute;
+  left: -6px;
+  top: 4px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--panel);
+  border: 2px solid var(--faint);
+}
+
+.track-stop--done .track-stop__marker {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.track-stop--current .track-stop__marker {
+  background: var(--amber);
+  border-color: var(--amber);
+}
+
+.track-stop__kind {
+  display: block;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.track-stop__place {
+  display: block;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.track-stop__times {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.track-stop__late {
+  color: var(--amber);
+}
+
+.track-footnote {
+  margin-top: 22px;
+  font-size: 0.72rem;
+  color: var(--faint);
+}
+
+.track-error {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 48px 16px;
+  text-align: center;
+}

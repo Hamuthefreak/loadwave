@@ -130,13 +130,27 @@ export function miles(n: string | number | null | undefined): string {
   return `${Math.round(v * 0.621371).toLocaleString('en-CA')} mi`;
 }
 
-export function perMile(rate: string | number | null | undefined, kmValue: string | number | null | undefined): string | null {
+/**
+ * Dollars per mile for a rate in the given currency.
+ *
+ * The currency is a parameter because it used to be hard-coded to USD, which
+ * put "US$4.32/mi" next to "$1,450" on a load priced in Canadian dollars — two
+ * figures for the same load that disagreed about what they were measuring. It
+ * follows the amount it is derived from, and defaults to CAD because that is
+ * what this product's rates are unless a load says otherwise.
+ */
+export function perMile(
+  rate: string | number | null | undefined,
+  kmValue: string | number | null | undefined,
+  currency = 'CAD',
+): string | null {
   const r = Number(rate ?? 0);
   const k = Number(kmValue ?? 0);
   if (!Number.isFinite(r) || r <= 0 || !Number.isFinite(k) || k <= 0) return null;
   const perKm = r / k;
   const perMile = perKm / 0.621371;
-  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(perMile);
+  const cur = ['CAD', 'USD'].includes(currency) ? currency : 'CAD';
+  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: cur, maximumFractionDigits: 2 }).format(perMile);
 }
 
 export function shortDate(iso: string | null | undefined): string {

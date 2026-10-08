@@ -29,11 +29,46 @@ export interface BoardLoad {
   /** Lane benchmark from the marketplace (rate-my-lane). */
   laneAvgPerMile?: number | null;
   laneSamples?: number;
+  /**
+   * What the truck actually earns. `grossPerMile` is the loaded leg — the number
+   * every other board shows — and `netPerMile` is the same money spread over the
+   * empty kilometres to the pickup. Both are null when the server could not work
+   * them out, and the card then shows the plain rate rather than a guess.
+   */
+  grossPerMile?: number | null;
+  deadheadKm?: number | null;
+  netPerMile?: number | null;
+  /** Where the deadhead was measured from: the active trip's delivery or the last fix. */
+  positionSource?: 'ACTIVE_LOAD' | 'LAST_POSITION' | null;
+  positionPlace?: string | null;
+  positionAt?: string | null;
+  /** Loads picking up near this one's delivery, best first. */
+  topRoundTrips?: RoundTrip[];
   /** Trust signals from the posting carrier. */
   postedByRatingAvg?: number | null;
   postedByRatingCount?: number;
   /** Authority age, insurance on file, payment record and reports. */
   postedByTrust?: TrustSignals | null;
+}
+
+/** A backhaul: a load that picks up close to where this one delivers. */
+export interface RoundTrip {
+  id: string;
+  originRegion: string;
+  destinationRegion: string;
+  originLocality: string | null;
+  destinationLocality: string | null;
+  equipmentType: string | null;
+  freightCurrency: string;
+  distanceKmEstimate: number;
+  /** Empty kilometres between this load's delivery and that load's pickup. */
+  deadheadKm: number;
+  grossPerMile: number | null;
+  /** That leg's rate over loaded plus empty kilometres. */
+  netPerMile: number | null;
+  /** True when its trailer matches ours; ranked first, never required. */
+  sameEquipment: boolean;
+  pickupDate: string | null;
 }
 
 export interface TruckRow {

@@ -245,7 +245,7 @@ function ManagerDashboard() {
               <div className="muted small">
                 {km(nowHauling.distanceKmEstimate)}
                 {nowHauling.distanceKmEstimate
-                  ? ` · ${perMile(nowHauling.freightAmountBase ?? nowHauling.freightAmountTransaction, nowHauling.distanceKmEstimate) ?? '—'}/mi`
+                  ? ` · ${perMile(nowHauling.freightAmountBase ?? nowHauling.freightAmountTransaction, nowHauling.distanceKmEstimate, nowHauling.freightCurrency) ?? '—'}/mi`
                   : ''}
               </div>
             </div>
@@ -346,7 +346,7 @@ function ManagerDashboard() {
                   </td>
                   <td>{km(l.distanceKmEstimate)}</td>
                   <td className="mono-num">{money(l.freightAmountBase ?? l.freightAmountTransaction, l.freightCurrency)}</td>
-                  <td className="mono-num">{perMile(l.freightAmountBase ?? l.freightAmountTransaction, l.distanceKmEstimate) ?? '—'}</td>
+                  <td className="mono-num">{perMile(l.freightAmountBase ?? l.freightAmountTransaction, l.distanceKmEstimate, l.freightCurrency) ?? '—'}</td>
                   <td>
                     <Badge tone={l.marketplaceStatus === 'PUBLIC' ? 'green' : l.marketplaceStatus === 'BOOKED' ? 'amber' : 'gray'}>
                       {l.marketplaceStatus === 'PUBLIC' ? 'On the board' : l.marketplaceStatus === 'BOOKED' ? 'Booked' : 'Private'}
@@ -683,7 +683,7 @@ function DriverDashboard() {
                 <div className="muted small">
                   {km(nowHauling.distanceKmEstimate)}
                   {nowHauling.distanceKmEstimate
-                    ? ` · ${perMile(nowHauling.freightAmountBase ?? nowHauling.freightAmountTransaction, nowHauling.distanceKmEstimate) ?? '—'}/mi`
+                    ? ` · ${perMile(nowHauling.freightAmountBase ?? nowHauling.freightAmountTransaction, nowHauling.distanceKmEstimate, nowHauling.freightCurrency) ?? '—'}/mi`
                     : ''}
                 </div>
               </div>

@@ -16,6 +16,9 @@ const SignIn = lazy(() => import('./pages/SignIn'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const Diagnostics = lazy(() => import('./pages/Diagnostics'));
+// Public on purpose: a broker opens a tracking link with no account, so this
+// page sits with the marketing routes rather than behind RequireAuth.
+const TrackPage = lazy(() => import('./pages/TrackPage'));
 const AppShell = lazy(() => import('./pages/app/AppShell'));
 const Dashboard = lazy(() => import('./pages/app/Dashboard'));
 const SearchLoads = lazy(() => import('./pages/app/SearchLoads'));
@@ -127,6 +130,7 @@ export default function App() {
       <Route path="/signin" element={<SignIn />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/track/:loadId/:token" element={<TrackPage />} />
       <Route path="/diagnostics" element={<Diagnostics />} />
       <Route
         path="/app"

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api } from '../../api';
+import CostPanel from '../../components/CostPanel';
 import { Badge, Empty, PageHeader } from '../../components/ui';
 
 interface Asset {
@@ -60,6 +61,8 @@ export default function Fleet() {
   return (
     <div>
       <PageHeader title="Fleet" sub="Your power units and trailers." />
+
+      <CostPanel />
 
       <div className="card" style={{ marginBottom: 24 }}>
         <h3>Add equipment</h3>

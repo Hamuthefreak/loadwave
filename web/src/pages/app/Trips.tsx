@@ -151,6 +151,11 @@ export default function Trips() {
 
   // One-tap trip status share: native share sheet on phones (SMS/WhatsApp/…),
   // clipboard copy everywhere else so there's always a path that works.
+  //
+  // The tracking link is the point of the share: whoever receives it can watch
+  // the load move instead of phoning the driver for a check call. If the link
+  // cannot be built, the sentence still goes out on its own — a share that fails
+  // outright is worse than one that says a little less.
   const shareTrip = async (trip: Trip) => {
     const lane = `${locality(trip.originCountry, trip.originRegion, trip.originLocality)} → ${locality(trip.destinationCountry, trip.destinationRegion, trip.destinationLocality)}`;
     const by = trip.deliveryDate ? ` Deliver by ${shortDate(trip.deliveryDate)}.` : '';
@@ -158,12 +163,24 @@ export default function Trips() {
       trip.status === 'IN_TRANSIT'
         ? `On the road: ${lane}.${by} — ${trip.commodity ?? 'General freight'}, ${km(trip.distanceKmEstimate)}. Sent from Loadwave.`
         : `Load booked: ${lane}.${by} — rolling soon. Sent from Loadwave.`;
+
+    let url: string | null = null;
+    try {
+      url = (await api<{ link: string }>(`/api/loads/${trip.id}/tracking`)).link;
+    } catch {
+      /* no link for this load — share the words alone */
+    }
+
     try {
       if (navigator.share) {
-        await navigator.share({ title: 'My trip status', text });
+        await navigator.share({ title: 'My trip status', text, ...(url ? { url } : {}) });
       } else {
-        await navigator.clipboard.writeText(text);
-        setFlash('Status copied — paste it into a text or email.');
+        await navigator.clipboard.writeText(url ? `${text}\nTrack it: ${url}` : text);
+        setFlash(
+          url
+            ? 'Status and tracking link copied — paste them into a text or email.'
+            : 'Status copied — paste it into a text or email.',
+        );
       }
     } catch {
       /* user closed the share sheet — nothing to do */

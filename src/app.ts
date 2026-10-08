@@ -61,7 +61,14 @@ import { resolveRates } from './modules/ifta/jurisdiction-rates';
 import { registerIftaRateRoutes, registerIftaRoutes } from './modules/ifta/ifta.routes';
 
 import { PrismaLoadBoardStore } from './modules/board/board.store';
+import { PrismaViewerPositionStore } from './modules/board/position.store';
 import { LoadBoardService } from './modules/board/board.service';
+import { PrismaCostRepo } from './modules/costs/cost.repo';
+import { PrismaCostService } from './modules/costs/cost.service';
+import { registerCostRoutes } from './modules/costs/cost.routes';
+import { PrismaTrackingRepo } from './modules/tracking/tracking.repo';
+import { PrismaTrackingService } from './modules/tracking/tracking.service';
+import { registerTrackingRoutes } from './modules/tracking/tracking.routes';
 import { PrismaTrustRepo } from './modules/trust/trust.repo';
 import { PrismaTrustService } from './modules/trust/trust.service';
 import { registerTrustRoutes } from './modules/trust/trust.routes';
@@ -140,6 +147,8 @@ export interface AppDeps {
   ifta: IftaService;
   geometry: PostgisRouteGeometryService;
   board: LoadBoardService;
+  costs: PrismaCostService;
+  tracking: PrismaTrackingService;
   trust: PrismaTrustService;
   billing: PrismaBillingService;
   messages: PrismaMessageService;
@@ -203,7 +212,22 @@ function buildBaseServices(
   const billing = overrides.billing ?? new PrismaBillingService(new PrismaBillingRepo(prisma));
   const board =
     overrides.board ??
-    new LoadBoardService(new PrismaLoadBoardStore(prisma), geo, trust);
+    new LoadBoardService(
+      new PrismaLoadBoardStore(prisma),
+      geo,
+      trust,
+      // Deadhead is priced from the truck: the delivery of the load it is on, or
+      // its newest reported position. No position → the board shows the loaded
+      // rate exactly as it did before this existed.
+      new PrismaViewerPositionStore(prisma),
+    );
+  const costs = overrides.costs ?? new PrismaCostService(new PrismaCostRepo(prisma));
+  const tracking =
+    overrides.tracking ??
+    new PrismaTrackingService(new PrismaTrackingRepo(prisma), {
+      secret: env.JWT_ACCESS_SECRET,
+      appUrl: env.APP_URL,
+    });
   const trucks =
     overrides.trucks ??
     new TruckService(new PrismaTruckStore(prisma), geo, trust);
@@ -214,7 +238,10 @@ function buildBaseServices(
   const searches =
     overrides.searches ??
     new PrismaSavedSearchService(prisma, (tenantId, filters: BoardFilters) =>
-      board.listPublic(tenantId, filters),
+      // The alert sweep reads load ids, so it does not pay for the backhaul
+      // pairing: that pass scans the entire public set, and there are as many
+      // sweeps as there are saved searches every five minutes.
+      board.listPublic(tenantId, filters, { roundTrips: false }),
     );
   const importService = overrides.importService ?? new PrismaImportService(prisma, loads);
   const push =
@@ -251,6 +278,8 @@ function buildBaseServices(
         iftaRates,
       ),
     board,
+    costs,
+    tracking,
     trust,
     billing,
     trucks,
@@ -431,6 +460,11 @@ function registerRoutes(
     registerIftaRoutes(scope, { prisma, bus: deps.bus, fuel: deps.fuel, ifta: deps.ifta }),
   );
   gatedFeature('board', (scope) => registerBoardRoutes(scope, { board: deps.board }));
+  registerCostRoutes(app, { costs: deps.costs });
+  // The tracking link is opened by a broker who has no account, so the public
+  // route is registered ungated and unauthenticated; the signed token in the
+  // path is the whole authorisation. See tracking.routes.ts.
+  registerTrackingRoutes(app, { tracking: deps.tracking });
   registerTrustRoutes(app, { trust: deps.trust });
   registerBillingRoutes(app, { billing: deps.billing, adminKey: env.BILLING_ADMIN_KEY });
   registerMessageRoutes(app, { messages: deps.messages });

@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import type { BoardFilters, MarketplaceStatus } from './board.policy';
 import type { TrustSignals } from '../trust/trust.service';
+import type { RoundTripOption, ViewerPositionSource } from './board.earning';
 
 export interface BoardLoadRow {
   id: string;
@@ -45,6 +46,22 @@ export interface BoardLoadRow {
   /** Lane benchmark: marketplace-wide avg $/mile for this O→D lane. */
   laneAvgPerMile?: number | null;
   laneSamples?: number;
+  /**
+   * What the truck actually earns: the rate over the loaded leg plus the empty
+   * kilometres to reach the pickup. All three are null when the arithmetic is
+   * incomplete — the card shows the plain $/mile it always showed.
+   */
+  grossPerMile?: number | null;
+  deadheadKm?: number | null;
+  netPerMile?: number | null;
+  /** Which position the deadhead was measured from, so the card can attribute it. */
+  positionSource?: ViewerPositionSource | null;
+  /** Human name of that position ("Toronto, ON", "unit 214"); null if unnamed. */
+  positionPlace?: string | null;
+  /** When the position was taken — a delivery date, or the time of the fix. */
+  positionAt?: string | null;
+  /** Loads picking up near this one's delivery: the backhaul, ranked. */
+  topRoundTrips?: RoundTripOption[];
   /** Trust signals from the posting carrier (rating aggregates + verification). */
   postedByRatingAvg?: number | null;
   postedByRatingCount?: number;

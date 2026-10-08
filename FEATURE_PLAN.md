@@ -369,3 +369,76 @@ chain, assign→bell pipeline). Pushed to main.
 
 **Status:** web typecheck + build clean; verified live in the preview (grid
 positions, list times, totals, close). Uncommitted on main.
+
+## Done — what the truck earns (Oct 2026)
+
+The four items at the top of `GAP_ANALYSIS.md`'s build order: the board prices
+empty miles, offers the backhaul, states what a unit costs to run, and answers
+the check call with a link.
+
+### Deadhead, net revenue per mile and backhauls
+
+- **`board.earning.ts`** — pure: `earning()` gives the loaded rate, the empty
+  kilometres from the viewer to the pickup, and the rate over both. `roundTrips()`
+  pairs a load with up to three loads picking up within 150 km of its delivery,
+  ranked by what the second leg earns per mile, with the trailer match preferred
+  but never required, and anything that cannot be picked up after we deliver
+  dropped as impossible. **22 tests** in `tests/unit/board-earning.test.ts` — the
+  board's first.
+- **`position.store.ts`** — where the truck is: the delivery of the load it is
+  on right now (a plan, and labelled as one) or its newest reported position
+  (a measurement, with its age). No position → every new field is null and the
+  card shows exactly what it showed before.
+- **The card** gained `net $/mi`, the deadhead that produced it and what it was
+  measured from ("166 km empty to the pickup · measured from your delivery in
+  Ottawa, ON"), the backhaul column, and a **Best net $ / mile** sort.
+- **Fixed along the way:** `perMile()` was hard-coded to USD, so a Canadian load
+  showed "US$4.32/mi" beside "$1,450". It now follows the amount's currency.
+
+### Cost per mile by unit
+
+- **`cost.policy.ts`** (pure, 22 tests) + **`cost.service.ts`** + `GET
+  /api/costs/per-mile` and `PUT /api/costs/declared/:assetId`, ADMIN/DISPATCHER
+  only. Fuel is real (`FuelTransaction`), distance is real (`RouteSegment`), and
+  the fixed cost is declared by the owner into `TenantSetting.asset_costs`.
+- **Loaded versus empty is derived** by intersecting segment windows with the
+  load-assignment window, which is an approximation and is labelled as one in
+  the response (`mileageBasis`) and on the screen. `excludedCosts` is part of the
+  payload, not a footnote: the panel prints "maintenance not counted" and "tolls
+  not counted" as prominently as the figures they qualify.
+- **`CostPanel.tsx`** on the Fleet page: cost per loaded mile, cost per mile,
+  share run empty, detention recovered, fuel bought, and the declared-cost editor.
+  10 integration tests in `tests/integration/costs-api.test.ts`.
+
+### Tracking milestones and a public link
+
+- **`tracking.policy.ts`** (pure) computes Arrived/Departed per stop by
+  geofencing the truck's own positions against the stop's coordinate — 750 m,
+  because a dock is bigger than a parking space. Derived at read time, so a
+  backfilled trail gives the same answer and there is nothing to fall out of sync.
+- **`GET /api/loads/:id/tracking`** (authenticated, tenant-scoped, a driver only
+  for their own load) returns the milestones and the link.
+  **`GET /api/track/:loadId/:token`** is the link: no session, no cache, and a
+  token derived from the load id and the access secret so there is no column to
+  migrate and nothing extra to leak. A wrong token and an unknown load answer
+  identically. **The public projection is an allow-list** — lane, status, stops
+  and a position rounded to ~110 m; rates, customer, driver and company have no
+  path into it, and a test asserts the exact key set.
+- **`/track/:loadId/:token`** is a public page outside the app shell, and My
+  Loads and the driver's trip share both hand out the link. 7 integration tests
+  plus 21 unit tests.
+
+### Demo data
+
+`.freebuff/seed-earning-tools.mjs` seeds a live trip with position history and
+stops, a month of fuel, distance and a declared fixed cost, and a plannable
+backhaul pair on the board. `--clean` removes every row it wrote and puts the
+demo load's status back.
+
+**Status:** root tsc, web tsc, lint, **677 tests / 65 suites** and the web build
+all clean; verified live at 390 px — the board card (net, deadhead attribution,
+backhaul, zero overflow), the Fleet cost panel ($2.94 per loaded mile, 20% empty,
+omissions named), the public tracking page, the tampered-token page, and the
+copy-link action on My Loads. The API was checked separately: a driver gets 403
+on `/api/costs/per-mile` and 200 on their own load's tracking. Uncommitted on
+main.

@@ -61,6 +61,7 @@ function MyLoadsTab() {
   const [rateFor, setRateFor] = useState<OwnLoad | null>(null);
   const [signFor, setSignFor] = useState<OwnLoad | null>(null);
   const [pdfBusy, setPdfBusy] = useState<string | null>(null);
+  const [linkBusy, setLinkBusy] = useState<string | null>(null);
   const [unread, setUnread] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -169,6 +170,33 @@ function MyLoadsTab() {
       setError(err instanceof Error ? err.message : 'Failed to create load');
     } finally {
       setSaving(false);
+    }
+  };
+
+  /**
+   * The tracking link is built on demand and copied, never stored: it is derived
+   * from the load's id and a server secret, so there is nothing here to leak and
+   * nothing to revoke when the load is done.
+   */
+  const copyTrackingLink = async (ownLoad: OwnLoad) => {
+    if (linkBusy) return;
+    setLinkBusy(ownLoad.id);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { link } = await api<{ link: string }>(`/api/loads/${ownLoad.id}/tracking`);
+      try {
+        await navigator.clipboard.writeText(link);
+        setSuccess('Tracking link copied. Send it to the broker or the receiver.');
+      } catch {
+        // A browser that refuses the clipboard still gets the link itself, so
+        // the dispatcher can copy it by hand instead of getting an error.
+        setSuccess(`Tracking link: ${link}`);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not build the tracking link.');
+    } finally {
+      setLinkBusy(null);
     }
   };
 
@@ -315,7 +343,7 @@ function MyLoadsTab() {
                   <td>{equipmentLabel(l.equipmentType)}</td>
                   <td>{km(l.distanceKmEstimate)}</td>
                   <td className="mono-num">{money(l.freightAmountBase ?? l.freightAmountTransaction, l.freightCurrency)}</td>
-                  <td className="mono-num">{perMile(l.freightAmountBase ?? l.freightAmountTransaction, l.distanceKmEstimate) ?? '—'}</td>
+                  <td className="mono-num">{perMile(l.freightAmountBase ?? l.freightAmountTransaction, l.distanceKmEstimate, l.freightCurrency) ?? '—'}</td>
                   <td>
                     {l.marketplaceStatus === 'PUBLIC' && <Badge tone="green">On the board</Badge>}
                     {l.marketplaceStatus === 'BOOKED' && <Badge tone="amber">Booked{l.bookedAt ? ` · ${shortDate(l.bookedAt)}` : ''}</Badge>}
@@ -356,6 +384,14 @@ function MyLoadsTab() {
                   </td>
                   <td>
                     <span className="row-actions">
+                      <button
+                        className="btn-sm"
+                        disabled={linkBusy === l.id}
+                        title="Copy a link the broker or receiver can open without an account"
+                        onClick={() => void copyTrackingLink(l)}
+                      >
+                        {linkBusy === l.id ? 'Copying…' : 'Tracking link'}
+                      </button>
                       <button
                         className="btn-sm"
                         disabled={pdfBusy === `${l.id}:rc`}
