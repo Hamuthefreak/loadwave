@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import QRCode from 'qrcode';
 import { api, getRefreshToken } from '../../api';
+import { IconCheck } from '../../components/icons';
 import { Modal, PageHeader, Spinner } from '../../components/ui';
 import { ComplianceCard } from '../../components/ComplianceCard';
 import { shortDate, timeAgo } from '../../utils/format';
@@ -280,7 +281,9 @@ export default function Settings() {
           {twoFactorOn ? (
             <>
               <div className="settings-check-row">
-                <span>✔️ Sign-ins require a verification code</span>
+                <span>
+                  <IconCheck size={13} className="inline-ico" />Sign-ins require a verification code
+                </span>
                 <button className="btn-danger-outline" onClick={() => { setShowDisable(true); setDisableError(null); }}>
                   Turn off
                 </button>

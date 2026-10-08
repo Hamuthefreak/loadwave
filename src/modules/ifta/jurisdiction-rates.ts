@@ -48,3 +48,35 @@ export function resolveRates(envRates?: string | null): Record<string, string> {
 export function rateOf(rates: Record<string, string>, code: string): Decimal {
   return d(rates[code] ?? 0);
 }
+
+/** Every rate in the table is quoted per litre... */
+export const RATE_VOLUME_UNIT = 'L';
+
+/**
+ * ...and in one currency. Whoever loads the quarter's table normalises the US
+ * state rates into it, which is what makes a difference between two
+ * jurisdictions one number a driver can act on rather than two numbers that
+ * only look alike.
+ */
+export const RATE_CURRENCY = 'CAD';
+
+/**
+ * The read-only shape the app consumes.
+ *
+ * The driver's fuel warning wants to say what the tax difference between two
+ * jurisdictions actually is, and it cannot do that from the pump price: the
+ * price is what the station charged, the rate is what the quarter is settled
+ * at. Exposing the table costs nothing — it is published reference data, not
+ * tenant data — and it is the difference between a nudge that quotes a fact
+ * and one that only quotes a receipt.
+ */
+export interface JurisdictionRateTable {
+  currency: string;
+  volumeUnit: string;
+  /** Jurisdiction code → tax rate per litre, as a decimal string. */
+  rates: Record<string, string>;
+}
+
+export function rateTable(rates: Record<string, string>): JurisdictionRateTable {
+  return { currency: RATE_CURRENCY, volumeUnit: RATE_VOLUME_UNIT, rates: { ...rates } };
+}

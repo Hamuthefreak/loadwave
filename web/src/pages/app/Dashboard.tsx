@@ -9,7 +9,9 @@ import { PayCard } from '../../components/PayCard';
 import { DocumentRenewModal } from '../../components/DocumentRenewModal';
 import DutyLogModal, { type HosDailyLogRow, type HosDayRow } from '../../components/DutyLogModal';
 import { FuelLogButton, FuelStopsList, type FuelLogRow } from '../../components/FuelLogger';
-import { sameJurisdictionStreak } from '../../utils/fuelPrefill';
+import { Notice } from '../../components/Notice';
+import { IconBell, IconClock, IconFuel, IconSend, IconTimer } from '../../components/icons';
+import { fuelJurisdictionInsight, type JurisdictionRates } from '../../utils/fuelPrefill';
 import {
   discardWaitingFuelStop,
   discardWaitingRenewal,
@@ -438,6 +440,26 @@ function docLine(item: DocItem): string {
   return `expires in ${days ?? 0} day${days === 1 ? '' : 's'}`;
 }
 
+/** Litres the way a driver reads them off a statement: "1,240 L". */
+function litresLabel(litres: number): string {
+  return `${Math.round(litres).toLocaleString('en-CA')} L`;
+}
+
+/** "24 September" — a day inside one season does not need its year. */
+function shortDay(iso: string): string {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toLocaleDateString('en-CA', { day: 'numeric', month: 'long' });
+}
+
+/**
+ * IFTA publishes rates as decimal dollars per litre (0.197); every driver and
+ * every fuel desk says that as 19.7 cents. Print the way it is spoken.
+ */
+function centsPerLitre(perLitre: number): string {
+  return `${Math.round(perLitre * 1000) / 10}¢/L`;
+}
+
 // Driver-facing dashboard: shows the live board and the driver's own status,
 // and leaves out the ops tooling (revenue, fuel, IFTA, fleet, drivers) that a
 // DRIVER account can't access anyway.
@@ -448,6 +470,10 @@ function DriverDashboard() {
   const [driver, setDriver] = useState<DriverRow | null>(null);
   const [cycle, setCycle] = useState<HosCycle | null>(null);
   const [fuelRows, setFuelRows] = useState<FuelLogRow[]>([]);
+  // Published IFTA rates, read-only from GET /api/ifta/rates. Null until they
+  // land (or forever, if the endpoint is unreachable) — the fuel warning then
+  // quotes the pump price alone rather than inventing a tax figure.
+  const [iftaRates, setIftaRates] = useState<JurisdictionRates | null>(null);
   const [docs, setDocs] = useState<MyDocs | null>(null);
   const [renewFor, setRenewFor] = useState<DocItem | null>(null);
   const [docNotice, setDocNotice] = useState<string | null>(null);
@@ -479,19 +505,27 @@ function DriverDashboard() {
       setTrucks(tr);
       if (user?.driverId) {
         try {
-          const [d, c, f, dl, dc] = await Promise.all([
+          const [d, c, f, dl, dc, rt] = await Promise.all([
             api<DriverRow>(`/api/drivers/${user.driverId}`),
             api<HosCycle>(`/api/hos/status/${user.driverId}`).catch(() => null),
-            api<FuelLogRow[]>('/api/fuel/me?limit=5').catch(() => [] as FuelLogRow[]),
+            // The card lists the last five; the window is wider because the fuel
+            // nudge makes a claim about a *pattern*, and three rows cannot tell a
+            // pattern from a coincidence.
+            api<FuelLogRow[]>('/api/fuel/me?limit=20').catch(() => [] as FuelLogRow[]),
             api<HosDailyLogRow>(`/api/hos/logs/${user.driverId}`).catch(() => null),
             // A driver is the one who has to produce a medical card at a scale.
             api<MyDocs>('/api/compliance/me').catch(() => null),
+            // The published rate table. Read-only reference data, not gated
+            // behind the IFTA entitlement, because a DRIVER account has none
+            // and still needs to be told what the tax difference is.
+            api<JurisdictionRates>('/api/ifta/rates').catch(() => null),
           ]);
           setDriver(d);
           setCycle(c);
           setFuelRows(f);
           setDaily(dl);
           setDocs(dc);
+          setIftaRates(rt);
         } catch {
           /* driver profile not linked yet */
         }
@@ -589,7 +623,14 @@ function DriverDashboard() {
           <>
             {showAlertCta && (
               <button className="btn-ghost" onClick={() => void turnOnAlerts()} disabled={alertsBusy}>
-                {alertsBusy ? 'Enabling…' : '🔔 Enable load alerts'}
+                {alertsBusy ? (
+                  'Enabling…'
+                ) : (
+                  <>
+                    <IconBell size={14} className="inline-ico" />
+                    Enable load alerts
+                  </>
+                )}
               </button>
             )}
             <button className="btn-ghost" onClick={() => void load()}>↻ Refresh</button>
@@ -696,27 +737,29 @@ function DriverDashboard() {
           {docProblems(docs.items)
             .slice(0, 5)
             .map((item) => (
-              <div className="doc-alert" key={item.kind}>
-                <span className="doc-alert-mark" aria-hidden>
-                  {item.pendingReview ? '⏳' : item.status === 'EXPIRED' ? '⛔' : '⚠️'}
-                </span>
-                <div className="doc-alert-body">
-                  <strong>{item.label}</strong>
-                  <div className="muted small">
-                    {docLine(item)} · {item.reference}
-                  </div>
-                </div>
-                {/* Hidden while an upload is already with the office: sending
-                    the same document twice just moves the queue around. */}
-                {!item.pendingReview && (
-                  <button
-                    className="btn-sm doc-renew-btn"
-                    onClick={() => setRenewFor(item)}
-                  >
-                    Renew
-                  </button>
-                )}
-              </div>
+              <Notice
+                key={item.kind}
+                // Three different situations that used to share one amber
+                // paragraph: already with the office, already lapsed, and about
+                // to. They are not the same warning and must not read alike.
+                tone={item.pendingReview ? 'info' : item.status === 'EXPIRED' ? 'danger' : 'warn'}
+                mark={item.pendingReview ? <IconClock size={15} /> : undefined}
+                title={item.label}
+                detail={
+                  item.pendingReview
+                    ? `${docLine(item)}. It stops blocking you the moment they confirm it.`
+                    : `${docLine(item)} · ${item.reference}`
+                }
+                // Hidden while an upload is already with the office: sending
+                // the same document twice just moves the queue around.
+                action={
+                  item.pendingReview ? undefined : (
+                    <button className="btn-sm" onClick={() => setRenewFor(item)}>
+                      Renew
+                    </button>
+                  )
+                }
+              />
             ))}
           {/* Taken where there was no signal, still on this phone. Shown here
               rather than only in the sheet that took them: a driver who cannot
@@ -724,37 +767,35 @@ function DriverDashboard() {
           {renewals.items.length > 0 && (
             <div className="queued-block">
               {renewals.items.map((item) => (
-                <div className="doc-alert queued-row" key={item.id}>
-                  <span className="doc-alert-mark" aria-hidden>
-                    {item.blocked ? '⛔' : '📤'}
-                  </span>
-                  <div className="doc-alert-body">
-                    <strong>{item.label}</strong>
-                    <div className="muted small">
-                      {item.blocked
-                        ? `Could not send — ${item.lastError ?? 'the office refused it'}`
-                        : renewals.busy
-                          ? 'Sending to the office…'
-                          : 'Saved on your phone · sends itself when you have signal'}
-                    </div>
-                  </div>
-                  {item.blocked ? (
-                    <button
-                      className="btn-sm doc-renew-btn"
-                      onClick={() => void discardWaitingRenewal(item.id)}
-                    >
-                      Discard
-                    </button>
-                  ) : (
-                    <button
-                      className="btn-sm doc-renew-btn"
-                      disabled={renewals.busy}
-                      onClick={() => void sendWaitingRenewals({ onlyId: item.id, force: true })}
-                    >
-                      Send now
-                    </button>
-                  )}
-                </div>
+                <Notice
+                  key={item.id}
+                  tone={item.blocked ? 'danger' : 'info'}
+                  className="notice-queued"
+                  mark={item.blocked ? undefined : <IconSend size={15} />}
+                  title={item.label}
+                  detail={
+                    item.blocked
+                      ? `Could not send — ${item.lastError ?? 'the office refused it'}`
+                      : renewals.busy
+                        ? 'Sending to the office…'
+                        : 'Saved on your phone · sends itself when you have signal'
+                  }
+                  action={
+                    item.blocked ? (
+                      <button className="btn-sm" onClick={() => void discardWaitingRenewal(item.id)}>
+                        Discard
+                      </button>
+                    ) : (
+                      <button
+                        className="btn-sm"
+                        disabled={renewals.busy}
+                        onClick={() => void sendWaitingRenewals({ onlyId: item.id, force: true })}
+                      >
+                        Send now
+                      </button>
+                    )
+                  }
+                />
               ))}
             </div>
           )}
@@ -778,7 +819,11 @@ function DriverDashboard() {
       />
 
       {user?.driverId && (() => {
-        const streakJurisdiction = sameJurisdictionStreak(fuelRows, 3);
+        const fuelInsight = fuelJurisdictionInsight(fuelRows, { rates: iftaRates });
+        // Split out so a paragraph can render only when the table named a
+        // jurisdiction this driver has actually bought fuel in for less tax.
+        const fuelTax = fuelInsight?.tax ?? null;
+        const taxLower = fuelTax?.lower ?? null;
         return (
         <div className="grid grid-2">
           <div className="card">
@@ -789,11 +834,74 @@ function DriverDashboard() {
               </div>
               <FuelLogButton onLogged={() => load()} onQueued={setFuelNotice} />
             </div>
-            {streakJurisdiction && (
-              <p className="fuel-nudge">
-                ⛽ Your last {Math.min(fuelRows.length, 3)} fills were all in {regionLabel(streakJurisdiction)} —
-                fueling in a lower-IFTA jurisdiction could cut your quarterly tax bill.
-              </p>
+            {/* The old nudge said "your last 3 fills were all in Quebec —
+                fuelling in a lower-IFTA jurisdiction could cut your quarterly
+                tax bill". "3" was the length of the window it looked at rather
+                than anything about the driver, no number was attached to the
+                claim, and the advice was not true as stated: under IFTA the tax
+                follows the miles that were run, not only where the tank was
+                filled. This says what was actually bought, over what period,
+                at what price, and what would move the line. */}
+            {fuelInsight && (
+              <Notice
+                tone={fuelInsight.cheaper ? 'warn' : 'info'}
+                mark={<IconFuel size={15} />}
+                title={`Every one of your last ${fuelInsight.fills} fills was in ${regionLabel(
+                  fuelInsight.jurisdiction,
+                )}`}
+              >
+                <p className="notice-detail">
+                  <strong>{litresLabel(fuelInsight.litres)}</strong>
+                  {shortDay(fuelInsight.since) ? ` since ${shortDay(fuelInsight.since)}` : ''}
+                  {fuelInsight.perLitre !== null && fuelInsight.currency ? (
+                    <>
+                      , averaging{' '}
+                      <strong>{money(fuelInsight.perLitre, fuelInsight.currency)}/L</strong>.
+                    </>
+                  ) : (
+                    '.'
+                  )}
+                </p>
+                {fuelInsight.cheaper ? (
+                  <p className="notice-detail">
+                    Diesel you bought in {regionLabel(fuelInsight.cheaper.jurisdiction)} averaged{' '}
+                    <strong>
+                      {money(fuelInsight.cheaper.perLitre, fuelInsight.cheaper.currency)}/L
+                    </strong>{' '}
+                    against {money(fuelInsight.perLitre ?? 0, fuelInsight.cheaper.currency)} here — about{' '}
+                    <strong>{money(fuelInsight.cheaper.save, fuelInsight.cheaper.currency)}</strong> less
+                    for the same {litresLabel(fuelInsight.litres)} at the pump. That is the price, not the
+                    tax: IFTA settles the tax afterwards, so the saving holds where you also run those
+                    miles.
+                  </p>
+                ) : (
+                  <p className="notice-detail">
+                    Fuel tax is credited where you bought the fuel and charged where the miles were run,
+                    so a fill outside {regionLabel(fuelInsight.jurisdiction)} is what moves this line —
+                    and it only helps if you are also driving where that jurisdiction's rate is lower.
+                    Log every fill, including the ones you pay cash for, so the credit matches the miles.
+                  </p>
+                )}
+                {/* The pump price and the tax are two different numbers: the
+                    price is what the station charged, the rate is what the
+                    quarter is settled at, and IFTA settles it on where the
+                    miles were run. Drawn only from jurisdictions already in
+                    this driver's own history, so the comparison is about their
+                    route rather than a table of forty jurisdictions. */}
+                {fuelTax && taxLower && (
+                  <p className="notice-detail">
+                    The tax is a separate, published number:{' '}
+                    {regionLabel(fuelTax.jurisdiction)} is{' '}
+                    <strong>{centsPerLitre(fuelTax.perLitre)}</strong> against{' '}
+                    <strong>{centsPerLitre(taxLower.perLitre)}</strong> in{' '}
+                    {regionLabel(taxLower.jurisdiction)}, where you also bought fuel —{' '}
+                    {centsPerLitre(taxLower.difference)}, about{' '}
+                    <strong>{money(taxLower.save, fuelTax.currency)}</strong> on the same{' '}
+                    {litresLabel(fuelInsight.litres)}. IFTA assesses it on where the miles were
+                    run, so the rate — not the receipt — is what the quarter turns on.
+                  </p>
+                )}
+              </Notice>
             )}
             {/* Fill-ups the pump could not send: the same row the documents
                 card uses, because a driver who cannot see it waiting has no
@@ -801,49 +909,45 @@ function DriverDashboard() {
             {fuelQueue.items.length > 0 && (
               <div className="queued-block">
                 {fuelQueue.items.map((stop) => (
-                  <div className="doc-alert queued-row" key={stop.id}>
-                    <span className="doc-alert-mark" aria-hidden>
-                      {stop.blocked ? '⛔' : '📤'}
-                    </span>
-                    <div className="doc-alert-body">
-                      <strong>
-                        {regionLabel(stop.jurisdictionCode)} ·{' '}
-                        {money(stop.amountTransaction, stop.transactionCurrency)}
-                      </strong>
-                      <div className="muted small">
-                        {Number(stop.volume).toLocaleString('en-CA', { maximumFractionDigits: 1 })}{' '}
-                        {stop.unit === 'L' ? 'L' : 'gal'} · {timeAgo(stop.occurredAt)}
-                      </div>
-                      <div className="muted small">
-                        {stop.blocked
-                          ? `Could not send — ${stop.lastError ?? 'the office refused it'}`
-                          : fuelQueue.busy
-                            ? 'Sending to the office…'
-                            : 'Saved on your phone · sends itself when you have signal'}
-                      </div>
-                    </div>
-                    {stop.blocked ? (
-                      <button
-                        className="btn-sm doc-renew-btn"
-                        onClick={() => void discardWaitingFuelStop(stop.id)}
-                      >
-                        Discard
-                      </button>
-                    ) : (
-                      <button
-                        className="btn-sm doc-renew-btn"
-                        disabled={fuelQueue.busy}
-                        onClick={() => void sendWaitingFuelStops({ onlyId: stop.id, force: true })}
-                      >
-                        Send now
-                      </button>
-                    )}
-                  </div>
+                  <Notice
+                    key={stop.id}
+                    tone={stop.blocked ? 'danger' : 'info'}
+                    className="notice-queued"
+                    mark={stop.blocked ? undefined : <IconSend size={15} />}
+                    title={`${regionLabel(stop.jurisdictionCode)} · ${money(
+                      stop.amountTransaction,
+                      stop.transactionCurrency,
+                    )}`}
+                    detail={`${Number(stop.volume).toLocaleString('en-CA', {
+                      maximumFractionDigits: 1,
+                    })} ${stop.unit === 'L' ? 'L' : 'gal'} · ${timeAgo(stop.occurredAt)} · ${
+                      stop.blocked
+                        ? `could not send — ${stop.lastError ?? 'the office refused it'}`
+                        : fuelQueue.busy
+                          ? 'sending to the office…'
+                          : 'saved on your phone, sends itself when you have signal'
+                    }`}
+                    action={
+                      stop.blocked ? (
+                        <button className="btn-sm" onClick={() => void discardWaitingFuelStop(stop.id)}>
+                          Discard
+                        </button>
+                      ) : (
+                        <button
+                          className="btn-sm"
+                          disabled={fuelQueue.busy}
+                          onClick={() => void sendWaitingFuelStops({ onlyId: stop.id, force: true })}
+                        >
+                          Send now
+                        </button>
+                      )
+                    }
+                  />
                 ))}
               </div>
             )}
 
-            <FuelStopsList rows={fuelRows} />
+            <FuelStopsList rows={fuelRows.slice(0, 5)} />
           </div>
 
           <div className="card">
@@ -995,26 +1099,27 @@ function HosHoursCard({
       )}
 
       {(cycle.violations.length > 0 || cycle.warnings.length > 0) && (
-        <div className={`hos-alert ${over ? 'hos-alert-over' : 'hos-alert-warn'}`}>
-          {over ? (
-            <strong>You've hit your limit — pull over and reset.</strong>
-          ) : (
-            <strong>Getting close to your limit.</strong>
-          )}
-          <ul>
+        <Notice
+          tone={over ? 'danger' : 'warn'}
+          className="notice-spaced"
+          title={over ? 'You have hit your limit — pull over and reset' : 'Getting close to your limit'}
+        >
+          <ul className="notice-list">
             {[...cycle.violations, ...cycle.warnings].slice(0, 3).map((w) => (
               <li key={w}>{w}</li>
             ))}
           </ul>
-        </div>
+        </Notice>
       )}
 
       {breakDue && (
-        <div className="fuel-nudge hos-break">
-          ⏱ You've driven <strong>{Math.floor(drivingMins / 60)}h {drivingMins % 60}m</strong> today —{' '}
-          a 30-minute break is due after 8h of driving. Plan your stop before the log turns
-          into a violation.
-        </div>
+        <Notice
+          tone="warn"
+          className="notice-spaced"
+          mark={<IconTimer size={15} />}
+          title={`Break due — ${Math.floor(drivingMins / 60)}h ${drivingMins % 60}m driven today`}
+          detail="Eight hours of driving needs a 30-minute interruption, and it has to come before the limit rather than after it. Any single stop of 30 minutes or more counts."
+        />
       )}
 
       {daily && daily.days.length > 0 && <HosDailyStrip days={daily.days} onOpenDay={onOpenDay} />}

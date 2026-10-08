@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, getTokenUser } from '../api';
+import { IconLock } from './icons';
 import { Spinner } from './ui';
 // The feature names and the payload shape live with the plan-lock rules, so the
 // card, the board's locked tabs and the API cannot describe entitlements
@@ -117,7 +118,7 @@ export function PlanCard() {
             {locked.map((f) => (
               <li key={f}>
                 <span className="plan-lock-icon" aria-hidden>
-                  🔒
+                  <IconLock size={14} className="inline-ico" />
                 </span>{' '}
                 {featureLabel(f)}
               </li>

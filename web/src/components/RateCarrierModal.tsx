@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import { IconStar } from './icons';
 import { lockScroll } from './ui';
 
 const STARS = [1, 2, 3, 4, 5];
@@ -67,7 +68,13 @@ export function RateCarrierModal({
       <div className="modal rate-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Rate carrier">
         {done ? (
           <div className="rate-done">
-            <div className="rate-done-stars" aria-hidden>★★★★★</div>
+            {/* Five icons rather than five star characters: the characters were
+                a font, so the row measured differently on every device. */}
+            <div className="rate-done-stars" aria-hidden>
+              {STARS.map((s) => (
+                <IconStar key={s} size={26} />
+              ))}
+            </div>
             <h3>Thanks for the rating</h3>
             <p className="muted small">It shows on your loads and builds trust on the board.</p>
             <button className="btn-green btn-block" onClick={onClose}>Done</button>
@@ -92,7 +99,7 @@ export function RateCarrierModal({
                   onClick={() => setStars(s)}
                   aria-label={`${s} star${s === 1 ? '' : 's'}`}
                 >
-                  ★
+                  <IconStar size={30} />
                 </button>
               ))}
             </div>

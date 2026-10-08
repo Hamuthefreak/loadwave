@@ -98,7 +98,7 @@ export function MarketingFooter() {
             <h3 className="ld-newsletter-title">Get freight rates in your inbox</h3>
           </div>
           {done ? (
-            <p className="ld-newsletter-done">Thanks — you're on the list. 🚚</p>
+            <p className="ld-newsletter-done">Thanks — you're on the list.</p>
           ) : (
             <form className="ld-newsletter-form" onSubmit={onSubscribe}>
               <input

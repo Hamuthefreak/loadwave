@@ -3,6 +3,7 @@ import type { PrismaClient } from '@prisma/client';
 import type { EventBus } from '../../events/event-bus';
 import { EVENTS, IftaQuarterComputeRequested } from '../../events/domain-events';
 import { quarterOf, type Quarter } from '../../utils/quarters';
+import { rateTable } from './jurisdiction-rates';
 import type { FuelService, FuelTransactionInput } from '../fuel/fuel.service';
 import type { IftaService } from './ifta.service';
 import type { UserRole } from '../auth/auth.types';
@@ -80,6 +81,27 @@ const computeSchema = {
     fuelTransactions: { type: 'array', items: fuelTxSchema },
   },
 } as const;
+
+export interface IftaRateDeps {
+  /** The resolved rate table the IFTA engine is computing the quarter with. */
+  rates: Record<string, string>;
+}
+
+/**
+ * Read-only IFTA jurisdiction rates.
+ *
+ * Deliberately a separate registration from `registerIftaRoutes`, and
+ * deliberately not behind the `ifta` plan gate. The fuel warning on the driver
+ * dashboard quotes the tax difference between two jurisdictions, and a DRIVER
+ * account has no IFTA entitlement to reach the gated group with — but the
+ * rates themselves are published reference data with nothing tenant-scoped in
+ * them, so a signed-in user is the whole requirement.
+ */
+export function registerIftaRateRoutes(app: FastifyInstance, deps: IftaRateDeps): void {
+  app.get('/api/ifta/rates', { preHandler: app.authenticate }, async (_request, reply) => {
+    return reply.send(rateTable(deps.rates));
+  });
+}
 
 export function registerIftaRoutes(app: FastifyInstance, deps: IftaModuleDeps): void {
   app.post<{ Body: IftaComputeBody }>(

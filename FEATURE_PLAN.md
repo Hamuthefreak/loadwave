@@ -118,7 +118,7 @@ HST/QST rules already exist in `invoice.service.ts`).
 
 ### 3.1 Saved-search alerts actually alert — **S/M**
 Saved searches exist backend-only (`saved-search.service.ts`, no UI). Add a
-"🔔 Save & notify me on this lane" control to the board header using current
+"Save & notify me on this lane" control to the board header using current
 filters, list saved searches under Tools, and a tiny poller that compares
 `PUBLIC` loads against `SavedSearch.notify = true` filters → `notify()`
 (dead-end #2 closes). Email is already best-effort when SMTP is set.
@@ -160,7 +160,7 @@ a board link into chat/email — or a notification `link`.
 Ratings lifecycle exists (`CarrierRating`, aggregates on Tenant). After a load
 reaches DELIVERED/INVOICED, prompt the counterparty once ("How was [carrier]?")
 in-app — with the rating surfacing on their board cards (badges already show
-verified MC/USDOT; add ★ avg).
+verified MC/USDOT; add a star average).
 
 ---
 
@@ -244,7 +244,7 @@ verified MC/USDOT; add ★ avg).
   notifications — with the owner's email when a user owns the search — for loads
   newer than the per-search checkpoint, advancing `lastCheckAt` every sweep so
   nothing double-alerts. Creates now record the signed-in `userId` (previously
-  null). The board's **🔔 Save & alert me** button opens a modal that saves the
+  null). The board's **Save & alert me** button opens a modal that saves the
   current filters with alerts on, and lists existing saved searches with
   Enable/Mute and Delete. Unit-tested in `tests/unit/saved-search-alerts.test.ts`.
 
@@ -292,7 +292,7 @@ Tests to extend alongside: unit tests exist for `hos-policy` and dispatch
 transitions; add driver-scoped route tests (a driver may only see/advance their
 own loads) and a notification-on-assign test.
 
-## ✅ Done — account security suite (Sept 2026)
+## Done — account security suite (Sept 2026)
 
 - **Forgot / reset password** — `PasswordResetToken` (hashed, single-use, 1h TTL), rate-limited endpoints, session kill on reset, `/forgot-password` + `/reset-password` pages; dev prints the link until SMTP lands (`APP_URL` env).
 - **Remember me** — checkbox on sign-in; 30-day refresh TTL in `localStorage` vs 7-day `sessionStorage`; rotation preserves the policy.
@@ -304,7 +304,7 @@ own loads) and a notification-on-assign test.
 
 **Status:** 23 suites / 137 unit tests, all live-verified end-to-end (API + browser).
 
-## ✅ Done — mobile & small-screen pass (Sept 2026)
+## Done — mobile & small-screen pass (Sept 2026)
 
 - **Phone-width audit** — every route measured for horizontal overflow at 360px and 768px (iframed harness): all app pages clean, zero page-level overflow.
 - **Bottom nav** — 10+ destinations now scroll sideways instead of squashing/overflowing; duty toggle kept for drivers; safe-area padding retained.
@@ -317,7 +317,7 @@ own loads) and a notification-on-assign test.
 
 **Status:** web typecheck + build clean; verified live at 360px + 768px (ops and driver sessions) via a temporary iframe harness (removed after).
 
-## ✅ Done — driver one-tap quick action (mobile)
+## Done — driver one-tap quick action (mobile)
 
 - **Floating quick-action button on the driver dashboard** — a fixed pill above the bottom nav (≤860px), always on screen without scrolling: off duty → **Go on duty**; on duty with an assigned load → **Start trip** with the lane (`Québec → Ontario`) right on the button; on duty with nothing assigned → **Find loads** (jumps to the board). Hidden while a load is already in transit or the driver is suspended.
 - **One-tap real actions, not navigation** — the button calls the same APIs as the sidebar: `PATCH /api/drivers/me/status` and `PATCH /api/loads/:id/status` (fires the dispatcher notification). After starting a trip it flashes "Trip started — drive safe" and recontextualizes; failures show a red "try again" state.
@@ -327,14 +327,14 @@ own loads) and a notification-on-assign test.
 
 **Status:** web typecheck + build clean; verified live at phone width (638px preview): Go on duty → ACTIVE, Start trip → IN_TRANSIT + "Maria Chen started the QC → ON trip" notification, FAB recontextualized after each tap, bottom-nav toggle in sync.
 
-## ✅ Done — push alerts, daily duty log & dashboard declutter
+## Done — push alerts, daily duty log & dashboard declutter
 
 - **Web push notifications** — drivers get a browser alert the instant dispatch
   assigns a load (and on office trip updates). PushSubscription table (hashed
   keys never stored raw, pruned on 404/410), VAPID keys via env (dev keys
   generated; empty = gracefully disabled), `POST /api/push/subscribe` +
   `GET /api/push/config`, service worker (`/sw.js`) with tap-to-open, silent
-  re-sync on app start (throttled to 5 min on failure), "🔔 Enable load
+  re-sync on app start (throttled to 5 min on failure), an "Enable load
   alerts" CTA on the driver dashboard when permission is undecided.
 - **Daily duty log** — every on/off-duty flip now writes real HOS log
   segments (MANUAL ingest), and `GET /api/hos/logs/:driverId` returns a
@@ -354,7 +354,7 @@ own loads) and a notification-on-assign test.
 live-verified in the preview (paired grids, daily strip, duty→log→cycle
 chain, assign→bell pipeline). Pushed to main.
 
-## ✅ Done — ELD-style duty log detail view
+## Done — ELD-style duty log detail view
 
 - Tapping any day on the dashboard's duty strip opens a **Duty log** modal
   with the classic ELD 24-hour grid: time axis (12am→11pm), four status

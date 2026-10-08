@@ -1,3 +1,6 @@
+import type { ReactNode } from 'react';
+import { IconFlag, IconStar } from './icons';
+
 /**
  * Trust signals, in the two shapes they are needed:
  *
@@ -105,7 +108,12 @@ export function paymentChip(payment: TrustPayment): { tone: Tone; text: string }
   return { tone: 'bad', text: `${label}${suffix}` };
 }
 
-function Chip({ tone, text, title }: { tone: Tone; text: string; title?: string }) {
+/**
+ * A chip's label is a node rather than a string so the reports chip can carry
+ * its flag as an icon. The chip is already a flex row, so the icon needs no
+ * baseline nudging — the gap does the spacing.
+ */
+function Chip({ tone, text, title }: { tone: Tone; text: ReactNode; title?: string }) {
   return (
     <span className={`trust-chip ${tone}`} title={title}>
       {text}
@@ -130,7 +138,12 @@ export function TrustLine({ trust }: { trust: TrustSignals | null | undefined })
       {trust.openReports > 0 && (
         <Chip
           tone="bad"
-          text={`⚑ ${trust.openReports} report${trust.openReports === 1 ? '' : 's'}`}
+          text={
+            <>
+              <IconFlag size={11} />
+              {trust.openReports} report{trust.openReports === 1 ? '' : 's'}
+            </>
+          }
           title="Complaints filed by counterparties in the last 12 months"
         />
       )}
@@ -162,7 +175,8 @@ export function TrustPanel({
         <p className="muted small">This carrier has not published compliance details yet.</p>
         {onReport && (
           <button type="button" className="btn-ghost btn-sm trust-report" onClick={onReport}>
-            ⚑ Report this carrier
+            <IconFlag size={13} className="inline-ico" />
+            Report this carrier
           </button>
         )}
       </div>
@@ -231,7 +245,9 @@ export function TrustPanel({
           <dd>
             {trust.ratingCount > 0 && trust.ratingAvg != null ? (
               <span>
-                ★ {trust.ratingAvg.toFixed(1)} <span className="muted small">from {trust.ratingCount}</span>
+                <IconStar size={13} className="inline-ico" />
+                {trust.ratingAvg.toFixed(1)}{' '}
+                <span className="muted small">from {trust.ratingCount}</span>
               </span>
             ) : (
               <span className="muted small">No ratings yet</span>
@@ -242,7 +258,15 @@ export function TrustPanel({
           <dt>Reports</dt>
           <dd>
             {trust.openReports > 0 ? (
-              <Chip tone="bad" text={`⚑ ${trust.openReports} in the last year`} />
+              <Chip
+                tone="bad"
+                text={
+                  <>
+                    <IconFlag size={11} />
+                    {trust.openReports} in the last year
+                  </>
+                }
+              />
             ) : (
               <span className="muted small">None in the last year</span>
             )}
@@ -285,7 +309,8 @@ export function TrustPanel({
 
       {onReport && (
         <button type="button" className="btn-ghost btn-sm trust-report" onClick={onReport}>
-          ⚑ Report this carrier
+          <IconFlag size={13} className="inline-ico" />
+          Report this carrier
         </button>
       )}
     </div>

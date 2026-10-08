@@ -58,7 +58,7 @@ import { registerInvoicingRoutes } from './modules/invoicing/invoicing.routes';
 import { PrismaIftaRepo } from './modules/ifta/ifta.repo';
 import { IftaService } from './modules/ifta/ifta.service';
 import { resolveRates } from './modules/ifta/jurisdiction-rates';
-import { registerIftaRoutes } from './modules/ifta/ifta.routes';
+import { registerIftaRateRoutes, registerIftaRoutes } from './modules/ifta/ifta.routes';
 
 import { PrismaLoadBoardStore } from './modules/board/board.store';
 import { LoadBoardService } from './modules/board/board.service';
@@ -175,6 +175,7 @@ function buildBaseServices(
   prisma: PrismaClient,
   bus: EventBus,
   overrides: Partial<AppDeps>,
+  iftaRates: Record<string, string>,
 ): Omit<AppDeps, 'auth' | 'team'> {
   const geometry = overrides.geometry ?? new PostgisRouteGeometryService(prisma);
   const fx = overrides.fx ?? new PrismaFxService(prisma);
@@ -247,7 +248,7 @@ function buildBaseServices(
       new IftaService(
         new PrismaIftaRepo(prisma, geometry, overrides.fuel ?? fuel),
         bus,
-        resolveRates(env.IFTA_JURISDICTION_RATES),
+        iftaRates,
       ),
     board,
     trust,
@@ -283,7 +284,11 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   });
 
   const server = app as unknown as FastifyInstance;
-  const base = buildBaseServices(env, logger, prisma, bus, opts.deps ?? {});
+  // One resolved table, shared by the engine that computes the quarter and the
+  // read-only endpoint the driver dashboard reads. Resolving it twice would let
+  // the warning quote a rate the quarter was not filed with.
+  const iftaRates = resolveRates(env.IFTA_JURISDICTION_RATES);
+  const base = buildBaseServices(env, logger, prisma, bus, opts.deps ?? {}, iftaRates);
 
   // Same-origin deployments (nginx serves both SPA and API) need no CORS at
   // all. Set CORS_ORIGIN to a comma-separated allowlist only when the API is
@@ -351,7 +356,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
   const deps: AppDeps = { ...base, auth, team };
 
-  registerRoutes(server, deps, prisma, env);
+  registerRoutes(server, deps, prisma, env, iftaRates);
   subscribeWorkers(server, deps);
   startSchedule(deps, logger);
 
@@ -379,7 +384,13 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   return server;
 }
 
-function registerRoutes(app: FastifyInstance, deps: AppDeps, prisma: PrismaClient, env: AppEnv): void {
+function registerRoutes(
+  app: FastifyInstance,
+  deps: AppDeps,
+  prisma: PrismaClient,
+  env: AppEnv,
+  iftaRates: Record<string, string>,
+): void {
   registerAuthRoutes(app, {
     auth: deps.auth,
     email: deps.email,
@@ -413,6 +424,9 @@ function registerRoutes(app: FastifyInstance, deps: AppDeps, prisma: PrismaClien
 
   gatedFeature('fuel', (scope) => registerFuelRoutes(scope, { fuel: deps.fuel, fx: deps.fx }));
   registerInvoicingRoutes(app, { loads: deps.loads, invoices: deps.invoices, requireFeature });
+  // Ungated on purpose: the driver's fuel warning needs the published rates,
+  // and a DRIVER account holds no `ifta` entitlement. See the route's docblock.
+  registerIftaRateRoutes(app, { rates: iftaRates });
   gatedFeature('ifta', (scope) =>
     registerIftaRoutes(scope, { prisma, bus: deps.bus, fuel: deps.fuel, ifta: deps.ifta }),
   );

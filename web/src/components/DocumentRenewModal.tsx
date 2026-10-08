@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Modal } from './ui';
+import { IconCamera } from './icons';
 import { fullDate } from '../utils/format';
 import { describeAamva, kindHasBarcode, parseAamva } from '../utils/aamva';
 import { readPdf417FromImage } from '../utils/pdf417';
@@ -226,7 +227,14 @@ export function DocumentRenewModal({
               onClick={() => scanInput.current?.click()}
               disabled={scanBusy}
             >
-              {scanBusy ? 'Reading…' : '📷 Scan the back'}
+              {scanBusy ? (
+                'Reading…'
+              ) : (
+                <>
+                  <IconCamera size={15} className="inline-ico" />
+                  Scan the back
+                </>
+              )}
             </button>
             <input
               ref={scanInput}

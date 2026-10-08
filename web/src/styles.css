@@ -721,6 +721,12 @@ tfoot td {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* A grid item's automatic minimum size is its min-content width. On the
+     board that is a nowrap lane row plus a nowrap rate — around 520px — so
+     the card refused to shrink into its own track and every load pushed the
+     page ~165px wide on a phone. The card is the thing meant to fit the
+     track, so let it. */
+  min-width: 0;
   transition: border-color 0.15s ease, transform 0.15s ease;
 }
 
@@ -1260,11 +1266,11 @@ tfoot td {
   }
 
   .board-search .form-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .load-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -2099,10 +2105,15 @@ tfoot td {
   align-items: center;
   gap: 10px;
   justify-content: space-between;
+  /* The authority badge is one nowrap pill (~283px). Space-between put it on
+     the same line as the carrier name and the pair ran past the card edge on a
+     phone; wrapping drops it to its own line instead of overflowing. */
+  flex-wrap: wrap;
   font-size: 0.8rem;
 }
 
-/* Trust chip: ★ 4.6 (12) — from carriers who completed loads with this poster */
+/* Trust chip: a star, 4.6 (12) — from carriers who completed loads with this
+   poster. The star itself is an icon (components/icons.tsx), not a character. */
 .rating-chip {
   display: inline-flex;
   align-items: center;
@@ -4221,43 +4232,24 @@ html.theme-fading * {
   background: var(--red);
 }
 
-.hos-alert {
-  margin-top: 16px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid;
-  font-size: 0.85rem;
-  background: var(--panel-2);
+/* The duty-limit notice and the break notice are `Notice`s (see
+   components/Notice.tsx) and sit under the bars rather than replacing them, so
+   they carry a little more space above than a stacked row would get. */
+.notice-spaced {
+  margin-top: 14px;
 }
 
-.hos-alert strong {
-  color: var(--text);
-}
-
-.hos-alert ul {
+/* The bullets of a notice that lists what is wrong — the HOS limitations. */
+.notice-list {
   margin: 6px 0 0;
-  padding-left: 18px;
+  padding-left: 17px;
+  font-size: 0.78rem;
+  line-height: 1.5;
   color: var(--muted);
 }
 
-.hos-alert li {
+.notice-list li {
   margin: 2px 0;
-}
-
-.hos-alert-warn {
-  border-color: rgba(217, 161, 60, 0.35);
-}
-
-.hos-alert-warn strong {
-  color: var(--amber);
-}
-
-.hos-alert-over {
-  border-color: rgba(212, 103, 95, 0.4);
-}
-
-.hos-alert-over strong {
-  color: var(--red);
 }
 
 /* ---------- Cab-side fuel stops ---------- */
@@ -4855,7 +4847,12 @@ a {
   /* Forms: paired 2-up layout instead of a tall single stack — volume | total,
      jurisdiction | unit, etc. Full-width fields span both columns. */
   .form-grid {
-    grid-template-columns: 1fr 1fr;
+    /* `1fr` carries an automatic `auto` minimum, which is min-content: a form
+       field's intrinsic width (~177px) then held each column open and the row
+       ran off a 390px screen. `minmax(0, 1fr)` lets the columns — and the
+       inputs inside them, which already carry `min-width: 0` — actually
+       shrink. */
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
   }
 
@@ -4868,7 +4865,7 @@ a {
   }
 
   .board-search .form-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .trip-card .trip-head-side {
@@ -5219,8 +5216,13 @@ body.has-driver-fab .content {
   font-size: 0.9rem;
 }
 
-/* Driver-side expiry strip on the dashboard. */
-.doc-alert {
+/* One shape for everything the app has to tell somebody — an expiring document,
+   a fill-up still on the phone, a quarter fuelled in a single jurisdiction, a
+   duty clock running out (see components/Notice.tsx). The tone lives in the
+   mark's tint, not in the border or the background, so a warning reads as a
+   warning on either theme without a second set of colour decisions, and the
+   text keeps full contrast on the panel behind it. */
+.notice {
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -5231,28 +5233,89 @@ body.has-driver-fab .content {
   margin-bottom: 8px;
 }
 
-.doc-alert:last-child {
+.notice:last-child {
   margin-bottom: 0;
 }
 
-.doc-alert-mark {
+/* A tile rather than a bare glyph: the icon gets a fixed box to sit in, so a
+   one-line notice and a three-line notice start their text in the same place. */
+.notice-mark {
   flex-shrink: 0;
-  font-size: 1rem;
-  line-height: 1.3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--panel-3);
+  color: var(--muted);
 }
 
-/* The renewal button shares a line with a long document name, which is exactly
-   where a flex row overflows on a phone: the text block gives way, the button
-   never shrinks below a tap target. */
-.doc-alert-body {
+/* The text block gives way, the button never shrinks below a tap target: a long
+   document name sharing a line with an action is exactly where a flex row
+   overflows on a phone. */
+.notice-body {
   flex: 1;
   min-width: 0;
 }
 
-.doc-renew-btn {
+.notice-title {
+  display: block;
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.notice-detail {
+  margin: 3px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* The numbers are the reason the notice exists, so they keep full contrast
+   while the sentence carrying them stays quiet. */
+.notice-detail b,
+.notice-detail strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.notice-detail + .notice-detail {
+  margin-top: 5px;
+}
+
+.notice-side {
   flex-shrink: 0;
   align-self: center;
   white-space: nowrap;
+}
+
+.notice-info .notice-mark {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.notice-warn .notice-mark {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.notice-danger .notice-mark {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.notice-success .notice-mark {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+/* A write still on the phone. Dashed, because it is local and nobody at the
+   office has seen it yet — that has to be legible at a glance, before the
+   sentence is read. */
+.notice-queued {
+  border-style: dashed;
+  background: transparent;
 }
 
 /* Renewal sheet: the photo input is the one control a driver opens the camera
@@ -5295,18 +5358,19 @@ body.has-driver-fab .content {
   display: none;
 }
 
-/* A write still on the phone, waiting for signal — a renewal on the documents
-   card, a fill-up on the fuel card. It sits with the rows it belongs to but
-   reads as local — dashed rather than solid — so it is never mistaken for
-   something the office has already seen. Shared by both cards so the two cannot
-   drift into looking like different kinds of thing. */
+/* A group of queued writes — the renewal rows on the documents card, the
+   fill-up rows on the fuel card — held slightly apart from the records that
+   already reached the office. */
 .queued-block {
   margin-top: 8px;
 }
 
-.queued-row {
-  border-style: dashed;
-  background: transparent;
+/* An icon that sits *inside* a sentence rather than in a box beside it (a flag
+   before "Report this carrier", a star before a rating). An SVG on the text
+   baseline drops below the x-height, so it is nudged up to meet the words. */
+.inline-ico {
+  vertical-align: -0.15em;
+  margin-right: 5px;
 }
 
 .renew-submit {
@@ -5796,26 +5860,13 @@ body.has-driver-fab .content {
   }
 }
 
-/* IFTA jurisdiction nudge on the driver fuel card */
-.fuel-nudge {
-  margin: 10px 0 4px;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--amber-soft);
-  border: 1px solid rgba(217, 161, 60, 0.35);
-  color: var(--amber);
-  font-size: 0.8rem;
-  line-height: 1.45;
-}
-
-/* HOS 30-minute break nudge — reuses the amber nudge look inside the
-   hours card, where the eye already is when checking duty time. */
-.hos-break {
-  margin: 12px 0 2px;
-}
-
-.hos-break strong {
-  color: var(--amber);
+/* The fuel-card nudge and the duty-clock nudge are both `Notice`s now, and they
+   sit inside a card that already has its own rhythm — this gives the one above
+   the list a little more room than the stacked rows below it get. */
+.card .notice + .fuel-list,
+.card .notice + .list,
+.card .notice + .empty {
+  margin-top: 10px;
 }
 
 /* Rate-my-lane: benchmark flag next to a board load's $/mile. */
@@ -6348,11 +6399,15 @@ tr.scorecard-tr > td {
   margin: 12px 0;
 }
 
+/* The star is an icon rather than a character now, so the button is centred on
+   it instead of sized by a glyph's font-size — the same footprint on every
+   platform, which is what a rating control has to be. */
 .rate-star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   background: transparent;
-  font-size: 2rem;
-  line-height: 1;
   color: var(--faint);
   cursor: pointer;
   padding: 4px 6px;
@@ -6371,9 +6426,10 @@ tr.scorecard-tr > td {
 .rate-done { text-align: center; padding: 8px 4px 4px; }
 
 .rate-done-stars {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
   color: var(--amber);
-  font-size: 1.8rem;
-  letter-spacing: 0.2em;
   margin-bottom: 6px;
 }
 

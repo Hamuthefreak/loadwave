@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api';
 import { Badge, Empty, Lane, Modal, PageHeader, Spinner } from '../../components/ui';
+import { IconTimer } from '../../components/icons';
 import { FuelLogButton } from '../../components/FuelLogger';
 import { SignaturePad } from '../../components/SignaturePad';
 import { daysLabel, daysUntil, km, money, perMile, regionLabel, shortDate } from '../../utils/format';
@@ -355,7 +356,10 @@ function DetentionBox({
       {running ? (
         <div className="detention-box">
           <span className="detention-label">Detention</span>
-          <span className="detention-clock" role="timer">⏱ {clock}</span>
+          <span className="detention-clock" role="timer">
+            <IconTimer size={14} className="inline-ico" />
+            {clock}
+          </span>
           <button className="btn-ghost btn-sm" onClick={() => onToggle(trip)} disabled={busy}>
             {busy ? 'Stopping…' : 'Stop waiting time'}
           </button>

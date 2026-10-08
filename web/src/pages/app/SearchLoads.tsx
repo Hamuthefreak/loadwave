@@ -4,6 +4,7 @@ import { Badge, Spinner, Modal, lockScroll } from '../../components/ui';
 import { SaveSearchModal } from '../../components/SaveSearchModal';
 import { ReportModal } from '../../components/ReportModal';
 import { TrustLine, TrustPanel } from '../../components/TrustBadges';
+import { IconBell, IconChat, IconFlag, IconFuel, IconSend, IconStar } from '../../components/icons';
 import { daysLabel, daysUntil, km, money, moneyShort, perMile, regionLabel, shortDate, timeAgo } from '../../utils/format';
 import { authorityBadge } from '../../utils/authority';
 import { usePlan } from '../../utils/plan';
@@ -286,7 +287,8 @@ export default function SearchLoads() {
             setSaveOpen(true);
           }}
         >
-          🔔 Save & alert me
+          <IconBell size={14} className="inline-ico" />
+          Save & alert me
         </button>
       </div>
 
@@ -456,7 +458,8 @@ export function LoadCard({
             className="rating-chip"
             title="Average rating from carriers who completed loads with this poster"
           >
-            ★ {Number(load.postedByRatingAvg).toFixed(1)}
+            <IconStar size={13} className="inline-ico" />
+            {Number(load.postedByRatingAvg).toFixed(1)}
             <small>({load.postedByRatingCount})</small>
           </span>
         )}
@@ -682,7 +685,7 @@ function FuelNetEstimator({
   return (
     <div className="net-est">
       <button type="button" className="net-est-toggle" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        <span aria-hidden>⛽</span>
+        <span aria-hidden><IconFuel size={15} /></span>
         {net != null ? (
           <span>
             ≈ {money(net.toFixed(2), currency)} after diesel
@@ -828,7 +831,7 @@ function DetailDrawer({ load, onClose, onBook, onBooked }: { load: BoardLoad; on
         <div className="drawer-head">
           <h3>Load details</h3>
           <div className="drawer-head-actions">
-            <button className="icon-btn" title="Share this load" onClick={() => { void shareLoad(load).then((r) => { if (r === 'copied') { setCopied(true); window.setTimeout(() => setCopied(false), 1500); } }).catch(() => {}); }}>{copied ? '✓' : '📤'}</button>
+            <button className="icon-btn" title="Share this load" onClick={() => { void shareLoad(load).then((r) => { if (r === 'copied') { setCopied(true); window.setTimeout(() => setCopied(false), 1500); } }).catch(() => {}); }}>{copied ? '✓' : <IconSend size={15} />}</button>
             <button className="icon-btn" onClick={onClose}>✕</button>
           </div>
         </div>
@@ -859,13 +862,14 @@ function DetailDrawer({ load, onClose, onBook, onBooked }: { load: BoardLoad; on
             )}
             {(load.postedByRatingCount ?? 0) > 0 && load.postedByRatingAvg != null && (
               <div className="rating-chip" style={{ marginTop: 6 }}>
-                ★ {Number(load.postedByRatingAvg).toFixed(1)} from {load.postedByRatingCount} carrier rating{load.postedByRatingCount === 1 ? '' : 's'}
+                <IconStar size={13} className="inline-ico" />
+                {Number(load.postedByRatingAvg).toFixed(1)} from {load.postedByRatingCount} carrier rating{load.postedByRatingCount === 1 ? '' : 's'}
               </div>
             )}
           </div>
           <TrustPanel trust={load.postedByTrust} onReport={() => setReporting(true)} />
           {reportFiled && (
-            <p className="muted small">⚑ Report filed — platform review has it. Only the count is public.</p>
+            <p className="muted small"><IconFlag size={12} className="inline-ico" />Report filed — platform review has it. Only the count is public.</p>
           )}
         </div>
         <ReportModal
@@ -1057,7 +1061,8 @@ function NegotiationPanel({
     <div className="negotiation">
       {!open ? (
         <button type="button" className="btn-ghost btn-block" onClick={() => setOpen(true)}>
-          💬 Message {posterName} or offer a rate
+          <IconChat size={14} className="inline-ico" />
+          Message {posterName} or offer a rate
           {unread > 0 && <span className="msg-count">{unread}</span>}
         </button>
       ) : (

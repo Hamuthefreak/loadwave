@@ -42,7 +42,9 @@ interface Fakes {
   computeRequests: IftaComputeRequest[];
 }
 
-async function buildWithFakes(): Promise<{ app: Awaited<ReturnType<typeof buildApp>>; fakes: Fakes }> {
+async function buildWithFakes(
+  features: string[] = [...FEATURES],
+): Promise<{ app: Awaited<ReturnType<typeof buildApp>>; fakes: Fakes }> {
   const bus = new EventBus();
   const computeRequests: IftaComputeRequest[] = [];
   const iftaFake = {
@@ -72,7 +74,7 @@ async function buildWithFakes(): Promise<{ app: Awaited<ReturnType<typeof buildA
       // tenant plan through the fake prisma (which has no tenant delegate).
       // Granting every feature keeps these tests about IFTA, not billing.
       billing: {
-        state: jest.fn(async () => ({ features: [...FEATURES], effectivePlan: 'PRO' })),
+        state: jest.fn(async () => ({ features, effectivePlan: 'PRO' })),
       } as never,
     },
   });
@@ -81,6 +83,11 @@ async function buildWithFakes(): Promise<{ app: Awaited<ReturnType<typeof buildA
 
 function authToken(app: Awaited<ReturnType<typeof buildApp>>, tenantId: string): string {
   const user: JwtUser = { sub: 'u1', tenantId, roles: ['ADMIN'], driverId: null, type: 'access' };
+  return app.jwt.sign(user);
+}
+
+function driverToken(app: Awaited<ReturnType<typeof buildApp>>, tenantId: string): string {
+  const user: JwtUser = { sub: 'u2', tenantId, roles: ['DRIVER'], driverId: 'driver-1', type: 'access' };
   return app.jwt.sign(user);
 }
 
@@ -182,6 +189,50 @@ describe('POST /api/ifta/compute', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(fakes.ifta.getSummaries).toHaveBeenCalledWith('tenant-a', '2026-Q1' as Quarter, undefined);
+    await app.close();
+  });
+});
+
+/**
+ * The rate table is deliberately outside the `ifta` plan gate: the driver's
+ * fuel warning quotes it, and a DRIVER account holds no IFTA entitlement. These
+ * tests pin that down from both sides — the driver can read the rates, and still
+ * cannot reach the gated group.
+ */
+describe('GET /api/ifta/rates', () => {
+  it('serves the published rates to a driver with no IFTA entitlement', async () => {
+    const { app } = await buildWithFakes([]);
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/ifta/rates',
+      headers: { authorization: `Bearer ${driverToken(app, 'tenant-a')}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { currency: string; volumeUnit: string; rates: Record<string, string> };
+    expect(body).toMatchObject({ currency: 'CAD', volumeUnit: 'L' });
+    // The default table, since this test env sets no IFTA_JURISDICTION_RATES.
+    expect(body.rates.QC).toBe('0.197');
+    expect(body.rates.ON).toBe('0.143');
+    await app.close();
+  });
+
+  it('still refuses that same driver the gated IFTA endpoints', async () => {
+    const { app } = await buildWithFakes([]);
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/ifta/summaries?quarter=2026-Q1',
+      headers: { authorization: `Bearer ${driverToken(app, 'tenant-a')}` },
+    });
+
+    expect(res.statusCode).toBe(402);
+    await app.close();
+  });
+
+  it('rejects unauthenticated requests', async () => {
+    const { app } = await buildWithFakes([]);
+    const res = await app.inject({ method: 'GET', url: '/api/ifta/rates' });
+    expect(res.statusCode).toBe(401);
     await app.close();
   });
 });

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api, fetchFile, saveBlob } from '../../api';
 import { Badge, Empty, Lane, PageHeader } from '../../components/ui';
+import { IconStar } from '../../components/icons';
 import { SignaturePad } from '../../components/SignaturePad';
 import DispatchModal, { type DispatchLoad } from '../../components/DispatchModal';
 import { LoadDocumentsModal } from '../../components/LoadDocumentsModal';
@@ -377,7 +378,7 @@ function MyLoadsTab() {
                           </button>
                           <button className="btn-sm" onClick={() => setInvoiceFor(l)}>Create invoice</button>
                           {l.marketplaceStatus === 'BOOKED' && (
-                            <button className="btn-sm" title="Rate the carrier that booked this load" onClick={() => setRateFor(l)}>★ Rate</button>
+                            <button className="btn-sm" title="Rate the carrier that booked this load" onClick={() => setRateFor(l)}><IconStar size={13} className="inline-ico" />Rate</button>
                           )}
                         </>
                       )}

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import QRCode from 'qrcode';
 import { api, purgeOfflineCache, setTokens } from '../api';
+import { IconKey, IconLock, IconShield } from '../components/icons';
 import { clearPendingQueues } from '../pending-store';
 
 interface AuthResponse {
@@ -366,7 +367,9 @@ export default function SignIn() {
 
           {mode === 'signin' && step === 'code' && (
             <form onSubmit={submitCode} className="twofactor-screen">
-              <div className="twofactor-icon" aria-hidden="true">🔐</div>
+              <div className="twofactor-icon" aria-hidden="true">
+                <IconLock size={22} />
+              </div>
               <h3>Two-step verification</h3>
               <p className="ld-muted small">
                 Enter the 6-digit code from your authenticator app{email ? ` for ${email}` : ''}.
@@ -403,7 +406,9 @@ export default function SignIn() {
 
           {mode === 'signin' && step === 'setup' && forcedSetup && (
             <div className="twofactor-screen">
-              <div className="twofactor-icon" aria-hidden="true">🛡️</div>
+              <div className="twofactor-icon" aria-hidden="true">
+                <IconShield size={22} />
+              </div>
               <h3>Your carrier requires two-factor authentication</h3>
               <p className="ld-muted small">
                 Office accounts sign in with an extra code. Set it up now — it takes 30 seconds
@@ -452,7 +457,9 @@ export default function SignIn() {
 
           {mode === 'signin' && step === 'codes' && recoveryCodes && (
             <div className="twofactor-screen">
-              <div className="twofactor-icon" aria-hidden="true">🔑</div>
+              <div className="twofactor-icon" aria-hidden="true">
+                <IconKey size={22} />
+              </div>
               <h3>Your recovery codes</h3>
               <div className="alert alert-warn" style={{ textAlign: 'left' }}>
                 <strong>Save these now — they're shown only once.</strong> Each code signs you in a
