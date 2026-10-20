@@ -339,6 +339,20 @@ html[data-theme='light'] .ld-pill-orange {
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+}
+
+/* A release marker, not a badge: inherited colour, small, low contrast. */
+.ld-version {
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  user-select: all;
+}
+
+/* The legal row already sits at the muted footer colour; a step lighter keeps
+   the version readable without turning it into a badge. */
+.ld-legal .ld-version {
+  color: #8a8a8a;
 }/* ---------- Responsive ---------- */
 
 @media (max-width: 1000px) {
@@ -841,6 +855,11 @@ min-height: 100vh;
 .ld-auth-back a {
   color: var(--body);
   text-decoration: underline;
+}
+
+.ld-auth-version {
+  display: block;
+  text-align: center;
 }
 
 .ld-auth-card .tabs {

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { APP_VERSION } from '../version';
 
 /**
  * The frame every auth screen sits in.
@@ -40,6 +41,7 @@ export default function AuthLayout({ hero, children }: AuthLayoutProps) {
           <p className="small ld-auth-back">
             <Link to="/">Back to homepage</Link>
           </p>
+          <span className="ld-version ld-auth-version">v{APP_VERSION}</span>
         </main>
       </div>
     </div>

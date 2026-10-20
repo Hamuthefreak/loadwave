@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-
 import { getToken, signOut } from './api';
 import HomePage from './pages/marketing/HomePage';
 import ThemeFab from './components/ThemeFab';
+import AvailabilityGate from './components/AvailabilityGate';
 
 // Everything except the homepage is code-split so the marketing site loads fast;
 // the TMS app chunks only download once you sign in and open that section.
@@ -139,6 +140,7 @@ export default function App() {
       <ScrollToHash />
       <Suspense fallback={<RouteFallback />}>
       <ErrorBoundary>
+      <AvailabilityGate>
       <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/carrier" element={<RoleLanding role="carrier" />} />
@@ -181,6 +183,7 @@ export default function App() {
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </AvailabilityGate>
       </ErrorBoundary>
       <ThemeFabForRoute />
       </Suspense>

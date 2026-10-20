@@ -1508,6 +1508,15 @@ tfoot td {
   padding-top: 14px;
 }
 
+/* Release marker at the very bottom of the sidebar — quiet by design. */
+.side-version {
+  color: var(--muted);
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
 .side-theme {
   display: flex;
   align-items: center;

@@ -27,6 +27,11 @@ export interface AppEnv {
   CORS_ORIGIN: string;
   /** Public app base URL used in emailed links (password reset, invites). */
   APP_URL: string;
+  /**
+   * IP → country lookup for the availability gate. `{ip}` is replaced with
+   * the visitor's address. Empty disables the lookup, which fails open.
+   */
+  GEOIP_URL: string;
   /** Web Push VAPID keys — empty disables push delivery (bell still works). */
   VAPID_PUBLIC_KEY: string;
   VAPID_PRIVATE_KEY: string;
@@ -100,6 +105,10 @@ const schema = {
     DIAGNOSTICS_KEY_FILE: { type: 'string', default: '' },
     CORS_ORIGIN: { type: 'string', default: '' },
     APP_URL: { type: 'string', default: 'http://localhost:5173' },
+    GEOIP_URL: {
+      type: 'string',
+      default: 'https://ipwho.is/{ip}?fields=success,country_code',
+    },
     VAPID_PUBLIC_KEY: { type: 'string', default: '' },
     VAPID_PRIVATE_KEY: { type: 'string', default: '' },
     VAPID_SUBJECT: { type: 'string', default: 'mailto:ops@loadwave.app' },

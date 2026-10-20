@@ -38,6 +38,13 @@ export function renderRoute(ui: ReactNode, path = '/'): void {
 
 export const view = () => container;
 
+/** Let a resolved promise-driven effect run and re-render. */
+export async function settle(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
 export function click(element: Element): void {
   act(() => {
     element.dispatchEvent(new MouseEvent('click', { bubbles: true }));

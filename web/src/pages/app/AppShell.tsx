@@ -8,6 +8,7 @@ import { setDuty, useDuty } from '../../duty-store';
 import { syncPushSubscription } from '../../push';
 import { clearPendingQueues, startPendingQueues } from '../../pending-store';
 import { timeAgo } from '../../utils/format';
+import { APP_VERSION } from '../../version';
 
 interface Tenant {
   id: string;
@@ -554,6 +555,7 @@ export default function AppShell({ onSignOut }: { onSignOut: () => void }) {
           <button className="nav-link logout" onClick={() => setConfirmSignOut(true)}>
             Sign out
           </button>
+          <small className="side-version">v{APP_VERSION}</small>
         </div>
       </aside>
 

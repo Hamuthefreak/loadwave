@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import ThemeToggle from './ThemeToggle';
+import { APP_VERSION } from '../version';
 
 export function MarketingNav() {
   const [scrolled, setScrolled] = useState(false);
@@ -131,6 +132,7 @@ export function MarketingFooter() {
       </div>
       <div className="ld-wrap ld-legal">
         <span>© {new Date().getFullYear()} Loadwave. All rights reserved.</span>
+        <span className="ld-version">v{APP_VERSION}</span>
       </div>
     </footer>
   );

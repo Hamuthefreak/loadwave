@@ -49,6 +49,7 @@ export default function SignIn() {
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [currency, setCurrency] = useState<'CAD' | 'USD'>('CAD');
+  const [country, setCountry] = useState<'CA' | 'US'>('CA');
   const [jurisdiction, setJurisdiction] = useState('QC');
   const [mcNumber, setMcNumber] = useState('');
   const [usdotNumber, setUsdotNumber] = useState('');
@@ -294,20 +295,40 @@ export default function SignIn() {
                 />
                 <div className="form-grid">
                   <label>
+                    Country
+                    <select
+                      value={country}
+                      onChange={(e) => {
+                        const next = e.target.value as 'CA' | 'US';
+                        setCountry(next);
+                        setJurisdiction(next === 'CA' ? 'QC' : 'NY');
+                        setCurrency(next === 'CA' ? 'CAD' : 'USD');
+                      }}
+                    >
+                      <option value="CA">Canada</option>
+                      <option value="US">United States</option>
+                    </select>
+                  </label>
+                  <label>
                     Base currency
                     <select value={currency} onChange={(e) => setCurrency(e.target.value as 'CAD' | 'USD')}>
                       <option value="CAD">CAD — Canadian $</option>
                       <option value="USD">USD — US $</option>
                     </select>
                   </label>
-                  <label>
-                    Home jurisdiction
-                    <select value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value)}>
-                      {PROVINCES.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
-                      {US_STATES.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
-                    </select>
-                  </label>
                 </div>
+                <label>
+                  Home jurisdiction
+                  <select value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value)}>
+                    {(country === 'CA' ? PROVINCES : US_STATES).map((r) => (
+                      <option key={r.code} value={r.code}>{r.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <p className="ld-muted small" style={{ margin: 0 }}>
+                  Company accounts are currently open to Canadian and US carriers. Loadwave files
+                  under each country&rsquo;s rules from the company&rsquo;s home jurisdiction.
+                </p>
                 <div className="form-grid">
                   <label>
                     MC number <span className="small">(optional)</span>

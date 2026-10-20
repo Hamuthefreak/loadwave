@@ -94,6 +94,11 @@ import { registerTruckRoutes } from './modules/trucks/truck.routes';
 
 import { PrismaGeoService } from './modules/geo/geo.service';
 import { registerGeoRoutes } from './modules/geo/geo.routes';
+import { GeoIpLookup } from './modules/availability/geoip.service';
+import {
+  availabilityGuard,
+  registerAvailabilityRoutes,
+} from './modules/availability/availability.routes';
 
 import { PrismaMarketService } from './modules/market/market.service';
 import { registerMarketRoutes } from './modules/market/market.routes';
@@ -420,6 +425,13 @@ function registerRoutes(
   env: AppEnv,
   iftaRates: Record<string, string>,
 ): void {
+  // Availability is checked before anything that could create an account. The
+  // lookup is shared with GET /api/availability so a visitor's country costs
+  // at most one provider request per day.
+  const geoip = new GeoIpLookup({ url: env.GEOIP_URL });
+  app.addHook('preHandler', availabilityGuard(geoip));
+  registerAvailabilityRoutes(app, { geoip });
+
   registerAuthRoutes(app, {
     auth: deps.auth,
     email: deps.email,
