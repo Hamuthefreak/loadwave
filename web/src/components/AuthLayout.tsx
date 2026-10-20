@@ -20,10 +20,12 @@ import { APP_VERSION } from '../version';
 interface AuthLayoutProps {
   /** Marketing panel shown beside the form on wide screens. */
   hero?: ReactNode;
+  /** Off for screens where the homepage is not somewhere the visitor can go. */
+  backLink?: boolean;
   children: ReactNode;
 }
 
-export default function AuthLayout({ hero, children }: AuthLayoutProps) {
+export default function AuthLayout({ hero, backLink = true, children }: AuthLayoutProps) {
   return (
     <div className="ld-mkt ld-auth-wrap">
       <div className="ld-auth-shell" data-layout={hero ? 'split' : 'solo'}>
@@ -38,9 +40,11 @@ export default function AuthLayout({ hero, children }: AuthLayoutProps) {
 
           {children}
 
-          <p className="small ld-auth-back">
-            <Link to="/">Back to homepage</Link>
-          </p>
+          {backLink ? (
+            <p className="small ld-auth-back">
+              <Link to="/">Back to homepage</Link>
+            </p>
+          ) : null}
           <span className="ld-version ld-auth-version">v{APP_VERSION}</span>
         </main>
       </div>

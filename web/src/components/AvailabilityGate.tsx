@@ -81,7 +81,7 @@ export default function AvailabilityGate({
 
   if (blocked) {
     return (
-      <AuthLayout>
+      <AuthLayout backLink={false}>
         <h1 className="ld-auth-title">{UNAVAILABLE_MESSAGE}</h1>
         <p className="ld-muted small" style={{ lineHeight: 1.6, margin: 0 }}>
           Loadwave is available in North America and Europe. If you are using a VPN, turn it off

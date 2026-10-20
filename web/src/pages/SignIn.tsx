@@ -326,8 +326,7 @@ export default function SignIn() {
                   </select>
                 </label>
                 <p className="ld-muted small" style={{ margin: 0 }}>
-                  Company accounts are currently open to Canadian and US carriers. Loadwave files
-                  under each country&rsquo;s rules from the company&rsquo;s home jurisdiction.
+                  Company accounts are currently open to Canadian and US carriers.
                 </p>
                 <div className="form-grid">
                   <label>

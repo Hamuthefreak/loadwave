@@ -33,6 +33,8 @@ describe('AvailabilityGate', () => {
 
     expect(view().textContent).toContain(UNAVAILABLE_MESSAGE);
     expect(view().textContent).not.toContain('the product');
+    // The homepage is gated too, so offering "Back to homepage" would loop.
+    expect(view().querySelector('.ld-auth-back')).toBeNull();
   });
 
   it.each([
