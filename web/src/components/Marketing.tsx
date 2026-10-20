@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import ThemeToggle from './ThemeToggle';
 
@@ -79,43 +79,16 @@ export function MarketingNav() {
   );
 }
 
+/**
+ * The footer used to open with a newsletter form that answered "you're on the
+ * list" and posted nowhere: no endpoint, no list, no way to unsubscribe
+ * because there was nothing to be subscribed to. A form that lies is worse
+ * than a form that is missing, so it is gone until there is somewhere for the
+ * address to go.
+ */
 export function MarketingFooter() {
-  const [email, setEmail] = useState('');
-  const [done, setDone] = useState(false);
-
-  const onSubscribe = (e: FormEvent) => {
-    e.preventDefault();
-    if (!email) return;
-    setDone(true);
-  };
-
   return (
     <footer className="ld-footer">
-      <div className="ld-wrap">
-        <div className="ld-newsletter">
-          <div>
-            <span className="ld-kicker ld-kicker-light">Market rates weekly</span>
-            <h3 className="ld-newsletter-title">Get freight rates in your inbox</h3>
-          </div>
-          {done ? (
-            <p className="ld-newsletter-done">Thanks — you're on the list.</p>
-          ) : (
-            <form className="ld-newsletter-form" onSubmit={onSubscribe}>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@company.com"
-                aria-label="Email address"
-              />
-              <button type="submit" className="ld-pill ld-pill-orange">
-                Subscribe
-              </button>
-            </form>
-          )}
-        </div>
-      </div>
       <div className="ld-wrap ld-footer-grid">
         <div className="ld-footer-brand">
           <div className="ld-brand ld-brand-light">
@@ -153,7 +126,7 @@ export function MarketingFooter() {
           <Link to="/signin">Sign in</Link>
           <Link to="/signin?mode=signup">Create account</Link>
           <Link to="/pricing">See pricing</Link>
-          <Link to="/#locations">Coverage map</Link>
+          <Link to="/#board">The load board</Link>
         </div>
       </div>
       <div className="ld-wrap ld-legal">

@@ -87,6 +87,28 @@ function RequireAuth({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Routes whose header already carries a theme toggle. The floating button is
+ * for the screens that have no header of their own (sign-in, diagnostics); on
+ * a marketing page it would sit in the corner as a second, identical control.
+ */
+const ROUTES_WITH_OWN_THEME_TOGGLE = new Set([
+  '/',
+  '/carrier',
+  '/broker',
+  '/shipper',
+  '/pricing',
+  '/faq',
+  '/privacy',
+  '/terms',
+  '/contact',
+]);
+
+function ThemeFabForRoute() {
+  const { pathname } = useLocation();
+  return ROUTES_WITH_OWN_THEME_TOGGLE.has(pathname) ? null : <ThemeFab />;
+}
+
 function ScrollToHash() {
   const location = useLocation();
   useEffect(() => {
@@ -160,7 +182,7 @@ export default function App() {
       <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       </ErrorBoundary>
-      <ThemeFab />
+      <ThemeFabForRoute />
       </Suspense>
     </>
   );

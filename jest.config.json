@@ -1,31 +1,54 @@
 {
-  "preset": "ts-jest",
-  "testEnvironment": "node",
-  "roots": ["<rootDir>/tests"],
-  "testMatch": ["**/*.test.ts"],
-  "moduleFileExtensions": ["ts", "js", "json"],
-  "moduleNameMapper": {
-    "^@/(.*)$": "<rootDir>/src/$1",
-    "^@tests/(.*)$": "<rootDir>/tests/$1"
-  },
-  "clearMocks": true,
-  "collectCoverageFrom": [
-    "src/**/*.ts",
-    "!src/main.ts",
-    "!src/**/index.ts",
-    "!src/**/types.ts"
-  ],
-  "transform": {
-    "^.+\\.ts$": [
-      "ts-jest",
-      {
-        "diagnostics": {
-          "ignoreCodes": [
-            2578,
-            151002
-          ]
-        }
+  "projects": [
+    {
+      "displayName": "node",
+      "preset": "ts-jest",
+      "testEnvironment": "node",
+      "roots": ["<rootDir>/tests"],
+      "testMatch": ["**/*.test.ts"],
+      "moduleFileExtensions": ["ts", "js", "json"],
+      "moduleNameMapper": {
+        "^@/(.*)$": "<rootDir>/src/$1",
+        "^@tests/(.*)$": "<rootDir>/tests/$1"
+      },
+      "clearMocks": true,
+      "collectCoverageFrom": [
+        "src/**/*.ts",
+        "!src/main.ts",
+        "!src/**/index.ts",
+        "!src/**/types.ts"
+      ],
+      "transform": {
+        "^.+\\.ts$": [
+          "ts-jest",
+          {
+            "diagnostics": {
+              "ignoreCodes": [2578, 151002]
+            }
+          }
+        ]
       }
-    ]
-  }
+    },
+    {
+      "displayName": "web",
+      "preset": "ts-jest",
+      "testEnvironment": "jsdom",
+      "roots": ["<rootDir>/web/tests"],
+      "testMatch": ["**/*.test.tsx"],
+      "setupFiles": ["<rootDir>/web/tests/setup.ts"],
+      "moduleFileExtensions": ["ts", "tsx", "js", "jsx", "json"],
+      "clearMocks": true,
+      "transform": {
+        "^.+\\.tsx?$": [
+          "ts-jest",
+          {
+            "tsconfig": "<rootDir>/web/tsconfig.test.json",
+            "diagnostics": {
+              "ignoreCodes": [2578, 151002]
+            }
+          }
+        ]
+      }
+    }
+  ]
 }

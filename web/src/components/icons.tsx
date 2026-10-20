@@ -231,3 +231,34 @@ export function IconTruck({ size, className }: IconProps) {
     </Glyph>
   );
 }
+
+/** A place: a pickup, a delivery, a facility on a lane. */
+export function IconPin({ size, className }: IconProps) {
+  return (
+    <Glyph size={size} className={className}>
+      <path d="M12 20.7s6.4-6.1 6.4-10.5a6.4 6.4 0 1 0-12.8 0c0 4.4 6.4 10.5 6.4 10.5Z" />
+      <circle cx="12" cy="10.2" r="2.3" />
+    </Glyph>
+  );
+}
+
+/** Forward: the next step, the next screen, the load after this one. */
+export function IconArrowRight({ size, className }: IconProps) {
+  return (
+    <Glyph size={size} className={className}>
+      <path d="M4.6 12h14.2" />
+      <path d="m13.5 6.7 5.3 5.3-5.3 5.3" />
+    </Glyph>
+  );
+}
+
+/** Money owed and money paid: an invoice, a settlement, a fuel receipt. */
+export function IconReceipt({ size, className }: IconProps) {
+  return (
+    <Glyph size={size} className={className}>
+      <path d="M5.6 3.6h12.8v16.8l-2.6-1.7-2.5 1.7-2.6-1.7-2.5 1.7-2.6-1.7Z" />
+      <path d="M9 8.2h6" />
+      <path d="M9 12h6" />
+    </Glyph>
+  );
+}

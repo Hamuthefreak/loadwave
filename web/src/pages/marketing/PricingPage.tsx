@@ -1,67 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MarketingLayout } from '../../components/Marketing';
-
-interface Plan {
-  name: string;
-  tagline: string;
-  price: string;
-  period: string;
-  highlight?: boolean;
-  topFeatures: string[];
-  full: Record<string, boolean>;
-}
-
-const FEATURE_ROWS: Array<{ label: string; key: string }> = [
-  { label: 'Live load board', key: 'board' },
-  { label: 'One-tap load booking', key: 'book' },
-  { label: 'Post capacity / trucks', key: 'trucks' },
-  { label: 'Private network loads', key: 'network' },
-  { label: 'Rate insights & market maps', key: 'rates' },
-  { label: 'Load comparison tool', key: 'compare' },
-  { label: 'Route & trip planning', key: 'route' },
-  { label: 'Invoicing with GST/HST/QST', key: 'invoicing' },
-  { label: 'Fuel logging', key: 'fuel' },
-  { label: 'IFTA quarterly summaries', key: 'ifta' },
-  { label: 'Mobile app (phone + tablet)', key: 'mobile' },
-];
-
-const PLANS: Plan[] = [
-  {
-    name: 'Solo',
-    tagline: 'For one owner-operator.',
-    price: '$0',
-    period: 'while in early access',
-    topFeatures: ['Live load board', 'Post your truck', 'Fuel & IFTA', 'Phone + tablet'],
-    full: {
-      board: true, book: true, trucks: true, network: false, rates: false, compare: false,
-      route: false, invoicing: false, fuel: true, ifta: true, mobile: true,
-    },
-  },
-  {
-    name: 'Pro',
-    tagline: 'For owner-ops & small fleets.',
-    price: '$49',
-    period: '/mo after trial',
-    highlight: true,
-    topFeatures: ['Everything in Solo', 'Invoicing & taxes', 'Load comparison', 'Rate insights'],
-    full: {
-      board: true, book: true, trucks: true, network: true, rates: true, compare: true,
-      route: true, invoicing: true, fuel: true, ifta: true, mobile: true,
-    },
-  },
-  {
-    name: 'Fleet',
-    tagline: 'For dispatchers running 3+ trucks.',
-    price: '$149',
-    period: '/mo after trial',
-    topFeatures: ['Everything in Pro', 'Multi-driver HOS', 'Route & trip planning', 'Priority support'],
-    full: {
-      board: true, book: true, trucks: true, network: true, rates: true, compare: true,
-      route: true, invoicing: true, fuel: true, ifta: true, mobile: true,
-    },
-  },
-];
+import { FEATURE_ROWS, PLANS } from './plans';
 
 export default function PricingPage() {
   const [showFull, setShowFull] = useState(false);

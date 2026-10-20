@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import AuthLayout from '../components/AuthLayout';
 
 interface ForgotResponse {
   ok: boolean;
@@ -32,15 +33,8 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="ld-mkt ld-auth-wrap">
-      <div className="ld-auth-card ld-auth-solo">
-        <div className="ld-auth-brand" style={{ justifyContent: 'center' }}>
-          <span className="ld-wordmark" style={{ fontSize: '1.15rem' }}>
-            Loadwave<span className="ld-wordmark-dot">.</span>
-          </span>
-        </div>
-
-        {done ? (
+    <AuthLayout>
+      {done ? (
           <>
             <h1 className="ld-auth-title">Check your inbox</h1>
             <p className="ld-muted small" style={{ lineHeight: 1.6, margin: 0 }}>
@@ -102,12 +96,6 @@ export default function ForgotPassword() {
           </>
         )}
 
-        <p className="small" style={{ textAlign: 'center', margin: 0 }}>
-          <Link to="/" style={{ color: 'var(--body)', textDecoration: 'underline' }}>
-            Back to homepage
-          </Link>
-        </p>
-      </div>
-    </div>
+    </AuthLayout>
   );
 }

@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
+import AuthLayout from '../components/AuthLayout';
+import PasswordField from '../components/PasswordField';
 
 export default function ResetPassword() {
   const [params] = useSearchParams();
@@ -8,7 +10,6 @@ export default function ResetPassword() {
 
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
-  const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
@@ -39,15 +40,8 @@ export default function ResetPassword() {
   };
 
   return (
-    <div className="ld-mkt ld-auth-wrap">
-      <div className="ld-auth-card ld-auth-solo">
-        <div className="ld-auth-brand" style={{ justifyContent: 'center' }}>
-          <span className="ld-wordmark" style={{ fontSize: '1.15rem' }}>
-            Loadwave<span className="ld-wordmark-dot">.</span>
-          </span>
-        </div>
-
-        {done ? (
+    <AuthLayout>
+      {done ? (
           <>
             <h1 className="ld-auth-title">Password updated</h1>
             <p className="ld-muted small" style={{ lineHeight: 1.6, margin: 0 }}>
@@ -78,43 +72,25 @@ export default function ResetPassword() {
 
             <form onSubmit={submit} style={{ display: 'contents' }}>
               <div className="ld-auth-fields">
-                <label>
-                  New password
-                  <span className="pw-wrap">
-                    <input
-                      type={showPw ? 'text' : 'password'}
-                      required
-                      minLength={8}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      autoComplete="new-password"
-                      autoFocus
-                    />
-                    <button
-                      type="button"
-                      className="pw-toggle"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => setShowPw((s) => !s)}
-                      aria-label={showPw ? 'Hide password' : 'Show password'}
-                      tabIndex={-1}
-                    >
-                      {showPw ? 'Hide' : 'Show'}
-                    </button>
-                  </span>
-                </label>
-                <label>
-                  Confirm new password
-                  <input
-                    type={showPw ? 'text' : 'password'}
-                    required
-                    minLength={8}
-                    value={confirm}
-                    onChange={(e) => setConfirm(e.target.value)}
-                    placeholder="••••••••"
-                    autoComplete="new-password"
-                  />
-                </label>
+                <PasswordField
+                  label="New password"
+                  required
+                  minLength={8}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  autoComplete="new-password"
+                  autoFocus
+                />
+                <PasswordField
+                  label="Confirm new password"
+                  required
+                  minLength={8}
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  placeholder="••••••••"
+                  autoComplete="new-password"
+                />
               </div>
 
               {error && <div className="alert alert-error">{error}</div>}
@@ -126,12 +102,6 @@ export default function ResetPassword() {
           </>
         )}
 
-        <p className="small" style={{ textAlign: 'center', margin: 0 }}>
-          <Link to="/" style={{ color: 'var(--body)', textDecoration: 'underline' }}>
-            Back to homepage
-          </Link>
-        </p>
-      </div>
-    </div>
+    </AuthLayout>
   );
 }

@@ -2,7 +2,9 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import QRCode from 'qrcode';
 import { api, purgeOfflineCache, setTokens } from '../api';
+import AuthLayout from '../components/AuthLayout';
 import { IconKey, IconLock, IconShield } from '../components/icons';
+import PasswordField from '../components/PasswordField';
 import { clearPendingQueues } from '../pending-store';
 
 interface AuthResponse {
@@ -53,7 +55,6 @@ export default function SignIn() {
 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [showPw, setShowPw] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [step, setStep] = useState<Step>('creds');
   const [twoFactorToken, setTwoFactorToken] = useState<string | null>(null);
@@ -63,8 +64,6 @@ export default function SignIn() {
   const [forcedQr, setForcedQr] = useState<string | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
   const [verified, setVerified] = useState<AuthResponse | null>(null);
-
-  const pwProps = { show: showPw, onToggle: () => setShowPw((s) => !s) };
 
   // Friendly, branded validation instead of the browser's raw bubble text
   // (someone typing "1" as their email gets a sentence they can act on).
@@ -79,19 +78,6 @@ export default function SignIn() {
 
   const emailCheck = vmsg('Enter a valid email address — like you@carrier.ca');
   const passwordCheck = vmsg('Your password needs at least 8 characters.');
-
-  const toggleBtn = (visible: boolean, toggle: () => void) => (
-    <button
-      type="button"
-      className="pw-toggle"
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={toggle}
-      aria-label={visible ? 'Hide password' : 'Show password'}
-      tabIndex={-1}
-    >
-      {visible ? 'Hide' : 'Show'}
-    </button>
-  );
 
   const finish = (res: AuthResponse) => {
     setTokens(res.tokens.accessToken, res.tokens.refreshToken, rememberMe);
@@ -205,9 +191,9 @@ export default function SignIn() {
   };
 
   return (
-    <div className="ld-mkt ld-auth-wrap">
-      <div className="ld-auth-shell">
-        <div className="ld-auth-hero">
+    <AuthLayout
+      hero={
+        <>
           <div className="ld-brand ld-brand-light">
             <span className="ld-wordmark">Loadwave.</span>
           </div>
@@ -222,14 +208,9 @@ export default function SignIn() {
             <span><i>✓</i> Invoices, fuel and IFTA in one place</span>
             <span><i>✓</i> Carrier authority status on every card</span>
           </div>
-        </div>
-
-        <div className="ld-auth-card">
-          <div className="ld-auth-brand">
-            <span className="ld-wordmark" style={{ fontSize: '1.15rem' }}>
-              Loadwave<span className="ld-wordmark-dot">.</span>
-            </span>
-          </div>
+        </>
+      }
+    >
           {mode === 'invite' && (
             <p className="small" style={{ margin: '0 0 14px', lineHeight: 1.5 }}>
               <strong>You've been invited to join a carrier team.</strong> Finish creating your
@@ -268,13 +249,14 @@ export default function SignIn() {
                   Email
                   <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ops@carrier.ca" autoComplete="email" {...emailCheck} />
                 </label>
-                <label>
-                  Password
-                  <span className="pw-wrap">
-                    <input type={showPw ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
-                    {toggleBtn(showPw, pwProps.onToggle)}
-                  </span>
-                </label>
+                <PasswordField
+                  label="Password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                />
                 {mode === 'signin' && (
                   <p className="small" style={{ margin: '-6px 0 0', textAlign: 'right' }}>
                     <Link to="/forgot-password" style={{ color: 'var(--body)' }}>
@@ -293,20 +275,23 @@ export default function SignIn() {
                   Email
                   <input type="email" required value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="you@carrier.ca" autoComplete="email" {...emailCheck} />
                 </label>
-                <label>
-                  Password
-                  <span className="small">
-                    {newPassword.length === 0
+                <PasswordField
+                  label="Password"
+                  hint={
+                    newPassword.length === 0
                       ? 'At least 8 characters.'
                       : newPassword.length < 8
                         ? `${8 - newPassword.length} more character${8 - newPassword.length === 1 ? '' : 's'} to go…`
-                        : '✓ Good to go.'}
-                  </span>
-                  <span className="pw-wrap">
-                    <input type={showPw ? 'text' : 'password'} required minLength={8} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="••••••••" autoComplete="new-password" {...passwordCheck} />
-                    {toggleBtn(showPw, pwProps.onToggle)}
-                  </span>
-                </label>
+                        : '✓ Good to go.'
+                  }
+                  required
+                  minLength={8}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="••••••••"
+                  autoComplete="new-password"
+                  {...passwordCheck}
+                />
                 <div className="form-grid">
                   <label>
                     Base currency
@@ -492,14 +477,7 @@ export default function SignIn() {
             </p>
           )}
 
-          <p className="small" style={{ textAlign: 'center', margin: 0 }}>
-            <Link to="/" style={{ color: 'var(--body)', textDecoration: 'underline' }}>
-              Back to homepage
-            </Link>
-          </p>
-        </div>
-      </div>
-    </div>
+    </AuthLayout>
   );
 }
 

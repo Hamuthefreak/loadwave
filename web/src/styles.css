@@ -4462,12 +4462,26 @@ html.theme-fading * {
 .delivery-hint.delivery-today .delivery-count { background: var(--accent); color: var(--accent-ink); }
 .delivery-hint.delivery-overdue .delivery-count { background: var(--red, #c0392b); color: #fff; }
 
-/* Sign-in: show/hide password */
+/* Password field with a show/hide toggle — one definition for every auth
+   screen (sign-in, create account, reset).
+
+   The field sits in a span rather than directly in the label, so it does not
+   get the column flex's stretch: without the width it kept the browser's
+   default (about 220px) and the toggle floated in the gap beside it. Filling
+   the wrapper puts the field's right edge where the absolutely positioned
+   toggle is anchored, and the right padding keeps text out from under it.
+
+   The type attribute is in the selector on purpose. The auth card's own input
+   padding loads after this file and ties on specificity with a plain
+   `.pw-wrap input`, which would drop the clearance. Naming the two types this
+   component swaps between raises this rule above it. */
 .pw-wrap {
   position: relative;
   display: block;
 }
-.pw-wrap input {
+.pw-wrap input[type='password'],
+.pw-wrap input[type='text'] {
+  width: 100%;
   padding-right: 62px;
 }
 .pw-toggle {
@@ -4478,6 +4492,7 @@ html.theme-fading * {
   background: none;
   border: none;
   color: var(--muted);
+  font: inherit;
   font-size: 0.78rem;
   font-weight: 700;
   cursor: pointer;
@@ -4485,6 +4500,12 @@ html.theme-fading * {
   border-radius: 6px;
 }
 .pw-toggle:hover { color: var(--accent-text); }
+
+/* Thumb-sized hit area; the toggle is a real tab stop, so it has to be
+   comfortable to tap as well. */
+@media (max-width: 560px) {
+  .pw-toggle { padding: 9px 10px; }
+}
 
 /* ---------- Settings & security ---------- */
 .settings-grid {
