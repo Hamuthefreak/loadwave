@@ -10,6 +10,14 @@ set -euo pipefail
 APP_DIR="/opt/loadboard"
 export NODE_ENV=production
 
+# `npm ci` writes to the deploy user's cache, and on this VM that cache holds
+# root-owned entries from an earlier privileged install. The install then dies
+# with EACCES on `_cacache` before it has created node_modules, which takes the
+# service's dependencies away. Give deploys a cache inside the app directory,
+# owned by whoever runs them (the workflow's ubuntu user, or a manual run).
+export npm_config_cache="${npm_config_cache:-$APP_DIR/.npm-cache}"
+mkdir -p "$npm_config_cache"
+
 # Only one deploy may touch this checkout at a time. Two overlapping runs both
 # run `npm ci` (which wipes node_modules) and can leave the service unable to
 # start. The workflow also serialises runs; this guards manual invocations.
