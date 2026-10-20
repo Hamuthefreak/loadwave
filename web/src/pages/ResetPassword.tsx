@@ -93,7 +93,7 @@ export default function ResetPassword() {
                 />
               </div>
 
-              {error && <div className="alert alert-error">{error}</div>}
+              {error && <div className="alert alert-error" role="alert">{error}</div>}
 
               <button type="submit" disabled={loading} className="btn-block">
                 {loading ? 'One moment…' : 'Update password'}

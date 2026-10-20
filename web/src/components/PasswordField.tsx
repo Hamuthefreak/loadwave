@@ -1,4 +1,4 @@
-import { useState, type InputHTMLAttributes, type ReactNode } from 'react';
+import { useId, useState, type InputHTMLAttributes, type ReactNode } from 'react';
 
 /**
  * One password field for every auth screen.
@@ -17,6 +17,12 @@ import { useState, type InputHTMLAttributes, type ReactNode } from 'react';
  * component that unmounts when the tab changes cannot leave its plaintext
  * showing when the next form appears.
  *
+ * The input is labelled with `htmlFor` rather than by wrapping it, because a
+ * label that contains the hint and the toggle feeds their text into the
+ * input's accessible name — "Password At least 8 characters. Show" — and an
+ * interactive button inside a label is not valid HTML. The hint is wired up
+ * as the description instead.
+ *
  * Everything else is the native input, spread through, so `required`,
  * `minLength`, `autoComplete`, validation handlers and autofocus behave the
  * way they did at each call site.
@@ -28,15 +34,35 @@ export interface PasswordFieldProps extends Omit<InputHTMLAttributes<HTMLInputEl
   hint?: ReactNode;
 }
 
-export default function PasswordField({ label, hint, ...input }: PasswordFieldProps) {
+export default function PasswordField({
+  label,
+  hint,
+  id,
+  'aria-describedby': describedBy,
+  ...input
+}: PasswordFieldProps) {
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
+  const hintId = `${inputId}-hint`;
   const [visible, setVisible] = useState(false);
 
+  const description = [describedBy, hint ? hintId : null].filter(Boolean).join(' ') || undefined;
+
   return (
-    <label>
-      {label}
-      {hint ? <span className="small">{hint}</span> : null}
+    <div className="pw-field">
+      <label htmlFor={inputId}>{label}</label>
+      {hint ? (
+        <span className="small" id={hintId}>
+          {hint}
+        </span>
+      ) : null}
       <span className="pw-wrap">
-        <input {...input} type={visible ? 'text' : 'password'} />
+        <input
+          {...input}
+          id={inputId}
+          type={visible ? 'text' : 'password'}
+          aria-describedby={description}
+        />
         <button
           type="button"
           className="pw-toggle"
@@ -49,6 +75,6 @@ export default function PasswordField({ label, hint, ...input }: PasswordFieldPr
           {visible ? 'Hide' : 'Show'}
         </button>
       </span>
-    </label>
+    </div>
   );
 }

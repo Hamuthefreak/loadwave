@@ -4,8 +4,10 @@
 
 .ld-mkt {
   /* Brand accent is the same safety green as the app. (Names kept from the
-     old orange palette to avoid touching every usage.) */
-  --orange: #4f8a1f;
+     old orange palette to avoid touching every usage.) White button text on
+     this green sits at 4.67:1 — the old #4f8a1f measured 4.21:1, under AA for
+     the 15px bold auth CTA. */
+  --orange: #4a821d;
   --orange-deep: #3f7a15;
   --amber: #67b02f;
   --orange-soft: #eef6e6;
@@ -890,7 +892,8 @@ min-height: 100vh;
   transform: translateX(calc(100% + 4px));
 }
 
-.ld-auth-card label {
+.ld-auth-card label,
+.ld-auth-card .pw-field {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -919,8 +922,12 @@ min-height: 100vh;
   background: var(--card);
 }
 
+/* Placeholder text is text: #a4aab3 on the light field was 2.24:1. The body
+   colour clears AA in both themes, and `opacity: 1` stops Firefox dimming it
+   further. */
 .ld-auth-card input::placeholder {
-  color: #a4aab3;
+  color: var(--body);
+  opacity: 1;
 }
 
 .ld-auth-card .form-grid {

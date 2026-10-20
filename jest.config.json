@@ -34,7 +34,7 @@
       "preset": "ts-jest",
       "testEnvironment": "jsdom",
       "roots": ["<rootDir>/web/tests"],
-      "testMatch": ["**/*.test.tsx"],
+      "testMatch": ["**/*.test.ts", "**/*.test.tsx"],
       "setupFiles": ["<rootDir>/web/tests/setup.ts"],
       "moduleFileExtensions": ["ts", "tsx", "js", "jsx", "json"],
       "clearMocks": true,

@@ -326,7 +326,7 @@ export default function SignIn() {
             )}
             </div>
 
-            {error && <div className="alert alert-error">{error}</div>}
+            {error && <div className="alert alert-error" role="alert">{error}</div>}
 
             <button type="submit" disabled={loading} className="btn-block">
               {loading
@@ -364,6 +364,7 @@ export default function SignIn() {
                 ref={codeInputRef}
                 autoFocus
                 className="twofactor-input"
+                aria-label="Verification code or recovery code"
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 placeholder="••••••"
@@ -411,6 +412,7 @@ export default function SignIn() {
                 <input
                   ref={codeInputRef}
                   autoFocus
+                  aria-label="Six-digit verification code"
                   inputMode="numeric"
                   autoComplete="one-time-code"
                   placeholder="6-digit code"
