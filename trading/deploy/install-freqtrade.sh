@@ -6,7 +6,8 @@
 #   bash /opt/loadboard/trading/deploy/install-freqtrade.sh
 #
 # Safe to re-run: it keeps an existing live config (and its generated web
-# credentials) untouched.
+# credentials) untouched. When Docker is missing it installs it, provided the
+# deploy user has passwordless sudo (the default for "ubuntu" on Oracle Cloud).
 set -euo pipefail
 
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # .../trading
@@ -23,38 +24,66 @@ if [ "${AVAIL_MB}" -lt 900 ]; then
   echo "      Use the Ampere A1 shape (or a separate box) if this is a 1 GB VM."
 fi
 
-if ! command -v docker >/dev/null 2>&1; then
-  cat <<'MSG'
-Docker is not installed on this VM. Run these once, then re-run this script:
+# --- Docker + compose plugin ------------------------------------------------
+install_compose_plugin() {
+  local arch dir=/usr/local/lib/docker/cli-plugins
+  case "$(uname -m)" in
+    x86_64|amd64)  arch=x86_64 ;;
+    aarch64|arm64) arch=aarch64 ;;
+    *) echo "ERROR: unsupported architecture: $(uname -m)" >&2; return 1 ;;
+  esac
+  echo "==> Installing the docker compose plugin ($arch)"
+  sudo -n mkdir -p "$dir"
+  sudo -n curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$arch" -o "$dir/docker-compose"
+  sudo -n chmod +x "$dir/docker-compose"
+}
 
-  sudo apt-get update
-  sudo apt-get install -y docker.io docker-compose-v2
-  sudo systemctl enable --now docker
-  sudo usermod -aG docker "$USER"    # then log out and back in
+ensure_docker() {
+  if ! command -v docker >/dev/null 2>&1; then
+    if ! sudo -n true 2>/dev/null; then
+      echo "==> docker is not installed and this user has no passwordless sudo." >&2
+      echo "    Install it once, then re-run this script:" >&2
+      echo "      sudo apt-get update && sudo apt-get install -y docker.io" >&2
+      echo "      sudo systemctl enable --now docker" >&2
+      echo "      sudo usermod -aG docker \"\$USER\"" >&2
+      return 1
+    fi
+    echo "==> Installing docker.io (first run only, ~1 min)"
+    sudo -n apt-get update -qq
+    sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io
+    sudo -n systemctl enable --now docker >/dev/null 2>&1 || true
+    sudo -n usermod -aG docker "$USER" >/dev/null 2>&1 || true
+  fi
+  if ! docker compose version >/dev/null 2>&1 && ! sudo -n docker compose version >/dev/null 2>&1; then
+    install_compose_plugin || return 1
+  fi
+  return 0
+}
 
-MSG
+if ! ensure_docker; then
+  echo "==> Not installing the bot (docker unavailable). LoadWave is unaffected."
   exit 0
 fi
 
-if ! docker compose version >/dev/null 2>&1; then
-  echo "ERROR: the 'docker compose' plugin is missing (package docker-compose-v2)." >&2
-  exit 1
-fi
-
 # Prefer docker without sudo; fall back to non-interactive sudo when the CI user
-# has no docker group membership.
+# has no docker group membership yet (a group change needs a fresh login).
 DC="docker"
 if ! docker info >/dev/null 2>&1; then
   DC="sudo -n docker"
   if ! $DC info >/dev/null 2>&1; then
     echo "ERROR: no permission to talk to the docker daemon." >&2
-    echo "       Add the deploy user to the docker group: sudo usermod -aG docker \$USER" >&2
+    echo "       Fix: sudo usermod -aG docker \$USER  (then log out and back in)" >&2
     exit 1
   fi
 fi
 
 echo "==> Preparing $APP_DIR"
-mkdir -p "$APP_DIR/user_data/logs" "$APP_DIR/user_data/data" "$APP_DIR/user_data/strategies"
+if ! mkdir -p "$APP_DIR/user_data/logs" "$APP_DIR/user_data/data" "$APP_DIR/user_data/strategies" 2>/dev/null; then
+  echo "    (using sudo for $APP_DIR)"
+  sudo -n mkdir -p "$APP_DIR/user_data/logs" "$APP_DIR/user_data/data" "$APP_DIR/user_data/strategies"
+  sudo -n chown -R "$(id -u):$(id -g)" "$APP_DIR"
+fi
+
 install -m 0644 "$SRC_DIR/docker-compose.yml" "$APP_DIR/docker-compose.yml"
 if [ -d "$SRC_DIR/user_data/strategies" ]; then
   cp -n "$SRC_DIR"/user_data/strategies/* "$APP_DIR/user_data/strategies/" 2>/dev/null || true
