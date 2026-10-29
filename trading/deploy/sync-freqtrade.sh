@@ -17,7 +17,7 @@ LIVE_CONFIG="$APP_DIR/user_data/config.json"
 # First run, or docker not installed yet: the installer handles both (it also
 # bootstraps docker itself when the deploy user has passwordless sudo).
 if ! command -v docker >/dev/null 2>&1 || [ ! -f "$LIVE_CONFIG" ]; then
-  echo "==> freqtrade: not installed yet — running the installer."
+  echo "==> freqtrade: not installed yet - running the installer."
   bash "$SRC_DIR/deploy/install-freqtrade.sh"
   exit $?
 fi
@@ -26,10 +26,13 @@ DC="docker"
 if ! docker info >/dev/null 2>&1; then
   DC="sudo -n docker"
   if ! $DC info >/dev/null 2>&1; then
-    echo "==> freqtrade: no docker permission for this user — skipping."
+    echo "==> freqtrade: no docker permission for this user - skipping."
     exit 0
   fi
 fi
+
+# A 1 GB VM cannot hold LoadWave + PostgreSQL + the bot in RAM alone.
+bash "$SRC_DIR/deploy/ensure-swap.sh" || true
 
 echo "==> freqtrade: syncing compose file"
 mkdir -p "$APP_DIR/user_data/strategies"
@@ -41,12 +44,12 @@ if [ -d "$SRC_DIR/user_data/strategies" ]; then
 fi
 
 cd "$APP_DIR"
-$DC compose pull --quiet || echo "WARN: image pull failed — keeping the running image."
+$DC compose pull --quiet || echo "WARN: image pull failed - keeping the running image."
 $DC compose up -d
 
-echo "==> freqtrade: waiting for the API"
+echo "==> freqtrade: waiting for the API (up to 4 min on a small VM)"
 healthy=""
-for _ in $(seq 1 30); do
+for _ in $(seq 1 80); do
   if curl -fsS http://127.0.0.1:8080/api/v1/ping >/dev/null 2>&1; then
     healthy="yes"
     break
@@ -56,6 +59,7 @@ done
 
 if [ -z "$healthy" ]; then
   echo "ERROR: the bot's API is not answering after restart." >&2
+  free -m >&2 || true
   $DC compose logs --tail 40 >&2 || true
   exit 1
 fi
