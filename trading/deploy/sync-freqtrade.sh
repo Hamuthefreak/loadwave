@@ -7,16 +7,19 @@
 # that live file holds the generated web credentials, your pair list and the
 # dry_run / live switch. Change it on the server (or delete it to re-seed).
 #
-# Never blocks a LoadWave deploy: missing docker simply skips.
+# Never blocks a LoadWave deploy: when nothing can be done it exits 0.
 set -euo pipefail
 
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_DIR="/opt/freqtrade"
 LIVE_CONFIG="$APP_DIR/user_data/config.json"
 
-if ! command -v docker >/dev/null 2>&1; then
-  echo "==> freqtrade: docker not installed — skipping (nothing to do)."
-  exit 0
+# First run, or docker not installed yet: the installer handles both (it also
+# bootstraps docker itself when the deploy user has passwordless sudo).
+if ! command -v docker >/dev/null 2>&1 || [ ! -f "$LIVE_CONFIG" ]; then
+  echo "==> freqtrade: not installed yet — running the installer."
+  bash "$SRC_DIR/deploy/install-freqtrade.sh"
+  exit $?
 fi
 
 DC="docker"
@@ -26,12 +29,6 @@ if ! docker info >/dev/null 2>&1; then
     echo "==> freqtrade: no docker permission for this user — skipping."
     exit 0
   fi
-fi
-
-if [ ! -f "$LIVE_CONFIG" ]; then
-  echo "==> freqtrade: not installed yet — running first-time install."
-  bash "$SRC_DIR/deploy/install-freqtrade.sh"
-  exit $?
 fi
 
 echo "==> freqtrade: syncing compose file"
