@@ -24,17 +24,23 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Backend - install, typecheck, lint, tests
+      # The root jest run also executes (web/) tests, so web dependencies must
+      # be installed before `npm test`. Without them every .tsx suite fails
+      # with TS2875: react/jsx-runtime not found, failing the whole deploy.
+      - name: Install backend and frontend deps
         run: |
           npm ci
+          npm --prefix web ci
+
+      - name: Backend - typecheck, lint, tests
+        run: |
           npm run typecheck
           npx eslint "src/**/*.ts" "tests/**/*.ts"
           npm test
 
-      - name: Frontend - install, typecheck, build
+      - name: Frontend - build
         run: |
           cd web
-          npm ci
           npm run build
 
   deploy:
