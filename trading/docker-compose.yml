@@ -1,0 +1,27 @@
+# Trading bot side-car for the LoadWave VM.
+#
+# freqtrade runs from its official image — the bot's source code does not need to
+# live on the VM. Only this file plus user_data/ (config, strategies, database)
+# matter, which is why `/opt/freqtrade` stays small and independent of the
+# LoadWave checkout.
+#
+# Start/stop:   docker compose up -d | docker compose down
+# Logs:         docker compose logs -f
+# Status:       docker compose ps
+services:
+  freqtrade:
+    image: freqtradeorg/freqtrade:stable
+    container_name: freqtrade
+    restart: unless-stopped
+    volumes:
+      - "./user_data:/freqtrade/user_data"
+    # Bound to loopback on purpose: the web UI is reached through an SSH tunnel,
+    # never exposed to the internet.
+    ports:
+      - "127.0.0.1:8080:8080"
+    command: >
+      trade
+      --logfile /freqtrade/user_data/logs/freqtrade.log
+      --db-url sqlite:////freqtrade/user_data/tradesv3.sqlite
+      --config /freqtrade/user_data/config.json
+      --strategy SampleStrategy

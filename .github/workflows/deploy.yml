@@ -6,7 +6,7 @@ on:
 
 # One deploy at a time, always. Two pushes in quick succession used to run two
 # deploys concurrently on the same small VM; each one runs `npm ci`, which
-# deletes and reinstalls node_modules, so the pair can starve the box and leave
+deletes and reinstalls node_modules, so the pair can starve the box and leave
 # the service unable to start. Queued runs wait instead of overlapping.
 concurrency:
   group: production-deploy
@@ -63,3 +63,24 @@ jobs:
             set -e
             echo "Connecting to production..."
             bash /opt/loadboard/deploy/auto-deploy.sh
+
+  # Side-car: the crypto trading bot in trading/ (dry run by default).
+  # Runs *after* LoadWave is up, and must never turn a successful site deploy
+  # red — hence continue-on-error, plus a script that exits 0 when Docker has
+  # not been installed on the VM yet.
+  trading:
+    name: Sync trading bot (freqtrade)
+    needs: deploy
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Sync bot on the VM
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: 22
+          script: |
+            set -e
+            bash /opt/loadboard/trading/deploy/sync-freqtrade.sh
