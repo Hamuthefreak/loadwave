@@ -4,10 +4,8 @@ on:
   push:
     branches: [main]
 
-# One deploy at a time, always. Two pushes in quick succession used to run two
-# deploys concurrently on the same small VM; each one runs `npm ci`, which
-# deletes and reinstalls node_modules, so the pair can starve the box and leave
-# the service unable to start. Queued runs wait instead of overlapping.
+# One deploy at a time, always. Overlapping deploys used to run two `npm ci`
+# jobs on the same small VM at once and could starve the box. Queued runs wait.
 concurrency:
   group: production-deploy
   cancel-in-progress: false
@@ -26,14 +24,14 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Backend — install, typecheck, lint, tests
+      - name: Backend - install, typecheck, lint, tests
         run: |
           npm ci
           npm run typecheck
           npx eslint "src/**/*.ts" "tests/**/*.ts"
           npm test
 
-      - name: Frontend — install, typecheck, build
+      - name: Frontend - install, typecheck, build
         run: |
           cd web
           npm ci
@@ -47,19 +45,38 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Optional: verify the VM's host key so GitHub Actions can't be
-      # MITMed. Generate with:
-      #   ssh-keyscan <VM_IP> | grep ed25519
-      # then store the line in secret VM_SSH_FINGERPRINT.
+      # Optional: verify the VM host key so Actions cannot be MITMed.
+      # Generate with `ssh-keyscan <VM_IP> | grep ed25519`, store the line in
+      # the secret VM_SSH_FINGERPRINT.
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ secrets.VM_HOST }}        # your Oracle VM public IPv4
-          username: ${{ secrets.VM_USER }}     # usually "ubuntu"
-          key: ${{ secrets.VM_SSH_KEY }}       # private key added as a repo secret
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
           port: 22
-          # script_stop was removed from this action — use `set -e` instead.
+          # script_stop is gone from this action - use `set -e` instead.
           script: |
             set -e
             echo "Connecting to production..."
             bash /opt/loadboard/deploy/auto-deploy.sh
+
+  # Side-car: the crypto bot in trading/ (dry run by default). Runs after
+  # LoadWave is up and must never turn a good site deploy red; the script also
+  # exits 0 by itself when it cannot do anything on this VM.
+  trading:
+    name: Sync trading bot (freqtrade)
+    needs: deploy
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Sync bot on the VM
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: 22
+          script: |
+            set -e
+            bash /opt/loadboard/trading/deploy/sync-freqtrade.sh
