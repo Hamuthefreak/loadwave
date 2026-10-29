@@ -6,7 +6,7 @@ on:
 
 # One deploy at a time, always. Two pushes in quick succession used to run two
 # deploys concurrently on the same small VM; each one runs `npm ci`, which
-deletes and reinstalls node_modules, so the pair can starve the box and leave
+# deletes and reinstalls node_modules, so the pair can starve the box and leave
 # the service unable to start. Queued runs wait instead of overlapping.
 concurrency:
   group: production-deploy
@@ -66,8 +66,8 @@ jobs:
 
   # Side-car: the crypto trading bot in trading/ (dry run by default).
   # Runs *after* LoadWave is up, and must never turn a successful site deploy
-  # red — hence continue-on-error, plus a script that exits 0 when Docker has
-  # not been installed on the VM yet.
+  # red — hence continue-on-error. The script also exits 0 on its own when it
+  # cannot do anything on this VM (no sudo, unusable docker).
   trading:
     name: Sync trading bot (freqtrade)
     needs: deploy
