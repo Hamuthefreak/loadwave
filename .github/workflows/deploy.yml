@@ -90,6 +90,25 @@ jobs:
       # The bot has no checkout of its own on the VM, and the repo is private,
       # so the runner pushes the few files the container needs over SCP instead
       # of asking the VM for a deploy key.
+      # Secrets are masked in logs, so a stale VM_HOST looks exactly like a
+      # firewalled VM. This reports only the shape of the value and whether the
+      # port answers - enough to tell "wrong address" from "blocked port".
+      - name: Preflight - can this runner reach the VM?
+        env:
+          HOST: ${{ secrets.VM_HOST }}
+        run: |
+          echo "host length: ${#HOST}"
+          if [ "$HOST" = "155.248.239.195" ]; then
+            echo "host is the new VM IP: yes"
+          else
+            echo "host is the new VM IP: NO - the secret is stale"
+          fi
+          if timeout 15 bash -c "cat < /dev/null > /dev/tcp/$HOST/22"; then
+            echo "tcp 22 reachable from runner: yes"
+          else
+            echo "tcp 22 reachable from runner: NO"
+          fi
+
       - name: Upload bot files
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -101,6 +120,8 @@ jobs:
           target: "/home/ubuntu/freqtrade-src"
           overwrite: true
           rm: false
+          # Oracle + a 1 GB box can be slow to answer the first handshake.
+          timeout: 60s
 
       # The installer is idempotent: it installs Docker on a bare VM, seeds the
       # config once (never overwriting the live one), then pulls and restarts
