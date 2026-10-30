@@ -3,6 +3,8 @@ name: Auto-deploy to Oracle VM
 on:
   push:
     branches: [main]
+  # Lets you (or an agent) re-run the bot sync without pushing a commit.
+  workflow_dispatch:
 
 # One deploy at a time, always. Overlapping deploys used to run two `npm ci`
 # jobs on the same small VM at once and could starve the box. Queued runs wait.
@@ -43,8 +45,14 @@ jobs:
           cd web
           npm run build
 
+  # The LoadWave site deploy. The production VM is now dedicated to the trading
+  # bot, so this job is off unless the repository variable LOADWAVE_ENABLED is
+  # set to "true" (Settings -> Secrets and variables -> Actions -> Variables).
+  # Without that guard every push would try to run /opt/loadboard/... on a box
+  # that no longer has LoadWave and turn the run red.
   deploy:
-    name: Deploy to production
+    name: Deploy LoadWave (off unless LOADWAVE_ENABLED=true)
+    if: vars.LOADWAVE_ENABLED == 'true'
     needs: verify
     runs-on: ubuntu-latest
     steps:
@@ -67,22 +75,46 @@ jobs:
             echo "Connecting to production..."
             bash /opt/loadboard/deploy/auto-deploy.sh
 
-  # Side-car: the crypto bot in trading/ (dry run by default). Runs after
-  # LoadWave is up and must never turn a good site deploy red; the script also
-  # exits 0 by itself when it cannot do anything on this VM.
+  # The crypto bot in trading/ (DRY RUN). Deliberately independent of both
+  # `verify` and `deploy`: the bot's code has nothing to do with LoadWave, and
+  # a red site build must never stop the bot from being updated. continue-on-
+  # error keeps a bot problem from turning a good push red.
   trading:
     name: Sync trading bot (freqtrade)
-    needs: deploy
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - name: Sync bot on the VM
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The bot has no checkout of its own on the VM, and the repo is private,
+      # so the runner pushes the few files the container needs over SCP instead
+      # of asking the VM for a deploy key.
+      - name: Upload bot files
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: 22
+          source: "trading/**"
+          target: "/home/ubuntu/freqtrade-src"
+          overwrite: true
+          rm: false
+
+      # The installer is idempotent: it installs Docker on a bare VM, seeds the
+      # config once (never overwriting the live one), then pulls and restarts
+      # the container. Running it on every push is therefore both first-time
+      # setup and the update path.
+      - name: Install / update bot on the VM
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           port: 22
+          # Docker install + ~1 GB image pull + readiness wait.
+          command_timeout: 20m
           script: |
             set -e
-            bash /opt/loadboard/trading/deploy/sync-freqtrade.sh
+            bash /home/ubuntu/freqtrade-src/trading/deploy/install-freqtrade.sh
