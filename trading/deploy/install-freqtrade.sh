@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
-# One-time install of the trading bot (freqtrade, DRY RUN) on the LoadWave VM.
+# One-time install of the trading bot (freqtrade, DRY RUN) on a dedicated VM.
 #
 # Run ON the server, as the deploy user:
-#   bash /opt/loadboard/trading/deploy/install-freqtrade.sh
+#   bash /home/ubuntu/freqtrade-src/trading/deploy/install-freqtrade.sh
 #
 # Safe to re-run: it keeps an existing live config (and its generated web
 # credentials) untouched. When Docker is missing it installs it, provided the
@@ -17,11 +17,18 @@ LIVE_CONFIG="$APP_DIR/user_data/config.json"
 echo "==> freqtrade installer (dry run)"
 
 AVAIL_MB="$(awk '/MemAvailable/ {printf "%d", $2/1024}' /proc/meminfo)"
-echo "    available RAM: ${AVAIL_MB} MB"
-if [ "${AVAIL_MB}" -lt 900 ]; then
-  echo "WARN: under ~900 MB free. freqtrade loads pandas/numpy per pair and can"
-  echo "      be killed by the OOM reaper next to LoadWave + PostgreSQL."
-  echo "      Use the Ampere A1 shape (or a separate box) if this is a 1 GB VM."
+CORES="$(nproc 2>/dev/null || echo '?')"
+ARCH="$(uname -m)"
+echo "    host: ${ARCH}, ${CORES} CPU, ${AVAIL_MB} MB RAM available"
+
+# On a 1 GB box the bot runs with a hard 768 MB container cap (see
+# docker-compose.yml) and needs swap to start: pandas/numpy alone are a few
+# hundred MB. Without swap the kernel kills the container during startup.
+if [ "${AVAIL_MB}" -lt 1500 ]; then
+  echo "    low-memory host: expecting swap + the 768 MB container cap"
+  bash "$SRC_DIR/deploy/ensure-swap.sh" || {
+    echo "WARN: swap could not be created - the bot may be killed while starting." >&2
+  }
 fi
 
 # --- Docker + compose plugin ------------------------------------------------
@@ -61,8 +68,8 @@ ensure_docker() {
 }
 
 if ! ensure_docker; then
-  echo "==> Not installing the bot (docker unavailable). LoadWave is unaffected."
-  exit 0
+  echo "==> Not installing the bot (docker unavailable)."
+  exit 1
 fi
 
 # Prefer docker without sudo; fall back to non-interactive sudo when the CI user
@@ -109,7 +116,7 @@ with open(path, "w") as fh:
     fh.write("\n")
 
 print("    web UI login  ->  user: %s   password: %s" % (api["username"], api["password"]))
-print("    (also stored in %s — change it there any time)" % path)
+print("    (also stored in %s - change it there any time)" % path)
 PY
 else
   echo "==> Keeping existing live config: $LIVE_CONFIG"
@@ -122,9 +129,9 @@ $DC compose pull
 echo "==> Starting the bot"
 $DC compose up -d
 
-echo "==> Waiting for the API to answer on 127.0.0.1:8080 (up to ~2 min)"
+echo "==> Waiting for the API to answer on 127.0.0.1:8080 (up to ~3 min)"
 healthy=""
-for _ in $(seq 1 40); do
+for _ in $(seq 1 60); do
   if curl -fsS http://127.0.0.1:8080/api/v1/ping >/dev/null 2>&1; then
     healthy="yes"
     break
@@ -134,12 +141,15 @@ done
 
 if [ -z "$healthy" ]; then
   echo "WARN: the API did not answer yet. Last log lines:" >&2
-  $DC compose logs --tail 30 || true
+  $DC compose logs --tail 40 || true
+  echo "--- container state ---" >&2
+  $DC compose ps || true
+  free -m || true
   exit 1
 fi
 
 echo ""
-echo "OK — the bot is running in DRY RUN (fake money, live prices)."
+echo "OK - the bot is running in DRY RUN (fake money, live prices)."
 echo "View the UI from your laptop (never expose port 8080 publicly):"
 echo ""
 echo "  ssh -N -L 8080:127.0.0.1:8080 <user>@<vm-ip>"
