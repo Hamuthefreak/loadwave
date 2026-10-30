@@ -119,6 +119,30 @@ jobs:
             esac
           done
 
+      # A key with the right shape that is still refused means one of two
+      # things: it is not in the instance's authorized_keys, or the login user
+      # is wrong (Ubuntu images use `ubuntu`, Oracle Linux images use `opc`).
+      # The handshake error is identical for both, so probe each name with the
+      # stock ssh client and report which one the key actually opens.
+      - name: Preflight - which user does this key open?
+        env:
+          HOST: ${{ secrets.VM_HOST }}
+          KEY: ${{ secrets.VM_SSH_KEY }}
+        run: |
+          umask 077
+          printf '%s\n' "$KEY" > /tmp/probe_key
+          for u in ubuntu opc; do
+            if ssh -i /tmp/probe_key -o IdentitiesOnly=yes -o BatchMode=yes \
+                 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                 -o ConnectTimeout=15 "$u@$HOST" 'echo ok' > /dev/null 2> "/tmp/probe_$u.err"; then
+              echo "auth OK as $u"
+            else
+              echo "auth failed as $u:"
+              grep -v 'Permanently added' "/tmp/probe_$u.err" | tail -n 3 || true
+            fi
+          done
+          exit 0
+
       - name: Upload bot files
         uses: appleboy/scp-action@v0.1.7
         with:
