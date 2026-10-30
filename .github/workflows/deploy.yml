@@ -96,6 +96,7 @@ jobs:
       - name: Preflight - can this runner reach the VM?
         env:
           HOST: ${{ secrets.VM_HOST }}
+          KEY: ${{ secrets.VM_SSH_KEY }}
         run: |
           echo "host length: ${#HOST}"
           if [ "$HOST" = "155.248.239.195" ]; then
@@ -108,6 +109,15 @@ jobs:
           else
             echo "tcp 22 reachable from runner: NO"
           fi
+          # A rejected key and a wrong key are the same error, so report the
+          # shape of the secret only - never its contents.
+          echo "key length: ${#KEY}"
+          echo "key newlines: $(printf '%s' "$KEY" | wc -l)"
+          for marker in "BEGIN RSA PRIVATE KEY" "BEGIN OPENSSH PRIVATE KEY" "BEGIN PRIVATE KEY" "BEGIN PUBLIC KEY" "ssh-rsa AAAA"; do
+            case "$KEY" in
+              *"$marker"*) echo "key contains: $marker" ;;
+            esac
+          done
 
       - name: Upload bot files
         uses: appleboy/scp-action@v0.1.7
