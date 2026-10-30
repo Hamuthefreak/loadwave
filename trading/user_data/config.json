@@ -1,7 +1,7 @@
 {
     "$schema": "https://schema.freqtrade.io/schema.json",
-    "bot_name": "loadwave-bot",
-    "max_open_trades": 3,
+    "bot_name": "freqtrade-bot",
+    "max_open_trades": 2,
     "stake_currency": "USDT",
     "stake_amount": 100,
     "tradable_balance_ratio": 0.99,
@@ -30,8 +30,9 @@
     },
     "entry_pricing": {
         "price_side": "same",
-        "use_order_book": true,
+        "use_order_book": false,
         "order_book_top": 1,
+        "price_last_balance": 0.0,
         "check_depth_of_market": {
             "enabled": false,
             "bids_to_ask_delta": 1
@@ -39,7 +40,7 @@
     },
     "exit_pricing": {
         "price_side": "same",
-        "use_order_book": true,
+        "use_order_book": false,
         "order_book_top": 1
     },
     "order_types": {
@@ -68,10 +69,7 @@
         "ccxt_async_config": {},
         "pair_whitelist": [
             "BTC/USDT",
-            "ETH/USDT",
-            "SOL/USDT",
-            "XRP/USDT",
-            "ADA/USDT"
+            "ETH/USDT"
         ],
         "pair_blacklist": []
     },
@@ -95,6 +93,6 @@
     "initial_state": "running",
     "force_entry_enable": false,
     "internals": {
-        "process_throttle_secs": 5
+        "process_throttle_secs": 10
     }
 }
